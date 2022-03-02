@@ -89,3 +89,23 @@ combination is physically possible, this is merely an upper bound.
 
 Which totals to 558 different gestures, excluding any gestures made between two
 hands
+
+## Installation
+
+To install and run all sub-systems of the project you will need:
+
+- The [Arduino software](https://github.com/arduino/Arduino/#installation) in
+  order to upload code to the Arduino. With [Homebrew](https://brew.sh/) installed:
+```sh
+brew install --cask arduino
+```
+- The `Arduino Mbed OS Nano Boards` package from the Boards Manager in
+    order to use the Arduino Nano 33 BLE board. Upon plugging in the Arduino
+    Nano 33 BLE board, a prompt in the Arduino software will guide you in
+    installing this package.
+- `Python3` with the libraries listed in `requirements.txt` installed:
+
+```sh
+pip install -r requirements.txt
+```
+
