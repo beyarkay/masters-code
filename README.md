@@ -103,6 +103,12 @@ brew install --cask arduino
     order to use the Arduino Nano 33 BLE board. Upon plugging in the Arduino
     Nano 33 BLE board, a prompt in the Arduino software will guide you in
     installing this package.
+- The `Mux.h` library, which can be installed from the Arduino IDE by going to
+  Tools > Manage Libraries... and then searching for `Analog-Digital
+  Multiplexers` by Stefano Chizzolini version 3.0.0. The github repository for
+  this library is available [here](https://github.com/stechio/arduino-ad-mux-lib).
+  Not installing this library will cause a `Mux.h not found` exception when
+  trying to compile or upload the `collect_training_data.ino` sketch.
 - `Python3` with the libraries listed in `requirements.txt` installed:
 
 ```sh
