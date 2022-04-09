@@ -18,6 +18,12 @@ int gesture_index = 0x01;
 // The piezo-electric buzzer is used to indicate the boundary between training
 // packets
 const int PIN_BUZZER = 2;
+int buzzer_state = 0;
+
+int must_deliminate_packet = 0;
+
+const int ms_per_training_packet = 1000;
+const int ms_per_beep = 50;
 
 void setup() {
     // Use a high baud rate so that the sensor readings are more accurate.
@@ -50,30 +56,44 @@ void loop() {
     Serial.print(gesture_index << 2);
     Serial.print(",");
 
-    if (gesture_index == 0x00 &&
-        millis() % 1000 <= MS_PER_ANALOG_READ * NUM_SENSORS) {
-        analogWrite(PIN_BUZZER, 150);
+    // Only sound the buzzer if we're in TRAINING mode and it's the correct
+    // time interval
+    if (gesture_index != 0
+            && millis() % ms_per_training_packet <= ms_per_beep
+            && buzzer_state != 150) {
+        buzzer_state = 150;
+        analogWrite(PIN_BUZZER, buzzer_state);
+    } else if (buzzer_state != 0) {
+        buzzer_state = 0;
+        analogWrite(PIN_BUZZER, buzzer_state);
+    }
+
+    // Only send a training packet deliminator if we're in TRAINING mode and
+    // about `ms_per_training_packet` has elapsed and we haven't already sent a
+    // training packet deliminator
+    if (gesture_index != 0
+            && millis() % ms_per_training_packet < 20
+            && must_deliminate_packet == 1) {
         for (int i = 0; i < NUM_SENSORS; i++) {
             Serial.print("0,");
         }
+        must_deliminate_packet = 0;
     } else {
-        if (millis() % 1000 <= 50)  {
-            analogWrite(PIN_BUZZER, 150);
-        } else {
-            analogWrite(PIN_BUZZER, 0);
-        }
         // Print each sensor value from the multiplexor
         for (int i = 0; i < NUM_SENSORS; i++) {
             digitalWrite(PIN_SENSOR_SELECT_0, (i & 0b0001) >> 0);
             digitalWrite(PIN_SENSOR_SELECT_1, (i & 0b0010) >> 1);
             digitalWrite(PIN_SENSOR_SELECT_2, (i & 0b0100) >> 2);
             digitalWrite(PIN_SENSOR_SELECT_3, (i & 0b1000) >> 3);
-            // TODO does the multiplexor change fast enough that we dont' need
+            // TODO does the multiplexor change fast enough that we don't need
             // to wait for it with this delay?
             delay(MS_PER_ANALOG_READ);
             Serial.print(analogRead(PIN_SENSOR_INPUT));
             Serial.print(",");
         }
+    }
+    if (millis() % ms_per_training_packet > 20) {
+        must_deliminate_packet = 1;
     }
     // Newline
     Serial.println();
