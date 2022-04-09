@@ -14,42 +14,41 @@
  * - Top1 -> A3, Top2 -> A2, Top3 -> D7, Top4 -> D6
  * - Bot1 -> A4, Bot2 -> A5, Bot3 -> D4, Bot4 -> D5
  */
-const int switches[] = {
+const int PINS_DIP_SWITCHES[] = {
      A3, A2, 7, 6, 
      A4, A5, 4, 5
 };
-const int pinsLen = 8;
-const int buzzerPin = 2;
-int selection = 200;
-
+const int num_dip_switches = 8;
+const int PIN_BUZZER = 2;
+int gesture_index = 200;
 
 void setup() {
-    for (int i = 0; i < pinsLen; i++) {
-        pinMode(switches[i], INPUT_PULLUP);
+    for (int i = 0; i < num_dip_switches; i++) {
+        pinMode(PINS_DIP_SWITCHES[i], INPUT_PULLUP);
     }
     // Buzzer
-    pinMode(buzzerPin, OUTPUT);
+    pinMode(PIN_BUZZER, OUTPUT);
 
     // Start up the serial writer
     Serial.begin(9600);
 }
 
 void loop() {
-    selection = 0;
-    for (int i = 0; i < pinsLen; i++) {
-        int val = 1 - digitalRead(switches[i]);
-        selection |= val << (pinsLen - i - 1);
+    gesture_index = 0;
+    for (int i = 0; i < num_dip_switches; i++) {
+        int val = 1 - digitalRead(PINS_DIP_SWITCHES[i]);
+        gesture_index |= val << (num_dip_switches - i - 1);
         Serial.print(val);
         Serial.print(i == 3 ? " " : "");
     }
     Serial.print(" => ");
-    Serial.println(selection);
+    Serial.println(gesture_index);
     //beep(2);
     delay(1000);
 }
 
 void beep(int times) {
-    beep(buzzerPin, times, 150);
+    beep(PIN_BUZZER, times, 150);
 }
 
 void beep(int pin, int times, int duty) {
