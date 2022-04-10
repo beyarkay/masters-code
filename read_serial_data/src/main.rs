@@ -43,9 +43,21 @@ fn read_port_data(mut port: Box<dyn serialport::SerialPort>) {
                 let c = serial_buf[idx] as char;
                 // check if we've reached the end of the line
                 if c == '\n' {
+                    println!("\n\nRaw values: {:?}", vals);
                     let short_vals = vals.clone().into_iter().skip(3).collect::<Vec<i32>>();
-                    let sparklines = spark(short_vals, 0, 1024);
-                    println!("{}: {:?}", sparklines, vals);
+                    print!("Values per finger: ");
+                    for (i, chunk) in short_vals.chunks(3).enumerate() {
+                        let sparklines = spark(chunk.to_vec(), 0, 1024);
+                        print!("{}: {} ", i + 1, sparklines);
+                    }
+                    print!("\nValues per dimension: ");
+                    for (i, dim) in vec!["x", "y", "z"].iter().enumerate() {
+                        let mut dim_vec = vec![];
+                        for val in short_vals.iter().skip(i).step_by(3) {
+                            dim_vec.push(*val);
+                        }
+                        print!("{}: {} ", dim, spark(dim_vec, 0, 1024));
+                    }
                     vals = vec![];
                     s = "".to_string();
                 } else if c != ',' {
