@@ -32,6 +32,8 @@ fn main() {
     }
 }
 
+/// Given a port as returned by `serialport::new(...).open().unwrap()`, read the incoming sensor
+/// data from that port and plot it as a series of sparklines to `stdout`
 fn read_port_data(mut port: Box<dyn serialport::SerialPort>) {
     let mut serial_buf: Vec<u8> = vec![0; 32];
     let mut s: String = "".to_string();
@@ -47,21 +49,13 @@ fn read_port_data(mut port: Box<dyn serialport::SerialPort>) {
                 if c == '\n' {
                     println!("\n\nRaw values:           {:?}", vals);
                     let short_vals = vals.clone().into_iter().skip(3).collect::<Vec<i32>>();
-                    min = if short_vals.len() != 0 { i32::min(min, *short_vals.iter().min().unwrap()) } else { min };
-                    max = if short_vals.len() != 0 { i32::max(max, *short_vals.iter().max().unwrap()) } else { max };
-                    print!("Values per finger:    ");
-                    for (i, chunk) in short_vals.chunks(3).enumerate() {
-                        let sparklines = spark(chunk.to_vec(), min, max);
-                        print!("{}: {} ", i + 1, sparklines);
+                    if short_vals.len() == 15 {
+                        min = if short_vals.len() != 0 { i32::min(min, *short_vals.iter().min().unwrap()) } else { min };
+                        max = if short_vals.len() != 0 { i32::max(max, *short_vals.iter().max().unwrap()) } else { max };
+                        println!("{}", values_per_finger(&short_vals, min, max));
+                        println!("{}", values_per_dimension(&short_vals, min, max));
                     }
-                    print!("\nValues per dimension: ");
-                    for (i, dim) in vec!["x", "y", "z"].iter().enumerate() {
-                        let mut dim_vec = vec![];
-                        for val in short_vals.iter().skip(i).step_by(3) {
-                            dim_vec.push(*val);
-                        }
-                        print!("{}: {} ", dim, spark(dim_vec, min, max));
-                    }
+
                     vals = vec![];
                     s = "".to_string();
                 } else if c != ',' {
@@ -79,22 +73,54 @@ fn read_port_data(mut port: Box<dyn serialport::SerialPort>) {
     }
 }
 
-fn spark(vec: Vec<i32>, low: i32, high: i32) -> String {
+/// Return a sparkline like `▃▆▂▃▂▃▃` which can be used as a graph. 
+///
+/// The values in `data` are scaled between `low` and `high` and then mapped to 9 values which are
+/// the sparks: ` ▁▂▂▄▅▆▇█` (note the inclusion of the space ` `).
+fn spark(data: &Vec<i32>, low: i32, high: i32) -> String {
     assert!(low < high);
     let sparklines = vec![
         ' ', '▁', '▂', '▃', '▄', '▅', '▆', '▇', '█'
     ];
     let range = high - low;
-    let step = range as f64 / sparklines.len() as f64;
+    let step = range as f32 / sparklines.len() as f32;
     let mut sparkline = "".to_string();
-    for i in vec {
+    for datum in data {
         for (spark_idx, spark) in sparklines.iter().enumerate() {
-            let lower = low as f64 + spark_idx as f64 * step;
-            let upper = low as f64 + (spark_idx + 1) as f64 * step;
-            if  lower <= i as f64 && i as f64  <= upper {
+            let lower = low as f32 + spark_idx as f32 * step;
+            let upper = low as f32 + (spark_idx + 1) as f32 * step;
+            if  lower <= *datum as f32 && *datum as f32  <= upper {
                 sparkline.push(*spark);
             }
         }
     }
     return sparkline;
+}
+
+fn values_per_finger(short_vals: &Vec<i32>, min: i32, max: i32) -> String {
+    let mut s = format!("Values per finger:    ");
+    for (i, chunk) in short_vals.chunks(3).enumerate() {
+        let sparklines = spark(&chunk.to_vec(), min, max);
+        s.push_str(format!("{}: {} ", i + 1, sparklines).as_str());
+    }
+    return s;
+}
+
+fn values_per_dimension(short_vals: &Vec<i32>, min: i32, max: i32) -> String {
+    let mut s = format!("Values per dimension: ");
+    let mut means = vec![0.0; 3];
+    for (i, dim) in vec!["x", "y", "z"].iter().enumerate() {
+        let mut dim_vec = vec![];
+        for val in short_vals.iter().skip(i).step_by(3) {
+            dim_vec.push(*val);
+        }
+        s.push_str(format!("{}: {} ", dim, spark(&dim_vec, min, max)).as_str());
+        means[i] = dim_vec.iter().sum::<i32>() as f32 / 5.0;
+        s.push_str(if means[i] > 250.0 { "inc " } else { "dec " } );
+    }
+    // s.push_str("\n");
+    // for mean in means {
+    //     s.push_str(format!("{} ", mean).as_str());
+    // }
+    return s;
 }
