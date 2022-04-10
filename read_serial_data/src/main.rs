@@ -48,7 +48,7 @@ fn read_port_data(mut port: Box<dyn serialport::SerialPort>) {
                 // check if we've reached the end of the line
                 if c == '\n' {
                     println!("\n\nRaw values:           {:?}", vals);
-                    let short_vals = vals.clone().into_iter().skip(3).collect::<Vec<i32>>();
+                    let short_vals = vals.clone().into_iter().skip(2).collect::<Vec<i32>>();
                     if short_vals.len() == 15 {
                         min = if short_vals.len() != 0 { i32::min(min, *short_vals.iter().min().unwrap()) } else { min };
                         max = if short_vals.len() != 0 { i32::max(max, *short_vals.iter().max().unwrap()) } else { max };
