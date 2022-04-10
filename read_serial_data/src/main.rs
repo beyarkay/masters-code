@@ -1,4 +1,3 @@
-use rspark;
 use std::time::Duration;
 
 fn main() {
@@ -44,10 +43,9 @@ fn read_port_data(mut port: Box<dyn serialport::SerialPort>) {
                 let c = serial_buf[idx] as char;
                 // check if we've reached the end of the line
                 if c == '\n' {
-                    vals = vals.into_iter().skip(3).collect::<Vec<i32>>();
-                    // println!("\nvals: {:?}", vals);
-                    let res = rspark::rspark::render(&vals).unwrap();
-                    println!("{}: {:?}", res, vals);
+                    let short_vals = vals.clone().into_iter().skip(3).collect::<Vec<i32>>();
+                    let sparklines = spark(short_vals, 0, 1024);
+                    println!("{}: {:?}", sparklines, vals);
                     vals = vec![];
                     s = "".to_string();
                 } else if c != ',' {
@@ -63,4 +61,24 @@ fn read_port_data(mut port: Box<dyn serialport::SerialPort>) {
             println!("No data found");
         }
     }
+}
+
+fn spark(vec: Vec<i32>, low: i32, high: i32) -> String {
+    assert!(low < high);
+    let sparklines = vec![
+        ' ', '▁', '▂', '▃', '▄', '▅', '▆', '▇', '█'
+    ];
+    let range = high - low;
+    let step = range as f64 / sparklines.len() as f64;
+    let mut sparkline = "".to_string();
+    for i in vec {
+        for (spark_idx, spark) in sparklines.iter().enumerate() {
+            let lower = low as f64 + spark_idx as f64 * step;
+            let upper = low as f64 + (spark_idx + 1) as f64 * step;
+            if  lower <= i as f64 && i as f64  <= upper {
+                sparkline.push(*spark);
+            }
+        }
+    }
+    return sparkline;
 }
