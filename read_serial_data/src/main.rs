@@ -36,8 +36,8 @@ fn read_port_data(mut port: Box<dyn serialport::SerialPort>) {
     let mut serial_buf: Vec<u8> = vec![0; 32];
     let mut s: String = "".to_string();
     let mut vals = vec![];
-    let mut min = i32::MAX;
-    let mut max = i32::MIN;
+    let mut min = 0;
+    let mut max = 800;
     loop {
         // If we've got a valid line of data
         if let Ok(num_bytes) = port.read(serial_buf.as_mut_slice()) {
@@ -45,12 +45,11 @@ fn read_port_data(mut port: Box<dyn serialport::SerialPort>) {
                 let c = serial_buf[idx] as char;
                 // check if we've reached the end of the line
                 if c == '\n' {
-                    println!("\n\nRaw values: {:?}", vals);
+                    println!("\n\nRaw values:           {:?}", vals);
                     let short_vals = vals.clone().into_iter().skip(3).collect::<Vec<i32>>();
-                    // println!("min: {}, max: {}", min, max);
-                    min = i32::min(min, *short_vals.iter().min().expect("Vector was empty"));
-                    max = i32::max(max, *short_vals.iter().max().expect("Vector was empty"));
-                    print!("Values per finger: ");
+                    min = if short_vals.len() != 0 { i32::min(min, *short_vals.iter().min().unwrap()) } else { min };
+                    max = if short_vals.len() != 0 { i32::max(max, *short_vals.iter().max().unwrap()) } else { max };
+                    print!("Values per finger:    ");
                     for (i, chunk) in short_vals.chunks(3).enumerate() {
                         let sparklines = spark(chunk.to_vec(), min, max);
                         print!("{}: {} ", i + 1, sparklines);
