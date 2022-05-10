@@ -1,6 +1,9 @@
+use mouse_rs::Mouse;
 use std::time::Duration;
+const CONTROL_MOUSE: bool = true;
 
 fn main() {
+    let mouse = Mouse::new();
     let portname = "/dev/tty.usbmodem11101";
     let mut port = serialport::new(portname, 57_600)
         .timeout(Duration::from_millis(1))
@@ -18,7 +21,11 @@ fn main() {
 
     // If the serial port exists
     if let Ok(port) = port {
-        read_port_data(port);
+        if CONTROL_MOUSE {
+            read_port_data(port, &mut Some(mouse));
+        } else {
+            read_port_data(port, &mut None);
+        }
     } else {
         // If we can't find the serial port, list the ones we can find
         let ports = serialport::available_ports().expect("No ports found!");
@@ -34,7 +41,7 @@ fn main() {
 
 /// Given a port as returned by `serialport::new(...).open().unwrap()`, read the incoming sensor
 /// data from that port and plot it as a series of sparklines to `stdout`
-fn read_port_data(mut port: Box<dyn serialport::SerialPort>) {
+fn read_port_data(mut port: Box<dyn serialport::SerialPort>, mouse: &mut Option<Mouse>) {
     let mut serial_buf: Vec<u8> = vec![0; 32];
     let mut s: String = "".to_string();
     let mut vals = vec![];
@@ -50,10 +57,19 @@ fn read_port_data(mut port: Box<dyn serialport::SerialPort>) {
                     println!("\n\nRaw values:           {:?}", vals);
                     let short_vals = vals.clone().into_iter().skip(2).collect::<Vec<i32>>();
                     if short_vals.len() == 15 {
-                        min = if short_vals.len() != 0 { i32::min(min, *short_vals.iter().min().unwrap()) } else { min };
-                        max = if short_vals.len() != 0 { i32::max(max, *short_vals.iter().max().unwrap()) } else { max };
+                        min = if short_vals.len() != 0 {
+                            i32::min(min, *short_vals.iter().min().unwrap())
+                        } else {
+                            min
+                        };
+                        max = if short_vals.len() != 0 {
+                            i32::max(max, *short_vals.iter().max().unwrap())
+                        } else {
+                            max
+                        };
                         println!("{}", values_per_finger(&short_vals, min, max));
-                        println!("{}", values_per_dimension(&short_vals, min, max));
+                        println!("{}", values_per_dimension(&short_vals, min, max, mouse));
+                        // write_to_file("", &short_vals);
                     }
 
                     vals = vec![];
@@ -73,15 +89,13 @@ fn read_port_data(mut port: Box<dyn serialport::SerialPort>) {
     }
 }
 
-/// Return a sparkline like `▃▆▂▃▂▃▃` which can be used as a graph. 
+/// Return a sparkline like `▃▆▂▃▂▃▃` which can be used as a graph.
 ///
 /// The values in `data` are scaled between `low` and `high` and then mapped to 9 values which are
 /// the sparks: ` ▁▂▂▄▅▆▇█` (note the inclusion of the space ` `).
 fn spark(data: &Vec<i32>, low: i32, high: i32) -> String {
     assert!(low < high);
-    let sparklines = vec![
-        ' ', '▁', '▂', '▃', '▄', '▅', '▆', '▇', '█'
-    ];
+    let sparklines = vec![' ', '▁', '▂', '▃', '▄', '▅', '▆', '▇', '█'];
     let range = high - low;
     let step = range as f32 / sparklines.len() as f32;
     let mut sparkline = "".to_string();
@@ -89,7 +103,7 @@ fn spark(data: &Vec<i32>, low: i32, high: i32) -> String {
         for (spark_idx, spark) in sparklines.iter().enumerate() {
             let lower = low as f32 + spark_idx as f32 * step;
             let upper = low as f32 + (spark_idx + 1) as f32 * step;
-            if  lower <= *datum as f32 && *datum as f32  <= upper {
+            if lower <= *datum as f32 && *datum as f32 <= upper {
                 sparkline.push(*spark);
             }
         }
@@ -106,17 +120,79 @@ fn values_per_finger(short_vals: &Vec<i32>, min: i32, max: i32) -> String {
     return s;
 }
 
-fn values_per_dimension(short_vals: &Vec<i32>, min: i32, max: i32) -> String {
+fn values_per_dimension(
+    short_vals: &Vec<i32>,
+    min: i32,
+    max: i32,
+    mouse: &mut Option<Mouse>,
+) -> String {
     let mut s = format!("Values per dimension: ");
     let mut means = vec![0.0; 3];
-    for (i, dim) in vec!["x", "y", "z"].iter().enumerate() {
+    for (i, dim) in vec!["x", "y", "z"].into_iter().enumerate() {
         let mut dim_vec = vec![];
         for val in short_vals.iter().skip(i).step_by(3) {
             dim_vec.push(*val);
         }
-        s.push_str(format!("{}: {} ", dim, spark(&dim_vec, min, max)).as_str());
         means[i] = dim_vec.iter().sum::<i32>() as f32 / 5.0;
-        s.push_str(if means[i] > 250.0 { "inc " } else { "dec " } );
+        let accel_str;
+        if means[i] > max as f32 * 0.60 {
+            accel_str = "(incr)  ";
+            if let Some(mouse) = mouse {
+                match dim {
+                    "z" => {
+                        let pos = mouse.get_position().expect("Couldn't get mouse position");
+                        let delta = if pos.x > 0 { 1 } else { 0 };
+                        mouse
+                            .move_to(
+                                (pos.x + delta).try_into().unwrap(),
+                                pos.y.try_into().unwrap(),
+                            )
+                            .ok();
+                    }
+                    "y" => {
+                        let pos = mouse.get_position().expect("Couldn't get mouse position");
+                        let delta = if pos.x > 0 { 1 } else { 0 };
+                        mouse
+                            .move_to(
+                                (pos.x).try_into().unwrap(),
+                                (pos.y - delta).try_into().unwrap(),
+                            )
+                            .ok();
+                    }
+                    _ => {}
+                }
+            }
+        } else if means[i] < max as f32 * 0.48 {
+            accel_str = "(decr) ";
+            if let Some(mouse) = mouse {
+                match dim {
+                    "z" => {
+                        let pos = mouse.get_position().expect("Couldn't get mouse position");
+                        let delta = if pos.x > 0 { 1 } else { 0 };
+                        mouse
+                            .move_to(
+                                (pos.x - delta).try_into().unwrap(),
+                                pos.y.try_into().unwrap(),
+                            )
+                            .ok();
+                    }
+                    "y" => {
+                        let pos = mouse.get_position().expect("Couldn't get mouse position");
+                        let delta = if pos.x > 0 { 1 } else { 0 };
+                        mouse
+                            .move_to(
+                                (pos.x).try_into().unwrap(),
+                                (pos.y + delta).try_into().unwrap(),
+                            )
+                            .ok();
+                    }
+                    _ => {}
+                }
+            }
+        } else {
+            accel_str = "(steady)";
+        }
+        s.push_str(format!("{} {}: {} ", dim, accel_str, spark(&dim_vec, min, max)).as_str());
     }
     // s.push_str("\n");
     // for mean in means {
@@ -124,3 +200,5 @@ fn values_per_dimension(short_vals: &Vec<i32>, min: i32, max: i32) -> String {
     // }
     return s;
 }
+
+fn write_to_file(data: &Vec<i32>, filename: String) {}
