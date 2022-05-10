@@ -1,5 +1,5 @@
-use mouse_rs::Mouse;
-use std::time::Duration;
+use mouse_rs::{Mouse, types::keys::Keys};
+use std::time::{Duration, SystemTime};
 const CONTROL_MOUSE: bool = true;
 
 fn main() {
@@ -48,6 +48,7 @@ fn read_port_data(mut port: Box<dyn serialport::SerialPort>, mouse: &mut Option<
     let mut min = 0;
     let mut max = 800;
     loop {
+        // sleep(Duration::from_millis(10));
         // If we've got a valid line of data
         if let Ok(num_bytes) = port.read(serial_buf.as_mut_slice()) {
             for idx in 0..num_bytes {
@@ -68,8 +69,11 @@ fn read_port_data(mut port: Box<dyn serialport::SerialPort>, mouse: &mut Option<
                             max
                         };
                         println!("{}", values_per_finger(&short_vals, min, max));
-                        println!("{}", values_per_dimension(&short_vals, min, max, mouse));
+                        println!("{}", values_per_dimension(&short_vals, min, max));
                         // write_to_file("", &short_vals);
+                        if let Some(mouse) = mouse {
+                            control_mouse(&short_vals, mouse);
+                        }
                     }
 
                     vals = vec![];
@@ -85,6 +89,7 @@ fn read_port_data(mut port: Box<dyn serialport::SerialPort>, mouse: &mut Option<
             }
         } else {
             println!("No data found");
+            break;
         }
     }
 }
@@ -124,7 +129,6 @@ fn values_per_dimension(
     short_vals: &Vec<i32>,
     min: i32,
     max: i32,
-    mouse: &mut Option<Mouse>,
 ) -> String {
     let mut s = format!("Values per dimension: ");
     let mut means = vec![0.0; 3];
@@ -137,58 +141,8 @@ fn values_per_dimension(
         let accel_str;
         if means[i] > max as f32 * 0.60 {
             accel_str = "(incr)  ";
-            if let Some(mouse) = mouse {
-                match dim {
-                    "z" => {
-                        let pos = mouse.get_position().expect("Couldn't get mouse position");
-                        let delta = if pos.x > 0 { 1 } else { 0 };
-                        mouse
-                            .move_to(
-                                (pos.x + delta).try_into().unwrap(),
-                                pos.y.try_into().unwrap(),
-                            )
-                            .ok();
-                    }
-                    "y" => {
-                        let pos = mouse.get_position().expect("Couldn't get mouse position");
-                        let delta = if pos.x > 0 { 1 } else { 0 };
-                        mouse
-                            .move_to(
-                                (pos.x).try_into().unwrap(),
-                                (pos.y - delta).try_into().unwrap(),
-                            )
-                            .ok();
-                    }
-                    _ => {}
-                }
-            }
         } else if means[i] < max as f32 * 0.48 {
             accel_str = "(decr) ";
-            if let Some(mouse) = mouse {
-                match dim {
-                    "z" => {
-                        let pos = mouse.get_position().expect("Couldn't get mouse position");
-                        let delta = if pos.x > 0 { 1 } else { 0 };
-                        mouse
-                            .move_to(
-                                (pos.x - delta).try_into().unwrap(),
-                                pos.y.try_into().unwrap(),
-                            )
-                            .ok();
-                    }
-                    "y" => {
-                        let pos = mouse.get_position().expect("Couldn't get mouse position");
-                        let delta = if pos.x > 0 { 1 } else { 0 };
-                        mouse
-                            .move_to(
-                                (pos.x).try_into().unwrap(),
-                                (pos.y + delta).try_into().unwrap(),
-                            )
-                            .ok();
-                    }
-                    _ => {}
-                }
-            }
         } else {
             accel_str = "(steady)";
         }
@@ -201,4 +155,47 @@ fn values_per_dimension(
     return s;
 }
 
-fn write_to_file(data: &Vec<i32>, filename: String) {}
+fn control_mouse(
+    short_vals: &Vec<i32>,
+    mouse: &mut Mouse,
+) {
+    let pos = mouse.get_position().expect("Couldn't get mouse position");
+    let mut delta = (0, 0);
+    for (i, val) in short_vals.iter().enumerate() {
+        if i / 3 == 0 && i % 3 == 2 { // Thumb z
+            let x_min = 425;
+            let x_max = 495;
+            delta.0 = if *val < x_min { -1 } else { if *val > x_max { 1 } else { 0 } };
+            delta.0 = if pos.x as i32 + delta.0 < 0 { 0 } else { delta.0 };
+        }
+        if i / 3 == 0 &&  i % 3 == 1 { // Thumb y
+            let y_min = 465;
+            let y_max = 525;
+            delta.1 = if *val < y_min { 1 } else { if *val > y_max { -1 } else { 0 } };
+            delta.1 = if pos.y as i32 + delta.1 < 0 { 0 } else { delta.1 };
+        } 
+        if i / 3 == 1 && i % 3 == 1 { // forefinger y
+            let x_thresh = 500;
+            if *val > x_thresh {
+                //lclick_time = SystemTime::now();
+                // println!("CLICK");
+                mouse.click(&Keys::LEFT).ok();
+            }
+        }
+        if i / 3 == 2 && i % 3 == 1 { // middle finger y
+            let x_thresh = 500;
+            if *val > x_thresh {
+                // println!("CLICK");
+                mouse.click(&Keys::RIGHT).ok();
+            }
+        }
+    }
+    mouse.move_to( 
+        (pos.x as i32 + delta.0).try_into().unwrap(),
+        (pos.y as i32 + delta.1).try_into().unwrap()
+    ).ok();
+}
+
+fn _write_to_file(_data: &Vec<i32>, _filename: String) {
+    todo!();
+}
