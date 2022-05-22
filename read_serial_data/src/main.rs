@@ -1,6 +1,6 @@
-use mouse_rs::{Mouse, types::keys::Keys};
+use mouse_rs::{types::keys::Keys, Mouse};
 use std::time::{Duration, SystemTime};
-const CONTROL_MOUSE: bool = true;
+const CONTROL_MOUSE: bool = false;
 
 fn main() {
     let mouse = Mouse::new();
@@ -47,6 +47,8 @@ fn read_port_data(mut port: Box<dyn serialport::SerialPort>, mouse: &mut Option<
     let mut vals = vec![];
     let mut min = 0;
     let mut max = 800;
+    let mut lclick_time = SystemTime::now();
+    let mut rclick_time = SystemTime::now();
     loop {
         // sleep(Duration::from_millis(10));
         // If we've got a valid line of data
@@ -72,7 +74,7 @@ fn read_port_data(mut port: Box<dyn serialport::SerialPort>, mouse: &mut Option<
                         println!("{}", values_per_dimension(&short_vals, min, max));
                         // write_to_file("", &short_vals);
                         if let Some(mouse) = mouse {
-                            control_mouse(&short_vals, mouse);
+                            control_mouse(&short_vals, mouse, &mut lclick_time, &mut rclick_time);
                         }
                     }
 
@@ -83,7 +85,7 @@ fn read_port_data(mut port: Box<dyn serialport::SerialPort>, mouse: &mut Option<
                     s.push(c);
                 } else {
                     // We've reached the end of a number, and can parse it as one
-                    vals.push(s.parse::<i32>().expect("Failed to parse string"));
+                    vals.push(s.parse::<i32>().unwrap_or(0));
                     s = "".to_string();
                 }
             }
@@ -125,11 +127,7 @@ fn values_per_finger(short_vals: &Vec<i32>, min: i32, max: i32) -> String {
     return s;
 }
 
-fn values_per_dimension(
-    short_vals: &Vec<i32>,
-    min: i32,
-    max: i32,
-) -> String {
+fn values_per_dimension(short_vals: &Vec<i32>, min: i32, max: i32) -> String {
     let mut s = format!("Values per dimension: ");
     let mut means = vec![0.0; 3];
     for (i, dim) in vec!["x", "y", "z"].into_iter().enumerate() {
@@ -158,42 +156,81 @@ fn values_per_dimension(
 fn control_mouse(
     short_vals: &Vec<i32>,
     mouse: &mut Mouse,
+    lclick_time: &mut SystemTime,
+    rclick_time: &mut SystemTime,
 ) {
     let pos = mouse.get_position().expect("Couldn't get mouse position");
     let mut delta = (0, 0);
     for (i, val) in short_vals.iter().enumerate() {
-        if i / 3 == 0 && i % 3 == 2 { // Thumb z
+        if i / 3 == 0 && i % 3 == 2 {
+            // Thumb z
             let x_min = 425;
             let x_max = 495;
-            delta.0 = if *val < x_min { -1 } else { if *val > x_max { 1 } else { 0 } };
-            delta.0 = if pos.x as i32 + delta.0 < 0 { 0 } else { delta.0 };
+            delta.0 = if *val < x_min {
+                -1
+            } else {
+                if *val > x_max {
+                    1
+                } else {
+                    0
+                }
+            };
+            delta.0 = if pos.x as i32 + delta.0 < 0 {
+                0
+            } else {
+                delta.0
+            };
         }
-        if i / 3 == 0 &&  i % 3 == 1 { // Thumb y
+        if i / 3 == 0 && i % 3 == 1 {
+            // Thumb y
             let y_min = 465;
             let y_max = 525;
-            delta.1 = if *val < y_min { 1 } else { if *val > y_max { -1 } else { 0 } };
-            delta.1 = if pos.y as i32 + delta.1 < 0 { 0 } else { delta.1 };
-        } 
-        if i / 3 == 1 && i % 3 == 1 { // forefinger y
+            delta.1 = if *val < y_min {
+                1
+            } else {
+                if *val > y_max {
+                    -1
+                } else {
+                    0
+                }
+            };
+            delta.1 = if pos.y as i32 + delta.1 < 0 {
+                0
+            } else {
+                delta.1
+            };
+        }
+        if i / 3 == 1 && i % 3 == 1 {
+            // forefinger y
             let x_thresh = 500;
-            if *val > x_thresh {
-                //lclick_time = SystemTime::now();
+            if *val > x_thresh
+                && SystemTime::now().duration_since(*lclick_time).unwrap()
+                    > Duration::from_millis(100)
+            {
+                *lclick_time = SystemTime::now();
                 // println!("CLICK");
                 mouse.click(&Keys::LEFT).ok();
             }
         }
-        if i / 3 == 2 && i % 3 == 1 { // middle finger y
+        if i / 3 == 2 && i % 3 == 1 {
+            // middle finger y
             let x_thresh = 500;
-            if *val > x_thresh {
+            if *val > x_thresh
+                && SystemTime::now().duration_since(*rclick_time).unwrap()
+                    > Duration::from_millis(100)
+            {
+                *rclick_time = SystemTime::now();
                 // println!("CLICK");
                 mouse.click(&Keys::RIGHT).ok();
             }
         }
     }
-    mouse.move_to( 
-        (pos.x as i32 + delta.0).try_into().unwrap(),
-        (pos.y as i32 + delta.1).try_into().unwrap()
-    ).ok();
+    mouse
+        .move_to(
+            (pos.x as i32 + delta.0).try_into().unwrap(),
+            (pos.y as i32 + delta.1).try_into().unwrap(),
+        )
+        .ok();
 }
 
 fn _write_to_file(_data: &Vec<i32>, _filename: String) {
