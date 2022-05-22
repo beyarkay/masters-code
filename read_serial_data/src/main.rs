@@ -1,5 +1,11 @@
+use chrono::prelude::{DateTime, Local};
 use mouse_rs::{types::keys::Keys, Mouse};
-use std::time::{Duration, SystemTime};
+use std::io::Write;
+use std::thread::{self, JoinHandle};
+use std::{
+    fs::File,
+    time::{Duration, SystemTime},
+};
 const CONTROL_MOUSE: bool = false;
 
 fn main() {
@@ -43,14 +49,17 @@ fn main() {
 /// data from that port and plot it as a series of sparklines to `stdout`
 fn read_port_data(mut port: Box<dyn serialport::SerialPort>, mouse: &mut Option<Mouse>) {
     let mut serial_buf: Vec<u8> = vec![0; 32];
-    let mut s: String = "".to_string();
+    let mut val: String = "".to_string();
     let mut vals = vec![];
     let mut min = 0;
     let mut max = 800;
     let mut lclick_time = SystemTime::now();
     let mut rclick_time = SystemTime::now();
+    let mut data = vec![];
+    let mut prev_millis = 0;
+    let mut start = Local::now();
+    let mut handle: Option<JoinHandle<()>> = None;
     loop {
-        // sleep(Duration::from_millis(10));
         // If we've got a valid line of data
         if let Ok(num_bytes) = port.read(serial_buf.as_mut_slice()) {
             for idx in 0..num_bytes {
@@ -58,35 +67,51 @@ fn read_port_data(mut port: Box<dyn serialport::SerialPort>, mouse: &mut Option<
                 // check if we've reached the end of the line
                 if c == '\n' {
                     println!("\n\nRaw values:           {:?}", vals);
-                    let short_vals = vals.clone().into_iter().skip(2).collect::<Vec<i32>>();
-                    if short_vals.len() == 15 {
-                        min = if short_vals.len() != 0 {
-                            i32::min(min, *short_vals.iter().min().unwrap())
-                        } else {
-                            min
-                        };
-                        max = if short_vals.len() != 0 {
-                            i32::max(max, *short_vals.iter().max().unwrap())
-                        } else {
-                            max
-                        };
-                        println!("{}", values_per_finger(&short_vals, min, max));
-                        println!("{}", values_per_dimension(&short_vals, min, max));
-                        // write_to_file("", &short_vals);
-                        if let Some(mouse) = mouse {
-                            control_mouse(&short_vals, mouse, &mut lclick_time, &mut rclick_time);
+                    // If we've received a full packet of information
+                    if vals.len() != 17 {
+                        continue;
+                    }
+                    if vals[0] != 0 && prev_millis > vals[1] {
+                        // TODO add checks to see if the gloves are in the resting position
+                        if handle.is_some() {
+                            handle.unwrap().join().expect("Failed to join thread");
                         }
+                        // TODO This can be sped up if we don't try to parse the Serial input as
+                        // numbers only to convert it back to strings for writing to file
+                        handle = Some(write_to_file(data, start));
+                        start = Local::now();
+                        data = vec![];
+                    }
+                    data.push(vals.clone());
+                    prev_millis = vals[1];
+                    let short_vals = vals.clone().into_iter().skip(2).collect::<Vec<u16>>();
+                    min = if short_vals.len() != 0 {
+                        u16::min(min, *short_vals.iter().min().unwrap())
+                    } else {
+                        min
+                    };
+                    max = if short_vals.len() != 0 {
+                        u16::max(max, *short_vals.iter().max().unwrap())
+                    } else {
+                        max
+                    };
+                    println!("{}", values_per_finger(&short_vals, min, max));
+                    println!("{}", values_per_dimension(&short_vals, min, max));
+
+                    if let Some(mouse) = mouse {
+                        control_mouse(&short_vals, mouse, &mut lclick_time, &mut rclick_time);
                     }
 
+                    // reset the values and s string
                     vals = vec![];
-                    s = "".to_string();
+                    val = "".to_string();
                 } else if c != ',' {
                     // if we've just got another character
-                    s.push(c);
+                    val.push(c);
                 } else {
                     // We've reached the end of a number, and can parse it as one
-                    vals.push(s.parse::<i32>().unwrap_or(0));
-                    s = "".to_string();
+                    vals.push(val.parse::<u16>().unwrap_or(0));
+                    val = "".to_string();
                 }
             }
         } else {
@@ -100,7 +125,7 @@ fn read_port_data(mut port: Box<dyn serialport::SerialPort>, mouse: &mut Option<
 ///
 /// The values in `data` are scaled between `low` and `high` and then mapped to 9 values which are
 /// the sparks: ` ▁▂▂▄▅▆▇█` (note the inclusion of the space ` `).
-fn spark(data: &Vec<i32>, low: i32, high: i32) -> String {
+fn spark(data: &Vec<u16>, low: u16, high: u16) -> String {
     assert!(low < high);
     let sparklines = vec![' ', '▁', '▂', '▃', '▄', '▅', '▆', '▇', '█'];
     let range = high - low;
@@ -118,7 +143,7 @@ fn spark(data: &Vec<i32>, low: i32, high: i32) -> String {
     return sparkline;
 }
 
-fn values_per_finger(short_vals: &Vec<i32>, min: i32, max: i32) -> String {
+fn values_per_finger(short_vals: &Vec<u16>, min: u16, max: u16) -> String {
     let mut s = format!("Values per finger:    ");
     for (i, chunk) in short_vals.chunks(3).enumerate() {
         let sparklines = spark(&chunk.to_vec(), min, max);
@@ -127,7 +152,7 @@ fn values_per_finger(short_vals: &Vec<i32>, min: i32, max: i32) -> String {
     return s;
 }
 
-fn values_per_dimension(short_vals: &Vec<i32>, min: i32, max: i32) -> String {
+fn values_per_dimension(short_vals: &Vec<u16>, min: u16, max: u16) -> String {
     let mut s = format!("Values per dimension: ");
     let mut means = vec![0.0; 3];
     for (i, dim) in vec!["x", "y", "z"].into_iter().enumerate() {
@@ -135,7 +160,7 @@ fn values_per_dimension(short_vals: &Vec<i32>, min: i32, max: i32) -> String {
         for val in short_vals.iter().skip(i).step_by(3) {
             dim_vec.push(*val);
         }
-        means[i] = dim_vec.iter().sum::<i32>() as f32 / 5.0;
+        means[i] = dim_vec.iter().sum::<u16>() as f32 / 5.0;
         let accel_str;
         if means[i] > max as f32 * 0.60 {
             accel_str = "(incr)  ";
@@ -154,7 +179,7 @@ fn values_per_dimension(short_vals: &Vec<i32>, min: i32, max: i32) -> String {
 }
 
 fn control_mouse(
-    short_vals: &Vec<i32>,
+    short_vals: &Vec<u16>,
     mouse: &mut Mouse,
     lclick_time: &mut SystemTime,
     rclick_time: &mut SystemTime,
@@ -233,6 +258,25 @@ fn control_mouse(
         .ok();
 }
 
-fn _write_to_file(_data: &Vec<i32>, _filename: String) {
-    todo!();
+fn write_to_file(data: Vec<Vec<u16>>, start: DateTime<Local>) -> JoinHandle<()> {
+    thread::spawn(move || {
+        let gesture_idx = data[0][0];
+        let measurements = data
+            .into_iter()
+            .map(|line| {
+                // Convert each line into a csv string
+                line.into_iter()
+                    .skip(1) // Skip the gesture index
+                    .map(|d| d.to_string())
+                    .collect::<Vec<_>>()
+                    .join(",")
+            })
+            .collect::<Vec<String>>();
+        let filename = format!(
+            "../gesture_data/gesture_{gesture_idx:0>3}/{}.txt",
+            start.to_rfc3339()
+        );
+        let mut file = File::create(filename).unwrap();
+        write!(&mut file, "{}", measurements.join("\n")).unwrap();
+    })
 }
