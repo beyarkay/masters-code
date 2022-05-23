@@ -69,16 +69,22 @@ fn read_port_data(mut port: Box<dyn serialport::SerialPort>, mouse: &mut Option<
                     println!("\n\nRaw values:           {:?}", vals);
                     // If we've received a full packet of information
                     if vals.len() != 17 {
+                        vals = vec![];
+                        val = "".to_string();
                         continue;
                     }
-                    if vals[0] != 0 && prev_millis > vals[1] {
+                    vals[0] = 1;
+                    // TODO remove this line
+                    if Local::now().signed_duration_since(start) > chrono::Duration::from_std(Duration::from_secs(1)).unwrap() {
+                    // if vals[0] != 0 && prev_millis > vals[1] {
                         // TODO add checks to see if the gloves are in the resting position
-                        if handle.is_some() {
-                            handle.unwrap().join().expect("Failed to join thread");
-                        }
+                        // if handle.is_some() {
+                        //     handle.unwrap().join().expect("Failed to join thread");
+                        // }
                         // TODO This can be sped up if we don't try to parse the Serial input as
                         // numbers only to convert it back to strings for writing to file
-                        handle = Some(write_to_file(data, start));
+                        write_to_file(data, start);
+                        println!("=====\nWRITING TO FILE\n=====");
                         start = Local::now();
                         data = vec![];
                     }
@@ -258,7 +264,7 @@ fn control_mouse(
         .ok();
 }
 
-fn write_to_file(data: Vec<Vec<u16>>, start: DateTime<Local>) -> JoinHandle<()> {
+fn write_to_file(data: Vec<Vec<u16>>, start: DateTime<Local>){
     thread::spawn(move || {
         let gesture_idx = data[0][0];
         let measurements = data
@@ -273,10 +279,11 @@ fn write_to_file(data: Vec<Vec<u16>>, start: DateTime<Local>) -> JoinHandle<()> 
             })
             .collect::<Vec<String>>();
         let filename = format!(
-            "../gesture_data/gesture_{gesture_idx:0>3}/{}.txt",
+            "../gesture_data/train/gesture{gesture_idx:0>4}/{}.txt",
             start.to_rfc3339()
         );
+        println!("Saving to {filename}");
         let mut file = File::create(filename).unwrap();
         write!(&mut file, "{}", measurements.join("\n")).unwrap();
-    })
+    });
 }
