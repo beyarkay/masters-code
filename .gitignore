@@ -1,4 +1,9 @@
 .DS_Store
+*/.DS_Store
 *.swp
-.venv
 read_serial_data/target/
+*/.venv
+*/.ipynb_checkpoints/
+gesture_data/test/*/*.txt
+gesture_data/train/*/*.txt
+gesture_data/valid/*/*.txt
