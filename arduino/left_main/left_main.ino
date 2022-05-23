@@ -30,8 +30,8 @@ void loop() {
         sprintf(buffer, "%4i,", val);
         Wire.write(buffer, 5);
     }
-    Wire.write(newline, 2);
-    delay(1);
+    // Wire.write(newline, 2);
+    delay(10);
     digitalWrite(LED_BUILTIN, LOW);
     Wire.endTransmission();
 }
