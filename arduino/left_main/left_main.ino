@@ -4,7 +4,6 @@ const int NUM_SELECT_PINS = 4;
 const int PINS_SENSOR_SELECT[] = {8, 9, 10, 11};
 const int PIN_SENSOR_INPUT = A0;
 int val = 0;
-char newline[2] = "\n";
 
 void setup() {
     pinMode(LED_BUILTIN, OUTPUT);
@@ -26,13 +25,43 @@ void loop() {
             digitalWrite(PINS_SENSOR_SELECT[j], (i & (1 << j)) >> j);
         }
         val = analogRead(PIN_SENSOR_INPUT);
-        char buffer[5];
-        sprintf(buffer, "%4i,", val);
-        Wire.write(buffer, 5);
+        int thou = val / 1000;
+        if (thou > 0) {
+            Wire.write('0' + thou);
+            val -= thou * 1000;
+        }
+        int hund = val / 100;
+        if (hund > 0 || thou) {
+            Wire.write('0' + hund);
+            val -= hund * 100;
+        }
+        int tens = val / 10;
+        if (tens > 0 || hund || thou) {
+            Wire.write('0' + tens);
+            val -= tens * 10;
+        }
+        if (val > 0 || tens || hund || thou) {
+            Wire.write('0' + val);
+        }
+        Wire.write(',');
     }
-    // Wire.write(newline, 2);
-    delay(10);
+    // Wire.write('!');
+    delay(5);
     digitalWrite(LED_BUILTIN, LOW);
-    Wire.endTransmission();
+    int status = Wire.endTransmission();
+    /* Status codes: 
+        0. Success.
+        1. Data too long to fit in transmit buffer.
+        2. Received NACK on transmit of address.
+        3. Received NACK on transmit of data.
+        4. Other error.
+        5. Timeout
+    */
+    for (int i = 0; i < status; i++) {
+        digitalWrite(LED_BUILTIN, HIGH);
+        delay(500);
+        digitalWrite(LED_BUILTIN, LOW);
+        delay(500);
+    }
 }
 

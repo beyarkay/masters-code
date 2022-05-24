@@ -1,4 +1,5 @@
 use chrono::prelude::{DateTime, Local};
+use std::fs;
 use mouse_rs::{types::keys::Keys, Mouse};
 use std::io::Write;
 use std::thread::{self, JoinHandle};
@@ -11,7 +12,7 @@ const CONTROL_MOUSE: bool = false;
 fn main() {
     let mouse = Mouse::new();
     let portname = "/dev/tty.usbmodem11101";
-    let mut port = serialport::new(portname, 57_600)
+    let mut port = serialport::new(portname, 19_200)
         .timeout(Duration::from_millis(1))
         .open();
     if let Err(_) = port {
@@ -20,8 +21,8 @@ fn main() {
         let ports = serialport::available_ports().expect("No ports found!");
         let portname = ports.last().expect("No ports found").port_name.clone();
         println!("Reading from `{}` instead", portname.clone());
-        port = serialport::new(portname, 57_600)
-            .timeout(Duration::from_millis(1))
+        port = serialport::new(portname, 19_200)
+            .timeout(Duration::from_millis(50))
             .open();
     }
 
@@ -48,43 +49,45 @@ fn main() {
 /// Given a port as returned by `serialport::new(...).open().unwrap()`, read the incoming sensor
 /// data from that port and plot it as a series of sparklines to `stdout`
 fn read_port_data(mut port: Box<dyn serialport::SerialPort>, mouse: &mut Option<Mouse>) {
-    let mut serial_buf: Vec<u8> = vec![0; 32];
+    let mut serial_buf: Vec<u8> = vec![0; 128];
     let mut val: String = "".to_string();
     let mut vals = vec![];
     let mut min = 0;
     let mut max = 800;
     let mut lclick_time = SystemTime::now();
     let mut rclick_time = SystemTime::now();
-    let mut data = vec![];
+    let mut data: Vec<Vec<u16>> = vec![];
     let mut prev_millis = 0;
     let mut start = Local::now();
     let mut handle: Option<JoinHandle<()>> = None;
     loop {
         // If we've got a valid line of data
-        if let Ok(num_bytes) = port.read(serial_buf.as_mut_slice()) {
+        let reading = port.read(serial_buf.as_mut_slice());
+        if let Ok(num_bytes) = reading {
             for idx in 0..num_bytes {
                 let c = serial_buf[idx] as char;
                 // check if we've reached the end of the line
                 if c == '\n' {
-                    println!("\n\nRaw values:           {:?}", vals);
+                    println!("Raw values:           {:?}", vals);
                     // If we've received a full packet of information
-                    if vals.len() != 17 {
+                    if vals.len() != 32 {
                         vals = vec![];
                         val = "".to_string();
                         continue;
                     }
-                    vals[0] = 1;
-                    // TODO remove this line
-                    if Local::now().signed_duration_since(start) > chrono::Duration::from_std(Duration::from_secs(1)).unwrap() {
-                    // if vals[0] != 0 && prev_millis > vals[1] {
+                    
+                    if prev_millis > vals[1] {
+                        // if vals[0] != 0 && prev_millis > vals[1] {
                         // TODO add checks to see if the gloves are in the resting position
                         // if handle.is_some() {
                         //     handle.unwrap().join().expect("Failed to join thread");
                         // }
                         // TODO This can be sped up if we don't try to parse the Serial input as
                         // numbers only to convert it back to strings for writing to file
-                        write_to_file(data, start);
-                        println!("=====\nWRITING TO FILE\n=====");
+                        if data[0][0] > 0 {
+                            write_to_file(data, start);
+                            println!("=====\nWRITING TO FILE\n=====");
+                        }
                         start = Local::now();
                         data = vec![];
                     }
@@ -101,8 +104,8 @@ fn read_port_data(mut port: Box<dyn serialport::SerialPort>, mouse: &mut Option<
                     } else {
                         max
                     };
-                    println!("{}", values_per_finger(&short_vals, min, max));
-                    println!("{}", values_per_dimension(&short_vals, min, max));
+                    // println!("{}", values_per_finger(&short_vals, min, max));
+                    // println!("{}", values_per_dimension(&short_vals, min, max));
 
                     if let Some(mouse) = mouse {
                         control_mouse(&short_vals, mouse, &mut lclick_time, &mut rclick_time);
@@ -121,7 +124,7 @@ fn read_port_data(mut port: Box<dyn serialport::SerialPort>, mouse: &mut Option<
                 }
             }
         } else {
-            println!("No data found");
+            println!("No data found: {:?}", reading.err().unwrap());
             break;
         }
     }
@@ -150,6 +153,7 @@ fn spark(data: &Vec<u16>, low: u16, high: u16) -> String {
 }
 
 fn values_per_finger(short_vals: &Vec<u16>, min: u16, max: u16) -> String {
+    todo!("This doesn't work with two hands");
     let mut s = format!("Values per finger:    ");
     for (i, chunk) in short_vals.chunks(3).enumerate() {
         let sparklines = spark(&chunk.to_vec(), min, max);
@@ -159,6 +163,7 @@ fn values_per_finger(short_vals: &Vec<u16>, min: u16, max: u16) -> String {
 }
 
 fn values_per_dimension(short_vals: &Vec<u16>, min: u16, max: u16) -> String {
+    todo!("This doesn't work with two hands");
     let mut s = format!("Values per dimension: ");
     let mut means = vec![0.0; 3];
     for (i, dim) in vec!["x", "y", "z"].into_iter().enumerate() {
@@ -264,7 +269,7 @@ fn control_mouse(
         .ok();
 }
 
-fn write_to_file(data: Vec<Vec<u16>>, start: DateTime<Local>){
+fn write_to_file(data: Vec<Vec<u16>>, start: DateTime<Local>) {
     thread::spawn(move || {
         let gesture_idx = data[0][0];
         let measurements = data
@@ -283,7 +288,15 @@ fn write_to_file(data: Vec<Vec<u16>>, start: DateTime<Local>){
             start.to_rfc3339()
         );
         println!("Saving to {filename}");
-        let mut file = File::create(filename).unwrap();
-        write!(&mut file, "{}", measurements.join("\n")).unwrap();
+        fs::create_dir("../gesture_data/train/gesture{gesture_idx:0>4}");
+        let file = File::create(filename.clone());
+        match file {
+            Ok(mut f) => {
+                write!(&mut f, "{}", measurements.join("\n"));
+            }, 
+            Err(e) => {
+                println!("Failed to write to {}: {}", filename, e);
+            }
+        }
     });
 }
