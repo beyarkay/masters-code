@@ -18,3 +18,5 @@ __pycache__/
 gesture_data/test/*/*.txt
 gesture_data/train/*/*.txt
 gesture_data/valid/*/*.txt
+
+machine_learning/wandb/
