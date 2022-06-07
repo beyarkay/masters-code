@@ -1,0 +1,21 @@
+gestures:
+  gesture0001: 
+    description: Left hand thumb IP flexion
+  gesture0002: 
+    description: Left hand index finger PIP flexion
+  gesture0003: 
+    description: Left hand middle finger PIP flexion
+  gesture0004: 
+    description: Left hand ring finger PIP flexion
+  gesture0005: 
+    description: Left hand little finger PIP flexion
+  gesture0006: 
+    description: Right hand thumb IP flexion
+  gesture0007: 
+    description: Right hand index finger PIP flexion
+  gesture0008: 
+    description: Right hand middle finger PIP flexion
+  gesture0009: 
+    description: Right hand ring finger PIP flexion
+  gesture0010: 
+    description: Right hand little finger PIP flexion
