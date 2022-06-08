@@ -19,3 +19,123 @@ gestures:
     description: Right hand ring finger PIP flexion
   gesture0010: 
     description: Right hand little finger PIP flexion
+  gesture11: 
+    description: Left hand thumb IP extension
+  gesture12: 
+    description: Left hand index finger PIP extension
+  gesture13: 
+    description: Left hand middle finger PIP extension
+  gesture14: 
+    description: Left hand ring finger PIP extension
+  gesture15: 
+    description: Left hand little finger PIP extension
+  gesture16: 
+    description: Right hand thumb IP extension
+  gesture17: 
+    description: Right hand index finger PIP extension
+  gesture18: 
+    description: Right hand middle finger PIP extension
+  gesture19: 
+    description: Right hand ring finger PIP extension
+  gesture20: 
+    description: Right hand little finger PIP extension
+  gesture21: 
+    description: Left hand thumb CMC flexion
+  gesture22: 
+    description: Left hand index finger MCP flexion
+  gesture23: 
+    description: Left hand middle finger MCP flexion
+  gesture24: 
+    description: Left hand ring finger MCP flexion
+  gesture25: 
+    description: Left hand little finger MCP flexion
+  gesture26: 
+    description: Right hand thumb CMC flexion
+  gesture27: 
+    description: Right hand index finger MCP flexion
+  gesture28: 
+    description: Right hand middle finger MCP flexion
+  gesture29: 
+    description: Right hand ring finger MCP flexion
+  gesture30: 
+    description: Right hand little finger MCP flexion
+  gesture31: 
+    description: Left hand thumb CMC extension
+  gesture32: 
+    description: Left hand index finger MCP extension
+  gesture33: 
+    description: Left hand middle finger MCP extension
+  gesture34: 
+    description: Left hand ring finger MCP extension
+  gesture35: 
+    description: Left hand little finger MCP extension
+  gesture36: 
+    description: Right hand thumb CMC extension
+  gesture37: 
+    description: Right hand index finger MCP extension
+  gesture38: 
+    description: Right hand middle finger MCP extension
+  gesture39: 
+    description: Right hand ring finger MCP extension
+  gesture40: 
+    description: Right hand little finger MCP extension
+  gesture41: 
+    description: No gesture
+  gesture42: 
+    description: Left thumb taps left hand index finger
+  gesture43: 
+    description: Left thumb taps left hand middle finger
+  gesture44: 
+    description: Left thumb taps left hand ring finger
+  gesture45: 
+    description: Left thumb taps left hand little finger
+  gesture46: 
+    description: No gesture
+  gesture47: 
+    description: Right thumb taps right hand index finger
+  gesture48: 
+    description: Right thumb taps right hand middle finger
+  gesture49: 
+    description: Right thumb taps right hand ring finger
+  gesture50: 
+    description: Right thumb taps right hand little finger
+  gesture51: 
+    description: Pronation at the left hand wrist
+  gesture52: 
+    description: Ulnar deviation at the left hand wrist
+  gesture53: 
+    description: Clockwise then counter clockwise rotation at the left hand wrist
+  gesture54: 
+    description: No gesture
+  gesture55: 
+    description: No gesture
+  gesture56: 
+    description: Pronation at the right hand wrist
+  gesture57: 
+    description: Ulnar deviation at the right hand wrist
+  gesture58: 
+    description: Clockwise then counter clockwise rotation at the right hand wrist
+  gesture59: 
+    description: No gesture
+  gesture60: 
+    description: No gesture
+  gesture61: 
+    description: Supination at the left hand wrist
+  gesture62: 
+    description: Radial deviation at the left hand wrist
+  gesture63: 
+    description: Counter clockwise then clockwise rotation at the left hand wrist
+  gesture64: 
+    description: No gesture
+  gesture65: 
+    description: No gesture
+  gesture66: 
+    description: Supination at the right hand wrist
+  gesture67: 
+    description: Radial deviation at the right hand wrist
+  gesture68: 
+    description: Counter clockwise then clockwise rotation at the right hand wrist
+  gesture69: 
+    description: No gesture
+  gesture70: 
+    description: No gesture
