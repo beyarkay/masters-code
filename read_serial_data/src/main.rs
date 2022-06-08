@@ -77,11 +77,7 @@ fn read_port_data(mut port: Box<dyn serialport::SerialPort>, mouse: &mut Option<
                     }
                     
                     if prev_millis > vals[1] {
-                        // if vals[0] != 0 && prev_millis > vals[1] {
                         // TODO add checks to see if the gloves are in the resting position
-                        // if handle.is_some() {
-                        //     handle.unwrap().join().expect("Failed to join thread");
-                        // }
                         // TODO This can be sped up if we don't try to parse the Serial input as
                         // numbers only to convert it back to strings for writing to file
                         if data[0][0] > 0 {
@@ -104,8 +100,11 @@ fn read_port_data(mut port: Box<dyn serialport::SerialPort>, mouse: &mut Option<
                     } else {
                         max
                     };
-                    // println!("{}", values_per_finger(&short_vals, min, max));
-                    // println!("{}", values_per_dimension(&short_vals, min, max));
+                    if vals[0] == 0 {
+                        println!("{}", values_per_finger(&short_vals, min, max));
+                        println!("{}", values_per_dimension(&short_vals, min, max));
+                        println!("\n\n\n\n");
+                    }
 
                     if let Some(mouse) = mouse {
                         control_mouse(&short_vals, mouse, &mut lclick_time, &mut rclick_time);
@@ -153,7 +152,6 @@ fn spark(data: &Vec<u16>, low: u16, high: u16) -> String {
 }
 
 fn values_per_finger(short_vals: &Vec<u16>, min: u16, max: u16) -> String {
-    todo!("This doesn't work with two hands");
     let mut s = format!("Values per finger:    ");
     for (i, chunk) in short_vals.chunks(3).enumerate() {
         let sparklines = spark(&chunk.to_vec(), min, max);
@@ -163,7 +161,6 @@ fn values_per_finger(short_vals: &Vec<u16>, min: u16, max: u16) -> String {
 }
 
 fn values_per_dimension(short_vals: &Vec<u16>, min: u16, max: u16) -> String {
-    todo!("This doesn't work with two hands");
     let mut s = format!("Values per dimension: ");
     let mut means = vec![0.0; 3];
     for (i, dim) in vec!["x", "y", "z"].into_iter().enumerate() {
@@ -171,15 +168,15 @@ fn values_per_dimension(short_vals: &Vec<u16>, min: u16, max: u16) -> String {
         for val in short_vals.iter().skip(i).step_by(3) {
             dim_vec.push(*val);
         }
-        means[i] = dim_vec.iter().sum::<u16>() as f32 / 5.0;
-        let accel_str;
-        if means[i] > max as f32 * 0.60 {
-            accel_str = "(incr)  ";
-        } else if means[i] < max as f32 * 0.48 {
-            accel_str = "(decr) ";
-        } else {
-            accel_str = "(steady)";
-        }
+        // means[i] = dim_vec.iter().sum::<u16>() as f32 / 5.0;
+        let accel_str = "";
+        // if means[i] > max as f32 * 0.60 {
+        //     accel_str = "(incr)  ";
+        // } else if means[i] < max as f32 * 0.48 {
+        //     accel_str = "(decr) ";
+        // } else {
+        //     accel_str = "(steady)";
+        // }
         s.push_str(format!("{} {}: {} ", dim, accel_str, spark(&dim_vec, min, max)).as_str());
     }
     // s.push_str("\n");
