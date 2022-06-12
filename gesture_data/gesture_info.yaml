@@ -19,123 +19,123 @@ gestures:
     description: Right hand ring finger PIP flexion
   gesture0010: 
     description: Right hand little finger PIP flexion
-  gesture11: 
+  gesture0011: 
     description: Left hand thumb IP extension
-  gesture12: 
+  gesture0012: 
     description: Left hand index finger PIP extension
-  gesture13: 
+  gesture0013: 
     description: Left hand middle finger PIP extension
-  gesture14: 
+  gesture0014: 
     description: Left hand ring finger PIP extension
-  gesture15: 
+  gesture0015: 
     description: Left hand little finger PIP extension
-  gesture16: 
+  gesture0016: 
     description: Right hand thumb IP extension
-  gesture17: 
+  gesture0017: 
     description: Right hand index finger PIP extension
-  gesture18: 
+  gesture0018: 
     description: Right hand middle finger PIP extension
-  gesture19: 
+  gesture0019: 
     description: Right hand ring finger PIP extension
-  gesture20: 
+  gesture0020: 
     description: Right hand little finger PIP extension
-  gesture21: 
+  gesture0021: 
     description: Left hand thumb CMC flexion
-  gesture22: 
+  gesture0022: 
     description: Left hand index finger MCP flexion
-  gesture23: 
+  gesture0023: 
     description: Left hand middle finger MCP flexion
-  gesture24: 
+  gesture0024: 
     description: Left hand ring finger MCP flexion
-  gesture25: 
+  gesture0025: 
     description: Left hand little finger MCP flexion
-  gesture26: 
+  gesture0026: 
     description: Right hand thumb CMC flexion
-  gesture27: 
+  gesture0027: 
     description: Right hand index finger MCP flexion
-  gesture28: 
+  gesture0028: 
     description: Right hand middle finger MCP flexion
-  gesture29: 
+  gesture0029: 
     description: Right hand ring finger MCP flexion
-  gesture30: 
+  gesture0030: 
     description: Right hand little finger MCP flexion
-  gesture31: 
+  gesture0031: 
     description: Left hand thumb CMC extension
-  gesture32: 
+  gesture0032: 
     description: Left hand index finger MCP extension
-  gesture33: 
+  gesture0033: 
     description: Left hand middle finger MCP extension
-  gesture34: 
+  gesture0034: 
     description: Left hand ring finger MCP extension
-  gesture35: 
+  gesture0035: 
     description: Left hand little finger MCP extension
-  gesture36: 
+  gesture0036: 
     description: Right hand thumb CMC extension
-  gesture37: 
+  gesture0037: 
     description: Right hand index finger MCP extension
-  gesture38: 
+  gesture0038: 
     description: Right hand middle finger MCP extension
-  gesture39: 
+  gesture0039: 
     description: Right hand ring finger MCP extension
-  gesture40: 
+  gesture0040: 
     description: Right hand little finger MCP extension
-  gesture41: 
+  gesture0041: 
     description: No gesture
-  gesture42: 
+  gesture0042: 
     description: Left thumb taps left hand index finger
-  gesture43: 
+  gesture0043: 
     description: Left thumb taps left hand middle finger
-  gesture44: 
+  gesture0044: 
     description: Left thumb taps left hand ring finger
-  gesture45: 
+  gesture0045: 
     description: Left thumb taps left hand little finger
-  gesture46: 
+  gesture0046: 
     description: No gesture
-  gesture47: 
+  gesture0047: 
     description: Right thumb taps right hand index finger
-  gesture48: 
+  gesture0048: 
     description: Right thumb taps right hand middle finger
-  gesture49: 
+  gesture0049: 
     description: Right thumb taps right hand ring finger
-  gesture50: 
+  gesture0050: 
     description: Right thumb taps right hand little finger
-  gesture51: 
+  gesture0051: 
     description: Pronation at the left hand wrist
-  gesture52: 
+  gesture0052: 
     description: Ulnar deviation at the left hand wrist
-  gesture53: 
+  gesture0053: 
     description: Clockwise then counter clockwise rotation at the left hand wrist
-  gesture54: 
+  gesture0054: 
     description: No gesture
-  gesture55: 
+  gesture0055: 
     description: No gesture
-  gesture56: 
+  gesture0056: 
     description: Pronation at the right hand wrist
-  gesture57: 
+  gesture0057: 
     description: Ulnar deviation at the right hand wrist
-  gesture58: 
+  gesture0058: 
     description: Clockwise then counter clockwise rotation at the right hand wrist
-  gesture59: 
+  gesture0059: 
     description: No gesture
-  gesture60: 
+  gesture0060: 
     description: No gesture
-  gesture61: 
+  gesture0061: 
     description: Supination at the left hand wrist
-  gesture62: 
+  gesture0062: 
     description: Radial deviation at the left hand wrist
-  gesture63: 
+  gesture0063: 
     description: Counter clockwise then clockwise rotation at the left hand wrist
-  gesture64: 
+  gesture0064: 
     description: No gesture
-  gesture65: 
+  gesture0065: 
     description: No gesture
-  gesture66: 
+  gesture0066: 
     description: Supination at the right hand wrist
-  gesture67: 
+  gesture0067: 
     description: Radial deviation at the right hand wrist
-  gesture68: 
+  gesture0068: 
     description: Counter clockwise then clockwise rotation at the right hand wrist
-  gesture69: 
+  gesture0069: 
     description: No gesture
-  gesture70: 
+  gesture0070: 
     description: No gesture
