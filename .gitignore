@@ -20,3 +20,7 @@ gesture_data/train/*/*.txt
 gesture_data/valid/*/*.txt
 
 machine_learning/wandb/
+
+*.png
+*.pdf
+*.jpg
