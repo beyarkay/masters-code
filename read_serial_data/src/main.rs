@@ -12,7 +12,8 @@ const CONTROL_MOUSE: bool = false;
 fn main() {
     let mouse = Mouse::new();
     let portname = "/dev/tty.usbmodem11101";
-    let mut port = serialport::new(portname, 19_200)
+    let baudrate = 19_200;
+    let mut port = serialport::new(portname, baudrate)
         .timeout(Duration::from_millis(1))
         .open();
     if let Err(_) = port {
@@ -21,7 +22,7 @@ fn main() {
         let ports = serialport::available_ports().expect("No ports found!");
         let portname = ports.last().expect("No ports found").port_name.clone();
         println!("Reading from `{}` instead", portname.clone());
-        port = serialport::new(portname, 19_200)
+        port = serialport::new(portname, baudrate)
             .timeout(Duration::from_millis(50))
             .open();
     }
