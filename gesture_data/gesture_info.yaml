@@ -209,5 +209,5 @@ gestures:
     description: No gesture
     desc: ng
   gesture0255: 
-    description: The "no movement" gesture.
+    description: The "no movement" gesture
     desc: no mvmt
