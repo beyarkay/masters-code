@@ -24,3 +24,5 @@ machine_learning/wandb/
 *.png
 *.pdf
 *.jpg
+
+*.pickle
