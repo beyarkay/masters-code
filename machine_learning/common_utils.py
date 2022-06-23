@@ -51,43 +51,83 @@ def get_dir_files():
     return dir_files
 
 
-def plot_raw_gesture(arr, title):
+def plot_raw_gesture(
+    arr,
+    title,
+    ax=None,
+    show_cbar=True,
+    show_xticks=True,
+    show_yticks=True,
+    delim_lw=1.5
+):
     """ Given an array of data and a title, create a heatmap of the sensor data."""
-    # Create a new plot
-    fig, ax = plt.subplots(1, figsize=(20, 10))
-    # with title referencing to the origin of the data
-    fig.suptitle(title)
+    # If no ax is specified, create one.
+    if ax is None:
+        # Create a new plot
+        fig, ax = plt.subplots(1, figsize=(20, 10))
+        # with title referencing to the origin of the data
+        fig.suptitle(title)
+    else:
+        # If an ax is specified, then use it and
+        # get a reference to the current figure
+        fig = plt.gcf()
+        ax.title.set_text(title)
+
     # If we've got a dataframe
     if type(arr) is pd.core.frame.DataFrame:
         # Plot the data
         img = ax.imshow(arr.T, cmap='viridis', aspect='auto')
         fig.colorbar(img, ax=ax)
-        # Set the xticks to be time since the start of the gesture in ms
-        ax.set_xticks([i for i in range(len(arr.index))])
-        ax.set_xticklabels([t.microseconds // 1000 for t in arr.index])
-        ax.set_xlabel("Milliseconds")
+        if show_xticks:
+            # Set the xticks to be time since the start of the gesture in ms
+            ax.set_xticks([i for i in range(len(arr.index))])
+            ax.set_xticklabels([t.microseconds // 1000 for t in arr.index])
+            ax.set_xlabel("Milliseconds")
+        else:
+            ax.set_xticks([])
 
     elif type(arr) is np.ndarray:
+        time = np.array(list(range(0, 975+1, 25)))
         if arr.shape == (1200,):
             arr = arr.reshape((30, 40)).T
-            time = list(range(0, 975+1, 25))
+
         elif arr.shape == (40, 31):
             # extract the x-axis labels
             time = arr[:,0]
             # And the rest of the data
             arr = arr[:,1:]
+
         # Actually draw the heatmap, with non-square blocks
         img = ax.imshow(arr.T, cmap='viridis', aspect='auto')
-        fig.colorbar(img, ax=ax)
-        # Set the x-axis ticks to be the elapsed miliseconds since the gesture started
-        ax.set_xticks([i for i in range(len(arr))])
-        ax.set_xticklabels([int(t) for t in time])
+        if show_cbar:
+            fig.colorbar(img, ax=ax)
+        if show_xticks:
+            # Set the x-axis ticks to be the elapsed miliseconds since the gesture started
+            ax.set_xticks([i for i in range(len(arr))])
+            ax.set_xticklabels([int(t) for t in time])
+            ax.set_xlabel("Milliseconds")
+        else:
+            ax.set_xticks([])
 
-    # Set the y-axis ticks to the names of the different fingers like 'right-index-y'
-    ax.set_yticks([i for i in range(len(fingers))])
-    ax.set_yticklabels(fingers)
+    if show_yticks:
+        # Set the y-axis ticks to the names of the different fingers like 'right-index-y'
+        ax.set_yticks([i for i in range(len(fingers))])
+        ax.set_yticklabels(fingers)
+    else:
+        ax.set_yticks([])
+
     # remove the grid
     ax.grid(visible=None)
+
+    # Draw some horizontal separators between the fingers
+    for i in range(1, 10):
+        # These constants had to be hand-tuned
+        ax.plot([-0.5, 39.5], [i*3 - 0.6, i*3 - 0.6], c='white', alpha=0.75, lw=delim_lw)
+
+    if show_xticks:
+        # Rotate the x-ticks so they're visible
+        ax.tick_params(axis='x', rotation=90)
+
     return fig, ax
 
 
