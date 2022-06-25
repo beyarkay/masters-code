@@ -83,12 +83,18 @@ def predict_from_serial_stream(ser):
                 predictions.sort(key=lambda ip: -ip[1])
 
                 if predictions[0][1] > 0.9:
-                    # Only bother printing info if the model is confident
+                    # If the model is confident in the prediction, then save
+                    # the observation for future analysis
+                    now = datetime.datetime.now().isoformat()
+                    gesture = idx_to_gesture[predictions[0][0]]
+                    with open('../gesture_data/self-classified/{gesture}/{now}.txt', 'w') as f:
+                        f.writelines([str(i*25) + ',' + ','.join(a) for i, a in enumerate(obs.tolist())])
+                    # Also print the prediction
                     tot = 0
                     for i, pred in predictions:
                         tot += pred
                         pretty = f'{pred*100:.2f}%'
-                        print(f'{idx_to_gesture[i]:>11}: {pretty:<10}', end='')
+                        print(f'{gesture:>11}: {pretty:<10}', end='')
                         if tot >= 0.95:
                             break
                     print()
