@@ -6,6 +6,7 @@ const int PIN_SENSOR_INPUT = A0;
 int val = 0;
 
 void setup() {
+    // Register the built in LED as output (for debugging)
     pinMode(LED_BUILTIN, OUTPUT);
     // register sensor selection pins as outputs
     for (int i = 0; i < NUM_SELECT_PINS; i++) {
@@ -18,13 +19,20 @@ void setup() {
 }
 
 void loop() {
-    Wire.beginTransmission(4); // transmit to device #4
+    // transmit to device #4
+    Wire.beginTransmission(4);
+    // Turn on the debugging LED
     digitalWrite(LED_BUILTIN, HIGH);
+    // Iterate over each sensor and read it's value
     for (int i = 0; i < NUM_SENSORS; i++) {
+        // Set the selection pins of the multiplexer
         for (int j = 0; j < NUM_SELECT_PINS; j++) {
             digitalWrite(PINS_SENSOR_SELECT[j], (i & (1 << j)) >> j);
         }
+        // Actually read in the sensor value
         val = analogRead(PIN_SENSOR_INPUT);
+        // Now convert the integer into a string so that written number always
+        // occupies the same amount of bytes
         int thou = val / 1000;
         if (thou > 0) {
             Wire.write('0' + thou);
@@ -43,9 +51,9 @@ void loop() {
         if (val > 0 || tens || hund || thou) {
             Wire.write('0' + val);
         }
+        // Finally write a `,` to deliminate the values
         Wire.write(',');
     }
-    // Wire.write('!');
     delay(5);
     digitalWrite(LED_BUILTIN, LOW);
     int status = Wire.endTransmission();

@@ -21,11 +21,18 @@ const int MS_PER_TRAINING_PACKET = 1000;
 const int MS_PER_BEEP = 30;
 long last_beep = 0;
 
+// Keep track of the last time we wrote to the serial port
+long last_write = 0;
+const int MIN_MS_PER_WRITE = 20;
+
 // left hand can send up to ((4 + 1) * 15) = 75 bytes of data at a time
 const int left_hand_cap = 75;
 int left_hand_len = 0;
 char left_hand[75];
-boolean new_data = false;
+
+const int right_hand_cap = 75;
+int right_hand_len = 0;
+char right_hand[75];
 
 void setup() {
     // Mark the builtin LED as output
@@ -48,91 +55,94 @@ void setup() {
     }
     // Mark the buzzer as an output
     pinMode(PIN_BUZZER, OUTPUT);
-    Serial.begin(57600);
+    // Set the last write time to now
+    last_write = millis();
 }
 
 void loop() {
-    // If we've got a data packet from the left hand
-    if (left_hand_len > 0) {
-        // First calculate and print out the gesture index.
-        // Read in the DIP switches to figure out what gesture index we're at
-        // Init `gesture_index` to zero so bit shifts can work properly
-        gesture_index = 0x00;
-        for (int i = 0; i < NUM_DIP_SWITCHES; i++) {
-            int val = 1 - digitalRead(PINS_DIP_SWITCHES[i]);
-            gesture_index |= val << (NUM_DIP_SWITCHES - i - 1);
-        }
-        // Print the gesture_index
+    if (millis() - last_write >= MIN_MS_PER_WRITE) {
+        last_write = millis();
         Serial.print(gesture_index);
         Serial.print(",");
-
-        // Only sound the buzzer if we're in TRAINING mode and it's the correct
-        // time interval
-        if (gesture_index != 0
-                && millis() % MS_PER_TRAINING_PACKET <= MS_PER_BEEP
-                && buzzer_state != 150) {
-            // sound the buzzer
-            buzzer_state = 150;
-            analogWrite(PIN_BUZZER, buzzer_state);
-            last_beep = millis();
-        } else if (buzzer_state != 0) {
-            // Reset the buzer
-            buzzer_state = 0;
-            analogWrite(PIN_BUZZER, buzzer_state);
-        }
-        if (gesture_index == 0) {
-            last_beep = millis();
-        }
-        // Print out the time since the start of the gesture
         Serial.print(millis() - last_beep);
         Serial.print(",");
-
-        // Then print out the data from the left hand
+        // Print out the data from the left hand
         for (int i = 0; i < left_hand_len; i++) {
-            Serial.print(left_hand[i]);
+            Serial.write(left_hand[i]);
         }
         left_hand_len = 0;
 
-        // Finally print out the data from the right hand
-        for (int i = 0; i < NUM_SENSORS; i++) {
-            for (int j = 0; j < NUM_SELECT_PINS; j++) {
-                digitalWrite(PINS_SENSOR_SELECT[j], (i & (1 << j)) >> j);
-            }
-            val = analogRead(PIN_SENSOR_INPUT);
-            // Serial.print(val);
-            int thou = val / 1000;
-            if (thou > 0) {
-                Serial.write('0' + thou);
-                val -= thou * 1000;
-            }
-            int hund = val / 100;
-            if (hund > 0 || thou) {
-                Serial.write('0' + hund);
-                val -= hund * 100;
-            }
-            int tens = val / 10;
-            if (tens > 0 || hund || thou) {
-                Serial.write('0' + tens);
-                val -= tens * 10;
-            }
-            if (val > 0 || tens || hund || thou) {
-                Serial.write('0' + val);
-            }
-            Serial.print(',');
+        // Print out the data from the right hand
+        for (int i = 0; i < right_hand_len; i++) {
+            Serial.write(right_hand[i]);
         }
-
-        // And end it all off with a newline
+        right_hand_len = 0;
         Serial.print("\n");
+    }
+    // Calculate and print out the gesture index. Read in the DIP switches
+    // to figure out what gesture index we're at Init `gesture_index` to
+    // zero so bit shifts can work properly
+    gesture_index = 0x00;
+    for (int i = 0; i < NUM_DIP_SWITCHES; i++) {
+        int val = 1 - digitalRead(PINS_DIP_SWITCHES[i]);
+        gesture_index |= val << (NUM_DIP_SWITCHES - i - 1);
+    }
+
+    // Only sound the buzzer if we're in TRAINING mode and it's the correct
+    // time interval
+    if (gesture_index != 0
+            && millis() % MS_PER_TRAINING_PACKET <= MS_PER_BEEP
+            && buzzer_state != 150) {
+        // sound the buzzer
+        buzzer_state = 150;
+        analogWrite(PIN_BUZZER, buzzer_state);
+        last_beep = millis();
+    } else if (buzzer_state != 0) {
+        // Reset the buzer
+        buzzer_state = 0;
+        analogWrite(PIN_BUZZER, buzzer_state);
+    }
+    if (gesture_index == 0) {
+        last_beep = millis();
+    }
+
+    right_hand_len = 0;
+    for (int i = 0; i < NUM_SENSORS; i++) {
+        for (int j = 0; j < NUM_SELECT_PINS; j++) {
+            digitalWrite(PINS_SENSOR_SELECT[j], (i & (1 << j)) >> j);
+        }
+        val = analogRead(PIN_SENSOR_INPUT);
+        int thou = val / 1000;
+        if (thou > 0) {
+            right_hand[right_hand_len++] = '0' + thou;
+            val -= thou * 1000;
+        }
+        int hund = val / 100;
+        if (hund > 0 || thou) {
+            right_hand[right_hand_len++] = '0' + hund;
+            val -= hund * 100;
+        }
+        int tens = val / 10;
+        if (tens > 0 || hund || thou) {
+            right_hand[right_hand_len++] = '0' + tens;
+            val -= tens * 10;
+        }
+        if (val > 0 || tens || hund || thou) {
+            right_hand[right_hand_len++] = '0' + val;
+        }
+        right_hand[right_hand_len++] = ',';
     }
 }
 
+/*
+ * Read incoming I2C data from the left hand.
+ */
 void receiveEvent(int num_events) {
     digitalWrite(LED_BUILTIN, HIGH);
     left_hand_len = 0;
     while (Wire.available() > 0) {
         left_hand[left_hand_len++] = Wire.read();
     }
-    delay(1);
     digitalWrite(LED_BUILTIN, LOW);
 }
 
