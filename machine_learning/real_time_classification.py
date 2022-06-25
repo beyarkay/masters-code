@@ -1,11 +1,12 @@
 print("Importing models")
-from time import sleep
+from time import sleep, time
+import datetime
 from common_utils import *
 import serial
 import os
 import subprocess
 
-def main() -> None:
+def main():
     # Set the options for the serial port
     baudrate = 19_200 
     ports = subprocess.run(
@@ -30,7 +31,6 @@ def main() -> None:
         predict_from_serial_stream(ser)
 
 def predict_from_serial_stream(ser):
-    # model_paths = os.listdir("saved_models")
     # Read in the model
     model_path = f"saved_models/MLPClassifier(activation='tanh',alpha=5.532519953153552e-05,hidden_layer_sizes=(400,200),max_iter=1000,solver='lbfgs').pickle"
     model = load_model(model_path)
@@ -44,24 +44,33 @@ def predict_from_serial_stream(ser):
     obs = np.zeros((30, 40))
     print(ser)
     filled_cols = 0
+    last_write = int(time() * 1000)
+    raw_values = None
+    old_values = None
     while True:
-        if ser.isOpen():
+        # If it's been at least 25ms and the serial port is open
+        if int(time() * 1000) - last_write >= 25 and ser.isOpen():
+            last_write = int(time() * 1000)
             try:
-
-                values = ser.readline().decode('utf-8').strip().split(",")
+                if raw_values is not None:
+                    old_values = raw_values[:]
+                raw_values = ser.readline().decode('utf-8').strip().split(",")
             except serial.serialutil.SerialException:
                 # If Ergo has been disconnected, end the program
                 return
-            if len(values) != 33:
-                print(values)
-                continue
-            values = [int(val) for val in values[2:-1]]
+            # Occasionally a line won't be completely populated. In this case,
+            # just carry over the previous readings to the new dataset
+            if len(raw_values) != 33:
+                if old_values is not None and len(old_values) == 33:
+                    raw_values = old_values[:]
+                else:
+                    continue
+            values = [int(val) for val in raw_values[2:-1]]
             new_values = np.array(values)
             # Shift all the values across by one column
             obs[:, 1:] = obs[:, :-1]
             # Then populate the first column with the new values
             obs[:, 0] = values
-            print(obs)
 
             if filled_cols < obs.shape[1]:
                 filled_cols += 1
