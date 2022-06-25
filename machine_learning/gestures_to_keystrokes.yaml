@@ -1,0 +1,35 @@
+# Keystrokes are given in vim's <> key notation. See `:h <>` and 
+# `:h key-notation` (or https://vimhelp.org/intro.txt.html#%3C%3E)
+# for details.
+gesture0001: a
+gesture0002: b
+gesture0003: c
+gesture0004: d
+gesture0005: e
+gesture0006: f
+gesture0007: g
+gesture0008: h
+gesture0009: i
+gesture0010: j
+gesture0011: k
+gesture0012: l
+gesture0013: m
+gesture0014: n
+gesture0015: o
+gesture0016: p
+gesture0017: q
+gesture0018: r
+gesture0019: s
+gesture0020: t
+gesture0021: u
+gesture0022: v
+gesture0023: w
+gesture0024: x
+gesture0025: y
+gesture0026: z
+gesture0027: <Space>
+gesture0028: <CR>
+gesture0029: <BS>
+gesture0030: <C-Left>
+gesture0031: <Enter>
+gesture0032: <Esc>
