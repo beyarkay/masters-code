@@ -208,6 +208,9 @@ gestures:
   gesture0070: 
     description: No gesture
     desc: ng
+  gesture0254:
+    description: The gesture corresponding to *Ergo* resting on a table
+    desc: on table
   gesture0255: 
     description: The "no movement" gesture
     desc: no mvmt
