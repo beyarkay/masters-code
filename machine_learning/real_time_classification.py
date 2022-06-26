@@ -5,6 +5,8 @@ from common_utils import *
 import serial
 import os
 import subprocess
+import sys
+np.set_printoptions(threshold=sys.maxsize, linewidth=250)
 
 def main():
     # Set the options for the serial port
@@ -41,7 +43,7 @@ def predict_from_serial_stream(ser):
     with open('saved_models/idx_to_gesture.pickle', 'rb') as f:
         idx_to_gesture = pickle.load(f)
 
-    obs = np.zeros((30, 40))
+    obs = np.zeros((40, 30))
     print(ser)
     filled_cols = 0
     last_write = int(time() * 1000)
@@ -63,14 +65,15 @@ def predict_from_serial_stream(ser):
             if len(raw_values) != 33:
                 if old_values is not None and len(old_values) == 33:
                     raw_values = old_values[:]
+                    print('continuing old values onwards')
                 else:
                     continue
             values = [int(val) for val in raw_values[2:-1]]
             new_values = np.array(values)
-            # Shift all the values across by one column
-            obs[:, 1:] = obs[:, :-1]
-            # Then populate the first column with the new values
-            obs[:, 0] = values
+            # Shift all the values across by one row
+            obs[1:, :] = obs[:-1, :]
+            # Then populate the first row with the new values
+            obs[0, :] = new_values
 
             if filled_cols < obs.shape[1]:
                 filled_cols += 1
@@ -87,8 +90,8 @@ def predict_from_serial_stream(ser):
                     # the observation for future analysis
                     now = datetime.datetime.now().isoformat()
                     gesture = idx_to_gesture[predictions[0][0]]
-                    with open('../gesture_data/self-classified/{gesture}/{now}.txt', 'w') as f:
-                        f.writelines([str(i*25) + ',' + ','.join(a) for i, a in enumerate(obs.tolist())])
+                    with open(f'../gesture_data/self-classified/{gesture}/{now}.txt', 'w') as f:
+                        f.writelines([str(i*25) + ',' + ','.join([str(int(ai)) for ai in a]) + '\n' for i, a in enumerate(obs.tolist())])
                     # Also print the prediction
                     tot = 0
                     for i, pred in predictions:
