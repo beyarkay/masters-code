@@ -3,7 +3,11 @@ const int NUM_SENSORS = 15;
 const int NUM_SELECT_PINS = 4;
 const int PINS_SENSOR_SELECT[] = {8, 9, 10, 11};
 const int PIN_SENSOR_INPUT = A0;
-int val = 0;
+int vals_rh[] = {
+    0, 0, 0, 0, 0,
+    0, 0, 0, 0, 0,
+    0, 0, 0, 0, 0
+};
 // There are 8 DIP switches that are used to select a gesture index
 const int PINS_DIP_SWITCHES[] = {
     A3, A2, 7, 6,
@@ -34,6 +38,10 @@ const int right_hand_cap = 75;
 int right_hand_len = 0;
 char right_hand[75];
 
+// alpha is used for exponential smoothing. High alpha => very smooth. This
+// value is found experimentally.
+const float alpha = 0.99;
+
 void setup() {
     // Mark the builtin LED as output
     pinMode(LED_BUILTIN, OUTPUT);
@@ -60,7 +68,10 @@ void setup() {
 }
 
 void loop() {
-    if (millis() - last_write >= MIN_MS_PER_WRITE) {
+    if (millis() - last_write >= MIN_MS_PER_WRITE 
+        && left_hand_len > 0 
+        && right_hand_len > 0
+    ) {
         last_write = millis();
         Serial.print(gesture_index);
         Serial.print(",");
@@ -84,8 +95,8 @@ void loop() {
     // zero so bit shifts can work properly
     gesture_index = 0x00;
     for (int i = 0; i < NUM_DIP_SWITCHES; i++) {
-        int val = 1 - digitalRead(PINS_DIP_SWITCHES[i]);
-        gesture_index |= val << (NUM_DIP_SWITCHES - i - 1);
+        int gesture_val = 1 - digitalRead(PINS_DIP_SWITCHES[i]);
+        gesture_index |= gesture_val << (NUM_DIP_SWITCHES - i - 1);
     }
 
     // Only sound the buzzer if we're in TRAINING mode and it's the correct
@@ -111,25 +122,27 @@ void loop() {
         for (int j = 0; j < NUM_SELECT_PINS; j++) {
             digitalWrite(PINS_SENSOR_SELECT[j], (i & (1 << j)) >> j);
         }
-        val = analogRead(PIN_SENSOR_INPUT);
-        int thou = val / 1000;
+        vals_rh[i] = floor((1.0 - alpha) * analogRead(PIN_SENSOR_INPUT) + alpha * vals_rh[i]);
+
+        int thou = vals_rh[i] / 1000;
         if (thou > 0) {
             right_hand[right_hand_len++] = '0' + thou;
-            val -= thou * 1000;
+            vals_rh[i] -= thou * 1000;
         }
-        int hund = val / 100;
+        int hund = vals_rh[i] / 100;
         if (hund > 0 || thou) {
             right_hand[right_hand_len++] = '0' + hund;
-            val -= hund * 100;
+            vals_rh[i] -= hund * 100;
         }
-        int tens = val / 10;
+        int tens = vals_rh[i] / 10;
         if (tens > 0 || hund || thou) {
             right_hand[right_hand_len++] = '0' + tens;
-            val -= tens * 10;
+            vals_rh[i] -= tens * 10;
         }
-        if (val > 0 || tens || hund || thou) {
-            right_hand[right_hand_len++] = '0' + val;
+        if (vals_rh[i] > 0 || tens || hund || thou) {
+            right_hand[right_hand_len++] = '0' + vals_rh[i];
         }
+        vals_rh[i] += thou * 1000 + hund * 100 + tens * 10;
         right_hand[right_hand_len++] = ',';
     }
 }

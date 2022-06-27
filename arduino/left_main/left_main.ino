@@ -3,7 +3,15 @@ const int NUM_SENSORS = 15;
 const int NUM_SELECT_PINS = 4;
 const int PINS_SENSOR_SELECT[] = {8, 9, 10, 11};
 const int PIN_SENSOR_INPUT = A0;
-int val = 0;
+int vals_lh[] = {
+    0, 0, 0, 0, 0,
+    0, 0, 0, 0, 0,
+    0, 0, 0, 0, 0
+};
+
+// alpha is used for exponential smoothing. High alpha => very smooth. This
+// value is found experimentally.
+const float alpha = 0.99;
 
 void setup() {
     // Register the built in LED as output (for debugging)
@@ -30,27 +38,28 @@ void loop() {
             digitalWrite(PINS_SENSOR_SELECT[j], (i & (1 << j)) >> j);
         }
         // Actually read in the sensor value
-        val = analogRead(PIN_SENSOR_INPUT);
+        vals_lh[i] = floor((1.0 - alpha) * analogRead(PIN_SENSOR_INPUT) + alpha * vals_lh[i]);
         // Now convert the integer into a string so that written number always
         // occupies the same amount of bytes
-        int thou = val / 1000;
+        int thou = vals_lh[i] / 1000;
         if (thou > 0) {
             Wire.write('0' + thou);
-            val -= thou * 1000;
+            vals_lh[i] -= thou * 1000;
         }
-        int hund = val / 100;
+        int hund = vals_lh[i] / 100;
         if (hund > 0 || thou) {
             Wire.write('0' + hund);
-            val -= hund * 100;
+            vals_lh[i] -= hund * 100;
         }
-        int tens = val / 10;
+        int tens = vals_lh[i] / 10;
         if (tens > 0 || hund || thou) {
             Wire.write('0' + tens);
-            val -= tens * 10;
+            vals_lh[i] -= tens * 10;
         }
-        if (val > 0 || tens || hund || thou) {
-            Wire.write('0' + val);
+        if (vals_lh[i] > 0 || tens || hund || thou) {
+            Wire.write('0' + vals_lh[i]);
         }
+        vals_lh[i] += thou * 1000 + hund * 100 + tens * 10;
         // Finally write a `,` to deliminate the values
         Wire.write(',');
     }
