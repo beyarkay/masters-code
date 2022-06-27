@@ -3,15 +3,23 @@ const int NUM_SENSORS = 15;
 const int NUM_SELECT_PINS = 4;
 const int PINS_SENSOR_SELECT[] = {8, 9, 10, 11};
 const int PIN_SENSOR_INPUT = A0;
+// There are hardware differences in all the sensors. Add an offset to
+// approximately remove these differences
+int offsets[] = {
+    -80, 30,  10, 
+    -70, 10,   0, 
+    -80, 30,  20, 
+    -50, 30,  20, 
+    -80, 20, 310
+};
+// `alpha` and `vals_lh` are used for exponential smoothing. High alpha => very
+// smooth. The value of alpha is found experimentally.
 int vals_lh[] = {
     0, 0, 0, 0, 0,
     0, 0, 0, 0, 0,
     0, 0, 0, 0, 0
 };
-
-// alpha is used for exponential smoothing. High alpha => very smooth. This
-// value is found experimentally.
-const float alpha = 0.99;
+const float alpha = 0.00;
 
 void setup() {
     // Register the built in LED as output (for debugging)
@@ -38,7 +46,8 @@ void loop() {
             digitalWrite(PINS_SENSOR_SELECT[j], (i & (1 << j)) >> j);
         }
         // Actually read in the sensor value
-        vals_lh[i] = floor((1.0 - alpha) * analogRead(PIN_SENSOR_INPUT) + alpha * vals_lh[i]);
+        int reading = analogRead(PIN_SENSOR_INPUT) + offsets[i];
+        vals_lh[i] = floor((1.0 - alpha) * reading + alpha * vals_lh[i]);
         // Now convert the integer into a string so that written number always
         // occupies the same amount of bytes
         int thou = vals_lh[i] / 1000;

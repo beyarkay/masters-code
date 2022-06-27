@@ -3,6 +3,15 @@ const int NUM_SENSORS = 15;
 const int NUM_SELECT_PINS = 4;
 const int PINS_SENSOR_SELECT[] = {8, 9, 10, 11};
 const int PIN_SENSOR_INPUT = A0;
+// There are hardware differences in all the sensors. Add an offset to
+// approximately remove these differences
+int offsets[] = {
+    0, 90, 80, 
+    -20, 70, 70, 
+    -50, 40, 50, 
+    -30, 60, 60, 
+    -40, 50, 100
+};
 int vals_rh[] = {
     0, 0, 0, 0, 0,
     0, 0, 0, 0, 0,
@@ -40,7 +49,7 @@ char right_hand[75];
 
 // alpha is used for exponential smoothing. High alpha => very smooth. This
 // value is found experimentally.
-const float alpha = 0.99;
+const float alpha = 0.00;
 
 void setup() {
     // Mark the builtin LED as output
@@ -79,7 +88,7 @@ void loop() {
         Serial.print(",");
         // Print out the data from the left hand
         for (int i = 0; i < left_hand_len; i++) {
-            Serial.write(left_hand[i]);
+            // Serial.write(left_hand[i]);
         }
         left_hand_len = 0;
 
@@ -122,7 +131,8 @@ void loop() {
         for (int j = 0; j < NUM_SELECT_PINS; j++) {
             digitalWrite(PINS_SENSOR_SELECT[j], (i & (1 << j)) >> j);
         }
-        vals_rh[i] = floor((1.0 - alpha) * analogRead(PIN_SENSOR_INPUT) + alpha * vals_rh[i]);
+        int reading = analogRead(PIN_SENSOR_INPUT) + offsets[i];
+        vals_rh[i] = floor((1.0 - alpha) * reading + alpha * vals_rh[i]);
 
         int thou = vals_rh[i] / 1000;
         if (thou > 0) {
