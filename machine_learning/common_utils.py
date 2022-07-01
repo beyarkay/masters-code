@@ -15,6 +15,11 @@ import yaml
 from yaml import Loader, Dumper
 import re
 import pickle
+
+# sklearn imports
+from sklearn.model_selection import train_test_split
+from sklearn.preprocessing import StandardScaler
+
 # Setup seaborn
 sns.set()
 
@@ -123,6 +128,8 @@ def read_to_numpy(root_dir='../gesture_data/train', min_obs=180, verbose=0):
 
     with open('saved_models/idx_to_gesture.pickle', 'wb') as f:
         pickle.dump(idx_to_gesture, f, protocol=pickle.HIGHEST_PROTOCOL)
+    with open('saved_models/gesture_to_idx.pickle', 'wb') as f:
+        pickle.dump(gesture_to_idx, f, protocol=pickle.HIGHEST_PROTOCOL)
     print(f'done')
     return X, y, np.array(paths)
 
@@ -130,7 +137,7 @@ def read_to_numpy(root_dir='../gesture_data/train', min_obs=180, verbose=0):
 
 def train_test_split_scale(X, y, paths):
     """Given arrays X, y, and paths, test-train split the data with a 25%
-    test size, and return the splits along with the fitted scaler."""
+    test size, and return the splits."""
     X_train, X_test, y_train, y_test, paths_train, paths_test = train_test_split(
         X, y, paths, test_size=0.25, random_state=42
     )
@@ -139,7 +146,7 @@ def train_test_split_scale(X, y, paths):
     X_train = scaler.fit_transform(X_train)
     X_test = scaler.transform(X_test)
     save_model(scaler)
-    return X_train, X_test, y_train, y_test, paths_train, paths_test, scaler
+    return X_train, X_test, y_train, y_test, paths_train, paths_test
 
 
 def plot_raw_gesture(
