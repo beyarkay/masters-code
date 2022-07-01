@@ -1,10 +1,11 @@
 use chrono::prelude::{DateTime, Local};
-use std::fs;
 use mouse_rs::{types::keys::Keys, Mouse};
 use std::io::Write;
-use std::thread::{self, JoinHandle};
+use indicatif::{ProgressBar, ProgressStyle};
 use std::{
-    fs::File,
+    fs::{self, File},
+    path::Path,
+    thread,
     time::{Duration, SystemTime},
 };
 const CONTROL_MOUSE: bool = false;
@@ -14,7 +15,7 @@ fn main() {
     let portname = "/dev/tty.usbmodem11101";
     let baudrate = 19_200;
     let mut port = serialport::new(portname, baudrate)
-        .timeout(Duration::from_millis(1))
+        .timeout(Duration::from_millis(100))
         .open();
     if let Err(_) = port {
         println!("No serial found on `{}`", portname);
@@ -60,7 +61,10 @@ fn read_port_data(mut port: Box<dyn serialport::SerialPort>, mouse: &mut Option<
     let mut data: Vec<Vec<u16>> = vec![];
     let mut prev_millis = 0;
     let mut start = Local::now();
-    let mut handle: Option<JoinHandle<()>> = None;
+    let pbar = ProgressBar::new(1000);
+    pbar.set_style(ProgressStyle::default_bar()
+                  .template("{bar:40.cyan/black} {pos:>7}/{len:7} {msg}")
+                  .progress_chars("=>-"));
     loop {
         // If we've got a valid line of data
         let reading = port.read(serial_buf.as_mut_slice());
@@ -69,27 +73,39 @@ fn read_port_data(mut port: Box<dyn serialport::SerialPort>, mouse: &mut Option<
                 let c = serial_buf[idx] as char;
                 // check if we've reached the end of the line
                 if c == '\n' {
-                    println!("Raw values:           {:?}", vals);
+                    if data.len() > 0 && data[0][0] == 0 {
+                        println!("Raw values:           {:?}", vals);
+                    }
                     // If we've received a full packet of information
                     if vals.len() != 32 {
                         vals = vec![];
                         val = "".to_string();
                         continue;
                     }
-                    
+
                     if prev_millis > vals[1] {
                         // TODO add checks to see if the gloves are in the resting position
                         // TODO This can be sped up if we don't try to parse the Serial input as
                         // numbers only to convert it back to strings for writing to file
-                        if data[0][0] > 0 {
+                        //
+                        if data.len() > 0 && data[0][0] > 0 {
+                            pbar.set_position(1000);
+                        }
+                        if data[0][0] > 0 && data.len() > 35 {
+                            let gesture_idx = data[0][0];
+                            let dir = format!("../gesture_data/train/gesture{gesture_idx:0>4}/");
+                            let paths: Vec<_> = fs::read_dir(dir.clone()).unwrap().collect();
                             write_to_file(data, start);
-                            println!("=====\nWRITING TO FILE\n=====");
+                            pbar.set_message(format!("Wrote observation; {} files in {}", paths.len(), dir));
                         }
                         start = Local::now();
                         data = vec![];
                     }
                     data.push(vals.clone());
                     prev_millis = vals[1];
+                    if data.len() > 0 && data[0][0] > 0 {
+                        pbar.set_position(prev_millis.into());
+                    }
                     let short_vals = vals.clone().into_iter().skip(2).collect::<Vec<u16>>();
                     min = if short_vals.len() != 0 {
                         u16::min(min, *short_vals.iter().min().unwrap())
@@ -163,17 +179,17 @@ fn values_per_finger(short_vals: &Vec<u16>, min: u16, max: u16) -> String {
 
 fn values_per_dimension(short_vals: &Vec<u16>, min: u16, max: u16) -> String {
     let mut s = format!("Values per dimension: ");
-    let mut means = vec![0.0; 3];
+    let mut _means = vec![0.0; 3];
     for (i, dim) in vec!["x", "y", "z"].into_iter().enumerate() {
         let mut dim_vec = vec![];
         for val in short_vals.iter().skip(i).step_by(3) {
             dim_vec.push(*val);
         }
-        // means[i] = dim_vec.iter().sum::<u16>() as f32 / 5.0;
+        // _means[i] = dim_vec.iter().sum::<u16>() as f32 / 5.0;
         let accel_str = "";
-        // if means[i] > max as f32 * 0.60 {
+        // if _means[i] > max as f32 * 0.60 {
         //     accel_str = "(incr)  ";
-        // } else if means[i] < max as f32 * 0.48 {
+        // } else if _means[i] < max as f32 * 0.48 {
         //     accel_str = "(decr) ";
         // } else {
         //     accel_str = "(steady)";
@@ -181,7 +197,7 @@ fn values_per_dimension(short_vals: &Vec<u16>, min: u16, max: u16) -> String {
         s.push_str(format!("{} {}: {} ", dim, accel_str, spark(&dim_vec, min, max)).as_str());
     }
     // s.push_str("\n");
-    // for mean in means {
+    // for mean in _means {
     //     s.push_str(format!("{} ", mean).as_str());
     // }
     return s;
@@ -281,17 +297,16 @@ fn write_to_file(data: Vec<Vec<u16>>, start: DateTime<Local>) {
                     .join(",")
             })
             .collect::<Vec<String>>();
-        let filename = format!(
-            "../gesture_data/train/gesture{gesture_idx:0>4}/{}.txt",
-            start.to_rfc3339()
-        );
-        println!("Saving to {filename}");
-        fs::create_dir("../gesture_data/train/gesture{gesture_idx:0>4}");
+        let dir = format!("../gesture_data/train/gesture{gesture_idx:0>4}");
+        let filename = format!("{dir}/{}.txt", start.to_rfc3339());
+        if !Path::new(&dir).is_dir() {
+            fs::create_dir(dir).unwrap();
+        }
         let file = File::create(filename.clone());
         match file {
             Ok(mut f) => {
-                write!(&mut f, "{}", measurements.join("\n"));
-            }, 
+                write!(&mut f, "{}", measurements.join("\n")).unwrap();
+            }
             Err(e) => {
                 println!("Failed to write to {}: {}", filename, e);
             }
