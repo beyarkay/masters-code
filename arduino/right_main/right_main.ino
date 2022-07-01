@@ -6,11 +6,11 @@ const int PIN_SENSOR_INPUT = A0;
 // There are hardware differences in all the sensors. Add an offset to
 // approximately remove these differences
 int offsets[] = {
-    0, 90, 80, 
-    -20, 70, 70, 
-    -50, 40, 50, 
-    -30, 60, 60, 
-    -40, 50, 100
+    0, 0, 0,
+    0, 0, 0,
+    0, 0, 0,
+    0, 0, 0,
+    0, 0, 0
 };
 int vals_rh[] = {
     0, 0, 0, 0, 0,
@@ -77,10 +77,9 @@ void setup() {
 }
 
 void loop() {
-    if (millis() - last_write >= MIN_MS_PER_WRITE 
-        && left_hand_len > 0 
-        && right_hand_len > 0
-    ) {
+    if (millis() - last_write >= MIN_MS_PER_WRITE
+        && left_hand_len > 0
+        && right_hand_len > 0) {
         last_write = millis();
         Serial.print(gesture_index);
         Serial.print(",");

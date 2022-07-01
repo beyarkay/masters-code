@@ -6,11 +6,11 @@ const int PIN_SENSOR_INPUT = A0;
 // There are hardware differences in all the sensors. Add an offset to
 // approximately remove these differences
 int offsets[] = {
-    -80, 30,  10, 
-    -70, 10,   0, 
-    -80, 30,  20, 
-    -50, 30,  20, 
-    -80, 20, 310
+    0, 0, 0,
+    0, 0, 0,
+    0, 0, 0,
+    0, 0, 0,
+    0, 0, 0
 };
 // `alpha` and `vals_lh` are used for exponential smoothing. High alpha => very
 // smooth. The value of alpha is found experimentally.
@@ -75,7 +75,7 @@ void loop() {
     delay(5);
     digitalWrite(LED_BUILTIN, LOW);
     int status = Wire.endTransmission();
-    /* Status codes: 
+    /* Status codes:
         0. Success.
         1. Data too long to fit in transmit buffer.
         2. Received NACK on transmit of address.
