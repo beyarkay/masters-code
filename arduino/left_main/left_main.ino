@@ -35,8 +35,8 @@ void setup() {
 }
 
 void loop() {
-    // transmit to device #4
-    Wire.beginTransmission(4);
+    // transmit to device #42
+    Wire.beginTransmission(42);
     // Turn on the debugging LED
     digitalWrite(LED_BUILTIN, HIGH);
     // Iterate over each sensor and read it's value

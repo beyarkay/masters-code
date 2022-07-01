@@ -54,8 +54,8 @@ const float alpha = 0.00;
 void setup() {
     // Mark the builtin LED as output
     pinMode(LED_BUILTIN, OUTPUT);
-    // Start up I2C communication with device on channel 4 (left hand)
-    Wire.begin(4);
+    // Start up I2C communication with device on channel 42 (left hand)
+    Wire.begin(42);
     // Register a function to handle received messages
     Wire.onReceive(receiveEvent);
     // Use a high baud rate so that the sensor readings are more accurate.
