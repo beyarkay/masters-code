@@ -87,10 +87,9 @@ void loop() {
         Serial.print(",");
         // Print out the data from the left hand
         for (int i = 0; i < left_hand_len; i++) {
-            // Serial.write(left_hand[i]);
+            Serial.write(left_hand[i]);
         }
         left_hand_len = 0;
-
         // Print out the data from the right hand
         for (int i = 0; i < right_hand_len; i++) {
             Serial.write(right_hand[i]);

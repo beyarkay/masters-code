@@ -85,9 +85,10 @@ void loop() {
     */
     for (int i = 0; i < status; i++) {
         digitalWrite(LED_BUILTIN, HIGH);
-        delay(500);
+        delay(100);
         digitalWrite(LED_BUILTIN, LOW);
-        delay(500);
+        delay(200);
     }
+    if (status > 0) { delay(1000); }
 }
 
