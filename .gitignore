@@ -15,6 +15,7 @@ read_serial_data/target/
 __pycache__/
 */__pycache__/
 
+gesture_data/*/*/*.csv
 gesture_data/*/*/*.txt
 
 machine_learning/wandb/
