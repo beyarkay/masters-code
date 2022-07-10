@@ -3,150 +3,150 @@ gestures:
     description: Left hand thumb IP flexion
     desc: l1-ip-flx
   gesture0002: 
-    description: Left hand index finger PIP flexion
+    description: Left hand index PIP flexion
     desc: l2-pip-flx
   gesture0003: 
-    description: Left hand middle finger PIP flexion
+    description: Left hand middle PIP flexion
     desc: l3-pip-flx
   gesture0004: 
-    description: Left hand ring finger PIP flexion
+    description: Left hand ring PIP flexion
     desc: l4-pip-flx
   gesture0005: 
-    description: Left hand little finger PIP flexion
+    description: Left hand little PIP flexion
     desc: l5-pip-flx
   gesture0006: 
     description: Right hand thumb IP flexion
     desc: r1-ip-flx
   gesture0007: 
-    description: Right hand index finger PIP flexion
+    description: Right hand index PIP flexion
     desc: r2-pip-flx
   gesture0008: 
-    description: Right hand middle finger PIP flexion
+    description: Right hand middle PIP flexion
     desc: r3-pip-flx
   gesture0009: 
-    description: Right hand ring finger PIP flexion
+    description: Right hand ring PIP flexion
     desc: r4-pip-flx
   gesture0010: 
-    description: Right hand little finger PIP flexion
+    description: Right hand little PIP flexion
     desc: r5-pip-flx
   gesture0011: 
     description: Left hand thumb IP extension
     desc: l1-ip-ext
   gesture0012: 
-    description: Left hand index finger PIP extension
+    description: Left hand index PIP extension
     desc: l2-pip-ext
   gesture0013: 
-    description: Left hand middle finger PIP extension
+    description: Left hand middle PIP extension
     desc: l3-pip-ext
   gesture0014: 
-    description: Left hand ring finger PIP extension
+    description: Left hand ring PIP extension
     desc: l4-pip-ext
   gesture0015: 
-    description: Left hand little finger PIP extension
+    description: Left hand little PIP extension
     desc: l5-pip-ext
   gesture0016: 
     description: Right hand thumb IP extension
     desc: r1-ip-ext
   gesture0017: 
-    description: Right hand index finger PIP extension
+    description: Right hand index PIP extension
     desc: r2-pip-ext
   gesture0018: 
-    description: Right hand middle finger PIP extension
+    description: Right hand middle PIP extension
     desc: r3-pip-ext
   gesture0019: 
-    description: Right hand ring finger PIP extension
+    description: Right hand ring PIP extension
     desc: r4-pip-ext
   gesture0020: 
-    description: Right hand little finger PIP extension
+    description: Right hand little PIP extension
     desc: r5-pip-ext
   gesture0021: 
     description: Left hand thumb CMC flexion
     desc: l1-cmc-flx
   gesture0022: 
-    description: Left hand index finger MCP flexion
+    description: Left hand index MCP flexion
     desc: l2-mcp-flx
   gesture0023: 
-    description: Left hand middle finger MCP flexion
+    description: Left hand middle MCP flexion
     desc: l3-mcp-flx
   gesture0024: 
-    description: Left hand ring finger MCP flexion
+    description: Left hand ring MCP flexion
     desc: l4-mcp-flx
   gesture0025: 
-    description: Left hand little finger MCP flexion
+    description: Left hand little MCP flexion
     desc: l5-mcp-flx
   gesture0026: 
     description: Right hand thumb CMC flexion
     desc: r1-cmc-flx
   gesture0027: 
-    description: Right hand index finger MCP flexion
+    description: Right hand index MCP flexion
     desc: r2-mcp-flx
   gesture0028: 
-    description: Right hand middle finger MCP flexion
+    description: Right hand middle MCP flexion
   gesture0029: 
-    description: Right hand ring finger MCP flexion
+    description: Right hand ring MCP flexion
     desc: r4-mcp-flx
   gesture0030: 
-    description: Right hand little finger MCP flexion
+    description: Right hand little MCP flexion
     desc: r5-mcp-flx
   gesture0031: 
     description: Left hand thumb CMC extension
     desc: l1-cmc-ext
   gesture0032: 
-    description: Left hand index finger MCP extension
+    description: Left hand index MCP extension
     desc: l2-mcp-ext
   gesture0033: 
-    description: Left hand middle finger MCP extension
+    description: Left hand middle MCP extension
     desc: l3-mcp-ext
   gesture0034: 
-    description: Left hand ring finger MCP extension
+    description: Left hand ring MCP extension
     desc: l4-mcp-ext
   gesture0035: 
-    description: Left hand little finger MCP extension
+    description: Left hand little MCP extension
     desc: l5-mcp-ext
   gesture0036: 
     description: Right hand thumb CMC extension
     desc: r1-cmc-ext
   gesture0037: 
-    description: Right hand index finger MCP extension
+    description: Right hand index MCP extension
     desc: r2-mcp-ext
   gesture0038: 
-    description: Right hand middle finger MCP extension
+    description: Right hand middle MCP extension
     desc: r3-mcp-ext
   gesture0039: 
-    description: Right hand ring finger MCP extension
+    description: Right hand ring MCP extension
     desc: r4-mcp-ext
   gesture0040: 
-    description: Right hand little finger MCP extension
+    description: Right hand little MCP extension
     desc: r5-mcp-ext
   gesture0041: 
     description: No gesture
     desc: ng
   gesture0042: 
-    description: Left thumb taps left hand index finger
+    description: Left thumb taps left hand index 
     desc: l1 taps left hand index
   gesture0043: 
-    description: Left thumb taps left hand middle finger
+    description: Left thumb taps left hand middle 
     desc: l1 taps left hand middle
   gesture0044: 
-    description: Left thumb taps left hand ring finger
+    description: Left thumb taps left hand ring 
     desc: l1 taps left hand ring
   gesture0045: 
-    description: Left thumb taps left hand little finger
+    description: Left thumb taps left hand little 
     desc: l1 taps left hand little
   gesture0046: 
     description: No gesture
     desc: ng
   gesture0047: 
-    description: Right thumb taps right hand index finger
+    description: Right thumb taps right hand index 
     desc: r1 taps right hand index
   gesture0048: 
-    description: Right thumb taps right hand middle finger
+    description: Right thumb taps right hand middle 
     desc: r1 taps right hand middle
   gesture0049: 
-    description: Right thumb taps right hand ring finger
+    description: Right thumb taps right hand ring 
     desc: r1 taps right hand ring
   gesture0050: 
-    description: Right thumb taps right hand little finger
+    description: Right thumb taps right hand little
     desc: r1 taps right hand little
   gesture0051: 
     description: Pronation at the left hand wrist
@@ -208,6 +208,9 @@ gestures:
   gesture0070: 
     description: No gesture
     desc: ng
+  gesture0253: 
+    description: Gestures for which the actual label is unknown
+    desc: unknown
   gesture0254:
     description: The gesture corresponding to *Ergo* resting on a table
     desc: on table
