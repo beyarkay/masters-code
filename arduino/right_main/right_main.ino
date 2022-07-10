@@ -5,13 +5,6 @@ const int PINS_SENSOR_SELECT[] = {8, 9, 10, 11};
 const int PIN_SENSOR_INPUT = A0;
 // There are hardware differences in all the sensors. Add an offset to
 // approximately remove these differences
-int offsets[] = {
-    0, 0, 0,
-    0, 0, 0,
-    0, 0, 0,
-    0, 0, 0,
-    0, 0, 0
-};
 int vals_rh[] = {
     0, 0, 0, 0, 0,
     0, 0, 0, 0, 0,
@@ -125,32 +118,37 @@ void loop() {
     }
 
     right_hand_len = 0;
-    for (int i = 0; i < NUM_SENSORS; i++) {
+    for (int zyx = 0; zyx < NUM_SENSORS; zyx++) {
+        // There's an issue where the order of the dimensions for the right
+        // hand is ZYX not XYZ. This expression fixes that. 0=>2, 1=>1, 2=>0,
+        // 3=>5, 4=>4, 5=>3, and so on.
+        int offset = (floor(zyx/3) * 3 + 1);
+        int xyz = - (zyx - offset) + offset;
         for (int j = 0; j < NUM_SELECT_PINS; j++) {
-            digitalWrite(PINS_SENSOR_SELECT[j], (i & (1 << j)) >> j);
+            digitalWrite(PINS_SENSOR_SELECT[j], (xyz & (1 << j)) >> j);
         }
-        int reading = analogRead(PIN_SENSOR_INPUT) + offsets[i];
-        vals_rh[i] = floor((1.0 - alpha) * reading + alpha * vals_rh[i]);
+        int reading = analogRead(PIN_SENSOR_INPUT);
+        vals_rh[xyz] = floor((1.0 - alpha) * reading + alpha * vals_rh[xyz]);
 
-        int thou = vals_rh[i] / 1000;
+        int thou = vals_rh[xyz] / 1000;
         if (thou > 0) {
             right_hand[right_hand_len++] = '0' + thou;
-            vals_rh[i] -= thou * 1000;
+            vals_rh[xyz] -= thou * 1000;
         }
-        int hund = vals_rh[i] / 100;
+        int hund = vals_rh[xyz] / 100;
         if (hund > 0 || thou) {
             right_hand[right_hand_len++] = '0' + hund;
-            vals_rh[i] -= hund * 100;
+            vals_rh[xyz] -= hund * 100;
         }
-        int tens = vals_rh[i] / 10;
+        int tens = vals_rh[xyz] / 10;
         if (tens > 0 || hund || thou) {
             right_hand[right_hand_len++] = '0' + tens;
-            vals_rh[i] -= tens * 10;
+            vals_rh[xyz] -= tens * 10;
         }
-        if (vals_rh[i] > 0 || tens || hund || thou) {
-            right_hand[right_hand_len++] = '0' + vals_rh[i];
+        if (vals_rh[xyz] > 0 || tens || hund || thou) {
+            right_hand[right_hand_len++] = '0' + vals_rh[xyz];
         }
-        vals_rh[i] += thou * 1000 + hund * 100 + tens * 10;
+        vals_rh[xyz] += thou * 1000 + hund * 100 + tens * 10;
         right_hand[right_hand_len++] = ',';
     }
 }
