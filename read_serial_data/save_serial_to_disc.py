@@ -19,6 +19,11 @@ CLR = "\x1b[2K\r"
 
 
 def main():
+    if len(sys.argv) != 2 or sys.argv[1] not in ['predict', 'save', 'p', 's']:
+        print("Usage: \n\tpython3 save_serial_to_disc.py save\n\tpython3 save_serial_to_disc.py predict")
+        print(sys.argv)
+        sys.exit(1)
+    callback = save_to_disc_cb if sys.argv[1].startswith('s') else predict_cb
     port = get_serial_port()
     if port is None:
         print("Port not found")
@@ -26,9 +31,7 @@ def main():
     baudrate = 19_200
     print(f"Reading from {port} with baudrate {baudrate}")
     with serial.Serial(port=port, baudrate=baudrate, timeout=1) as ser:
-        # loop_over_serial_stream(ser, save_to_disc_cb)
-        loop_over_serial_stream(ser, predict_cb)
-
+        loop_over_serial_stream(ser, callback)
 
 def get_serial_port() -> str | None:
     ports = [p.device for p in comports() if p.device.startswith("/dev/cu.usbmodem")]
@@ -43,9 +46,6 @@ def get_serial_port() -> str | None:
     else:
         port = ports[0]
     return port
-
-def write_obs_to_disc(obs: np.ndarray, filename: str) -> None:
-    np.savetxt(filename, obs, delimiter=",", fmt='%4.0f')
 
 def loop_over_serial_stream(
     serial_handle: serial.serialposix.Serial,
@@ -85,10 +85,10 @@ def loop_over_serial_stream(
             raw_values: List[str] = serial_handle.readline().decode('utf-8').strip().split(",")[:-1]
             # Ensure there are exactly 32 values
             if len(raw_values) == 0:
-                print(f"No values found from serial connection, try unplugging the device ({raw_values=})")
+                print(f"{CLR}No values found from serial connection, try unplugging the device ({raw_values=})")
                 sys.exit(1)
             if len(raw_values) != n_sensors+2:
-                print(f"raw values are length {len(raw_values)}, not {n_sensors+2}: {raw_values}")
+                print(f"{CLR}Raw values are length {len(raw_values)}, not {n_sensors+2}: {raw_values}")
                 continue
             cb_data["prev_gesture_idx"] = cb_data["gesture_idx"]
             cb_data["gesture_idx"] = int(raw_values[0])
@@ -109,17 +109,19 @@ def loop_over_serial_stream(
         except serial.serialutil.SerialException as e:
             print(f"Ergo has been disconnected: {e}")
             sys.exit(1)
-        except ValueError:
-            continue
 
         upper_bound = 800
         lower_bound = 300
         # Convert the values to integers and clamp between `lower_bound` and
         # `upper_bound`
-        new_measurements = np.array([
-            min(upper_bound, max(lower_bound, int(val))) 
-            for val in raw_values[2:]
-        ])
+        try:
+            new_measurements = np.array([
+                min(upper_bound, max(lower_bound, int(val)))
+                for val in raw_values[2:]
+            ])
+        except ValueError as e:
+            print("value error: {e}, {raw_values=}")
+            continue
 
         # Call the callback
         cb_data = callback(new_measurements, cb_data)
@@ -129,9 +131,13 @@ def loop_over_serial_stream(
         colors = []
         dims = ['x', 'y', 'z']
         for i, val in enumerate(raw_values[2:]):
-            colors.append(dims[i%3] + get_colored_string(int(val) - lower_bound, upper_bound - lower_bound)) 
+            colors.append(get_colored_string(
+                int(val) - lower_bound,
+                upper_bound - lower_bound,
+                fstring=(dims[i%3]+'{value:3}')
+            ))
             if i % 15 == 14 and i > 0:
-                colors[-1] += '     '
+                colors[-1] += '   '
             elif i % 3 == 2 and i > 0:
                 colors[-1] += ' '
             else:
@@ -176,21 +182,13 @@ def save_to_disc_cb(new_measurements: np.ndarray, d: dict[str, Any]) -> dict[str
     d["n_measurements"] += 1
     return d
 
-def get_colored_string(value, n_values) -> str:
-    colours = cm.get_cmap('turbo', n_values)
-    rgb = [int(val * 255) for val in colours(value)[:-1]]
-    mag = np.sqrt(sum([x * x for x in rgb]))
-    coloured = color(f'{str(value):3}', 'black' if mag > 180 else 'white', f'rgb({rgb[0]},{rgb[1]},{rgb[2]})')
-    return coloured
-
 def predict_cb(new_measurements: np.ndarray, d: dict[str, Any]) -> dict[str, Any]:
-    """."""
-    
+    """Predict the current gesture, printing the probabilities to stdout."""
     scaler = utils.load_model(
         '../machine_learning/saved_models/StandardScaler().pickle'
     )
     clf = utils.load_model(
-        '../machine_learning/saved_models/MLPClassifier(alpha=8.97617892363434e-05,hidden_layer_sizes=50,max_iter=1000).pickle'
+        '../machine_learning/saved_models/MLPClassifier(alpha=0.00023740156109408082,hidden_layer_sizes=200,max_iter=1000).pickle'
     )
     # Calculate how much time has passed between this measurement and the
     # previous measurement, rounded to the nearest 25ms
@@ -225,11 +223,22 @@ def predict_cb(new_measurements: np.ndarray, d: dict[str, Any]) -> dict[str, Any
     predictions = utils.predict_nicely(d["obs"], clf, scaler, d["idx_to_gesture"])
     print(f"{CLR}", end='')
     for gesture, proba in sorted(predictions, key=lambda gp: gp[0]):
-        colored = get_colored_string(int(proba*100), 100)
         gesture = gesture.replace('gesture0', 'g')
-        print(f'{gesture:>6}:{colored:>2}%', end=',')
+        fstring = f'{gesture:>4}:{{value:>3}}%'
+        colored = get_colored_string(int(proba*100), 100, fstring=fstring)
+        print(colored, end=',  ')
     print()
     return d
+
+def get_colored_string(value, n_values, fstring='{value:3}') -> str:
+    colours = cm.get_cmap('turbo', n_values)
+    rgb = [int(val * 255) for val in colours(value)[:-1]]
+    mag = np.sqrt(sum([x * x for x in rgb]))
+    coloured = color(fstring.format(value=value), 'black' if mag > 180 else 'white', f'rgb({rgb[0]},{rgb[1]},{rgb[2]})')
+    return coloured
+
+def write_obs_to_disc(obs: np.ndarray, filename: str) -> None:
+    np.savetxt(filename, obs, delimiter=",", fmt='%4.0f')
 
 if __name__ == "__main__":
     try:
