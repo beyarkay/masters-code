@@ -61,6 +61,11 @@ def loop_over_serial_stream(
     with open('../machine_learning/saved_models/idx_to_gesture.pickle', 'rb') as f:
         idx_to_gesture = pickle.load(f)
     # cb_data contains all data that get passed to the CallBack
+    scaler = utils.load_model(
+        '../machine_learning/saved_models/StandardScaler().pickle'
+    )
+    model_paths = sorted(['../machine_learning/saved_models/' + p for p in os.listdir('../machine_learning/saved_models/') if "Classifier" in p])
+    clf = utils.load_model(model_paths[0])
     cb_data: dict[str, Any] = {
         "n_timesteps": 40,
         "n_sensors": 30,
@@ -74,6 +79,9 @@ def loop_over_serial_stream(
         "time_ms": int(time() * 1000),
         "prev_time_ms": int(time() * 1000),
         "idx_to_gesture": idx_to_gesture,
+        "scaler": scaler,
+        "clf": clf,
+        "prediction": "no prediction",
     }
 
     while serial_handle.isOpen():
@@ -90,6 +98,7 @@ def loop_over_serial_stream(
             if len(raw_values) != n_sensors+2:
                 print(f"{CLR}Raw values are length {len(raw_values)}, not {n_sensors+2}: {raw_values}")
                 continue
+            # TODO for some reason the observation is mostly NaNs when `gesture_idx==0`
             cb_data["prev_gesture_idx"] = cb_data["gesture_idx"]
             cb_data["gesture_idx"] = int(raw_values[0])
             cb_data["prev_offset"] = cb_data["curr_offset"]
@@ -136,14 +145,14 @@ def loop_over_serial_stream(
                 upper_bound - lower_bound,
                 fstring=(dims[i%3]+'{value:3}')
             ))
-            if i % 15 == 14 and i > 0:
+            if i == 14:
                 colors[-1] += '   '
             elif i % 3 == 2 and i > 0:
                 colors[-1] += ' '
             else:
                 colors[-1] += ''
         colors = ''.join(colors)
-        print(f'{now_str} {aligned_offset: >3} [{curr_idx: >2}]: {raw_values[0]: >3} {raw_values[1]: >3} {colors}', end="\r")
+        print(f'{now_str} {aligned_offset: >3} [{curr_idx: >2}]: {raw_values[0]: >3} {raw_values[1]: >3} {colors}{cb_data["prediction"]}', end="\r")
 
         serial_handle.flush()
     else:
@@ -152,6 +161,8 @@ def loop_over_serial_stream(
 def save_to_disc_cb(new_measurements: np.ndarray, d: dict[str, Any]) -> dict[str, Any]:
     """Given a series of new measurements, populate an observation and save to
     disc as require."""
+    clf = d["clf"]
+    scaler = d["scaler"]
 
     # If the current time offset is < the previous time offset, then the
     # gesture has ended and we should 1) save the current observation to
@@ -161,6 +172,8 @@ def save_to_disc_cb(new_measurements: np.ndarray, d: dict[str, Any]) -> dict[str
         # If there was no measurement for 975ms, just use the one for 000ms
         if np.isnan(d["obs"][-1]).any():
             d["obs"][-1, :] = new_measurements
+        predictions = utils.predict_nicely(d["obs"], clf, scaler, d["idx_to_gesture"])
+        d["prediction"] = format_prediction(*predictions[0])
 
         directory = f'../gesture_data/train/gesture{d["gesture_idx"]:04}'
         now_str = datetime.datetime.now().isoformat()
@@ -180,15 +193,19 @@ def save_to_disc_cb(new_measurements: np.ndarray, d: dict[str, Any]) -> dict[str
     d["prev_idx"] = d["curr_idx"]
     # Place this observation at it's place in curr_idx
     d["n_measurements"] += 1
+
     return d
+
+def format_prediction(gesture, proba):
+    gesture = gesture.replace('gesture0', 'g').replace('g0', 'g')
+    fstring = f'{gesture:>3}:{{value:<02}}%'
+    colored = get_colored_string(int(proba*100), 100, fstring=fstring)
+    return colored
 
 def predict_cb(new_measurements: np.ndarray, d: dict[str, Any]) -> dict[str, Any]:
     """Predict the current gesture, printing the probabilities to stdout."""
-    scaler = utils.load_model(
-        '../machine_learning/saved_models/StandardScaler().pickle'
-    )
-    model_paths = sorted(['../machine_learning/saved_models/' + p for p in os.listdir('../machine_learning/saved_models/') if "Classifier" in p])
-    clf = utils.load_model(model_paths[0])
+    clf = d["clf"]
+    scaler = d["scaler"]
     # Calculate how much time has passed between this measurement and the
     # previous measurement, rounded to the nearest 25ms
     diff = round((d["time_ms"] - d["prev_time_ms"]) / 25) * 25
@@ -221,11 +238,9 @@ def predict_cb(new_measurements: np.ndarray, d: dict[str, Any]) -> dict[str, Any
 
     predictions = utils.predict_nicely(d["obs"], clf, scaler, d["idx_to_gesture"])
     print(f"{CLR}", end='')
+    d["prediction"] = format_prediction(*predictions[0])
     for gesture, proba in sorted(predictions, key=lambda gp: gp[0]):
-        gesture = gesture.replace('gesture0', 'g')
-        fstring = f'{gesture:>4}:{{value:>3}}%'
-        colored = get_colored_string(int(proba*100), 100, fstring=fstring)
-        print(colored, end=',  ')
+        print(format_prediction(gesture, proba), end=' ')
     print()
     return d
 
