@@ -19,23 +19,57 @@ import pickle
 # sklearn imports
 from sklearn.model_selection import train_test_split
 from sklearn.preprocessing import StandardScaler
+from sklearn.preprocessing import RobustScaler
 
 # Setup seaborn
 sns.set()
 
 # Define some variables for creating feature names like 'left-thumb-x' or 'right-index-z'
 finger_names = [
-    'left-little', 'left-ring', 'left-middle', 'left-index', 'left-thumb',
-    'right-thumb', 'right-index',  'right-middle',  'right-ring',  'right-little',
+    'little', 'ring', 'middle', 'index', 'thumb',
+    'thumb', 'index',  'middle',  'ring',  'little',
 ]
-dimensions = ['z', 'y', 'x']
+dimensions = ['x', 'y', 'z']
 # Actually create some feature names to give the data meaningful labels
 fingers = []
-for finger_name in finger_names:
+fingers_short = []
+for i, finger_name in enumerate(finger_names):
     for dimension in dimensions:
-        fingers.append(f'{finger_name}-{dimension}')
+        hand = ['left', 'right'][i // 5]
+        fingers.append(f'{hand}-{finger_name}-{dimension}')
+        if dimension == dimensions[1]:
+            fingers_short.append(f'{dimension}\n{finger_name}\n{hand}')
+        else:
+            fingers_short.append(f'{dimension}')
 
-n_sensors, n_timesteps = 30, 40
+n_timesteps = 40
+n_sensors = 30
+
+def to_flat(arr):
+    """Given a 2D array, flatten it to `(n_timesteps*n_sensors,)`"""
+    if type(arr) is pd.core.frame.DataFrame:
+        arr = arr.to_numpy()
+    assert arr.shape == (n_timesteps, n_sensors), f"Shape isn't ({n_timesteps}, {n_sensors})"
+    return arr.flatten()
+
+def from_flat(flat):
+    """Given a flattened array, reshape it to `(n_timesteps, n_sensors)`"""
+    assert flat.shape == (n_timesteps*n_sensors,), f"Shape isn't ({n_timesteps*n_sensors},)"
+    return flat.reshape((n_timesteps, n_sensors))
+
+def scale_single(arr, scaler):
+    """Scale a single observation by the given scaler.
+    Returns the result in the same shape as the input."""
+    input_shape = arr.shape
+    if type(arr) is pd.core.frame.DataFrame:
+        arr = to_flat(arr)
+    assert arr.shape != (n_sensors, n_timesteps), f"Shape is transposed"
+    if arr.shape == (n_timesteps, n_sensors,):
+        arr = to_flat(arr)
+    assert arr.shape == (n_timesteps*n_sensors,), f"Shape isn't ({n_timesteps*n_sensors},)"
+
+    return scaler.transform(np.array([arr]))[0].reshape(input_shape)
+
 
 def get_gesture_info():
     """Get a dictionary of gestures to their text descriptions."""
@@ -109,16 +143,14 @@ def read_to_numpy(root_dir='../gesture_data/train', min_obs=180, verbose=0):
             # Iterate over every observation for the current gesture
             for file in filenames:
                 path = f'{root_dir}/{gesture_index}/{file}'
-                # Read in the raw sensor data. Normalisation is done later on via sklearn
-                df = read_to_df(path, normalise=False)
+                # Read in the raw sensor data.
+                df = read_to_ndarray(path)
                 # Make sure the data is the correct shape
                 if df.shape != (n_timesteps, n_sensors):
                     print(df)
-                obs = df.to_numpy().flatten()
+                obs = to_flat(df)
                 max_val = max(max_val, df.max().max())
                 if np.any(np.isnan(obs)):
-                    print(f'rm {path}')
-                elif df.max().max() > 1000:
                     print(f'rm {path}')
                 paths.append(path)
                 X[obs_idx] = obs
@@ -151,26 +183,29 @@ def train_test_split_scale(X, y, paths):
 
 def plot_raw_gesture(
     arr,
-    title,
+    title=None,
     ax=None,
     show_cbar=True,
     show_xticks=True,
     show_yticks=True,
-    delim_lw=1.5
+    show_values=False,
+    delim_lw=2.5,
 ):
-    """ Given an array of data and a title, create a heatmap of the sensor data.
+    """ Given an array of data, create a heatmap of the sensor data.
     Returns the fig and ax"""
     # If no ax is specified, create one.
     if ax is None:
         # Create a new plot
-        fig, ax = plt.subplots(1, figsize=(20, 10))
-        # with title referencing to the origin of the data
-        fig.suptitle(title)
+        fig, ax = plt.subplots(1, figsize=(40, 20))
+        if title is not None:
+            # with title referencing to the origin of the data
+            fig.suptitle(title)
     else:
         # If an ax is specified, then use it and
         # get a reference to the current figure
         fig = plt.gcf()
-        ax.title.set_text(title)
+        if title is not None:
+            ax.title.set_text(title)
 
     assert type(arr) is np.ndarray, f"Type is {type(arr)}, not np.array"
     assert arr.shape == (n_timesteps, n_sensors), f"Shape isn't ({n_timesteps}, {n_sensors})"
@@ -222,6 +257,9 @@ def plot_raw_gesture(
     return fig, ax
 
 
+def read_to_ndarray(filename):
+    return np.loadtxt(filename, delimiter=',')
+
 def read_to_df(filename, normalise=False):
     """ Given a filename, read in the file to a Pandas DataFrame.
     The columns are 'milliseconds' along with one column for each finger+dimension
@@ -270,6 +308,34 @@ def read_to_df(filename, normalise=False):
     if should_return_nans:
         df.loc[:] = np.nan
     return df
+
+def predict_nicely(obs, clf, scaler, idx_to_gesture):
+    """Given a single observation, a classifier, and a scaler, return a list of
+    predictions in the format [(gesture, probability), ...].
+
+    For example:
+    ```
+    >>> df = read_to_df(f'../gesture_data/self-classified/{gesture}/{file}')
+    >>> predictions = predict_nicely(df, clf, scaler)
+    >>> for gesture, proba in predictions:
+    ...     if proba < 0.0001:
+    ...         break
+    >>>     print(f'{gesture}: {proba*100:.2f}%')
+    gesture0008: 96.36%
+    gesture0005: 3.64%
+    ```
+    """
+    if type(obs) is pd.core.frame.DataFrame:
+        obs = obs.to_numpy()
+    assert obs.shape == (n_timesteps, n_sensors), "shape must be (n_timesteps, n_sensors)"
+    # Scalar transform the observation and predict the gesture from it
+    wrap_scale_flat = np.array([to_flat(scale_single(obs, scaler))])
+    predict_proba = clf.predict_proba(wrap_scale_flat)
+    # Sort the predictions
+    predictions = sorted(enumerate(predict_proba[0]), key=lambda ip: -ip[1])
+    # Convert the indexes to gestures and return the predictions
+    return [(idx_to_gesture[idx], proba) for idx, proba in predictions]
+
 
 def save_model(model):
     """Given a model, save it to the directory `./saved_models/` as a pickle.
