@@ -1,16 +1,15 @@
 print("Importing models")
-from time import sleep, time
+from time import time
 import datetime
 from common_utils import *
 import serial
-import os
 import subprocess
 import sys
 np.set_printoptions(threshold=sys.maxsize, linewidth=250)
 
 def main():
     # Set the options for the serial port
-    baudrate = 19_200 
+    baudrate = 19_200
     ports = subprocess.run(
             ["python", "-m", "serial.tools.list_ports"],
             stdout=subprocess.PIPE,
@@ -33,9 +32,13 @@ def main():
         predict_from_serial_stream(ser)
 
 def predict_from_serial_stream(ser):
+    n_sensors = 30
+    n_timesteps = 40
     # Read in the model
-    model_path = f"saved_models/MLPClassifier(activation='tanh',alpha=5.532519953153552e-05,hidden_layer_sizes=(400,200),max_iter=1000,solver='lbfgs').pickle"
-    model = load_model(model_path)
+    model_paths = ['saved_models/' + p for p in os.listdir('saved_models') if 'Classifier' in p]
+    assert model_paths, "There must be at least one classifier in `saved_models/`"
+    clf = load_model(model_paths[0])
+    print(f"Loaded model at {model_paths[0]}")
     # Read in the scaler
     scaler_path = f"saved_models/StandardScaler().pickle"
     scaler = load_model(scaler_path)
@@ -43,7 +46,7 @@ def predict_from_serial_stream(ser):
     with open('saved_models/idx_to_gesture.pickle', 'rb') as f:
         idx_to_gesture = pickle.load(f)
 
-    obs = np.zeros((40, 30))
+    obs = np.zeros((n_timesteps, n_sensors))
     print(ser)
     filled_cols = 0
     last_write = int(time() * 1000)
@@ -87,7 +90,7 @@ def predict_from_serial_stream(ser):
 
                 if predictions[0][1] > 0.9:
                     # If the model is confident in the prediction, then save
-                    # the observation for future analysis
+                    # the observation for future analysis.
                     now = datetime.datetime.now().isoformat()
                     gesture = idx_to_gesture[predictions[0][0]]
                     with open(f'../gesture_data/self-classified/{gesture}/{now}.txt', 'w') as f:
@@ -102,6 +105,7 @@ def predict_from_serial_stream(ser):
                             break
                     print()
             ser.flush()
+
 
 if __name__ == "__main__":
     main()
