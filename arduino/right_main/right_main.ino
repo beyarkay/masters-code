@@ -23,9 +23,10 @@ int gesture_index = 0x01;
 // packets
 const int PIN_BUZZER = 2;
 int buzzer_state = 0;
-const int MS_PER_TRAINING_PACKET = 1000;
-const int MS_PER_BEEP = 30;
-long last_beep = 0;
+const int MS_PER_TRAINING_PACKET = 500;
+const int MS_PER_BEEP = 40;
+const int START_TIME = (MS_PER_TRAINING_PACKET - MS_PER_BEEP) / 2;
+const int FINSH_TIME = (MS_PER_TRAINING_PACKET + MS_PER_BEEP) / 2;
 
 // Keep track of the last time we wrote to the serial port
 long last_write = 0;
@@ -76,7 +77,7 @@ void loop() {
         last_write = millis();
         Serial.print(gesture_index);
         Serial.print(",");
-        Serial.print(millis() - last_beep);
+        Serial.print(gesture_index == 0 ? 0 : millis() % MS_PER_TRAINING_PACKET);
         Serial.print(",");
         // Print out the data from the left hand
         for (int i = 0; i < left_hand_len; i++) {
@@ -101,20 +102,23 @@ void loop() {
 
     // Only sound the buzzer if we're in TRAINING mode and it's the correct
     // time interval
+    int time_offset = millis() % MS_PER_TRAINING_PACKET;
     if (gesture_index != 0
-            && millis() % MS_PER_TRAINING_PACKET <= MS_PER_BEEP
-            && buzzer_state != 150) {
+            && START_TIME <= time_offset
+            && time_offset <= FINSH_TIME
+            && buzzer_state != 150
+    ) {
         // sound the buzzer
         buzzer_state = 150;
         analogWrite(PIN_BUZZER, buzzer_state);
-        last_beep = millis();
-    } else if (buzzer_state != 0) {
+    }
+    if (
+        (time_offset < START_TIME || FINSH_TIME < time_offset)
+        && buzzer_state != 0
+    ) {
         // Reset the buzer
         buzzer_state = 0;
         analogWrite(PIN_BUZZER, buzzer_state);
-    }
-    if (gesture_index == 0) {
-        last_beep = millis();
     }
 
     right_hand_len = 0;
