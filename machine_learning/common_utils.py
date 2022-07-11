@@ -3,7 +3,7 @@ import matplotlib.image as mplimg
 import matplotlib as mpl
 # By default use a larger figure size
 mpl.rcParams['figure.figsize'] = [12, 12]
-mpl.rcParams['figure.dpi'] = 72
+mpl.rcParams['figure.dpi'] = 200
 import numpy as np
 import pandas as pd
 import seaborn as sns
@@ -80,7 +80,7 @@ def read_to_numpy(root_dir='../gesture_data/train', min_obs=180, verbose=0):
         print(f'{n_classes=}, {n_obs=}')
 
     # Create arrays to store the observations and labels
-    X = np.zeros((n_obs, n_sensors * n_timesteps))
+    X = np.zeros((n_obs, n_timesteps * n_sensors))
     y = np.zeros((n_obs,))
     # Also keep track of the paths from which each observation originated
     paths = []
@@ -172,47 +172,31 @@ def plot_raw_gesture(
         fig = plt.gcf()
         ax.title.set_text(title)
 
-    # If we've got a dataframe
-    if type(arr) is pd.core.frame.DataFrame:
-        # Plot the data
-        img = ax.imshow(arr.T, cmap='viridis', aspect='equal')
+    assert type(arr) is np.ndarray, f"Type is {type(arr)}, not np.array"
+    assert arr.shape == (n_timesteps, n_sensors), f"Shape isn't ({n_timesteps}, {n_sensors})"
+
+    time = np.array(list(range(0, 975+1, 25)))
+
+    # Actually draw the heatmap, with square blocks.
+    img = ax.imshow(arr, cmap='viridis', aspect='equal')
+    if show_cbar:
         fig.colorbar(img, ax=ax)
-        if show_xticks:
-            # Set the xticks to be time since the start of the gesture in ms
-            ax.set_xticks([i for i in range(len(arr.index))])
-            ax.set_xticklabels([t.microseconds // 1000 for t in arr.index])
-            ax.set_xlabel("Milliseconds")
-        else:
-            ax.set_xticks([])
-
-    elif type(arr) is np.ndarray:
-        time = np.array(list(range(0, 975+1, 25)))
-        if arr.shape == (1200,):
-            arr = arr.reshape((n_timesteps, n_sensors))
-        elif arr.shape == (n_timesteps, n_sensors+1):
-            # extract the x-axis labels
-            time = arr[:,0]
-            # And the rest of the data
-            arr = arr[:,1:]
-
-        # Actually draw the heatmap, with square blocks
-        img = ax.imshow(arr.T, cmap='viridis', aspect='equal')
-        if show_cbar:
-            fig.colorbar(img, ax=ax)
-        if show_xticks:
-            # Set the x-axis ticks to be the elapsed miliseconds since the gesture started
-            ax.set_xticks([i for i in range(len(arr))])
-            ax.set_xticklabels([int(t) for t in time])
-            ax.set_xlabel("Milliseconds")
-        else:
-            ax.set_xticks([])
-
     if show_yticks:
-        # Set the y-axis ticks to the names of the different fingers like 'right-index-y'
-        ax.set_yticks([i for i in range(len(fingers))])
-        ax.set_yticklabels(fingers)
+        # Set the y-axis ticks to be the elapsed miliseconds since the gesture started
+        ax.set_yticks([i for i in range(len(arr))])
+        ax.set_yticklabels([int(t) for t in time])
+        ax.set_ylabel("Milliseconds")
     else:
         ax.set_yticks([])
+
+    if show_xticks:
+        # Set the x-axis ticks to the names of the different fingers like 'right-index-y'
+        ax.set_xticks(range(len(fingers)))
+        ax.set_xticklabels(fingers_short)
+        # Rotate the x-ticks so they're visible
+        ax.tick_params(axis='x', rotation=0)
+    else:
+        ax.set_xticks([])
 
     # remove the grid
     ax.grid(visible=None)
@@ -220,11 +204,20 @@ def plot_raw_gesture(
     # Draw some horizontal separators between the fingers
     for i in range(1, 10):
         # These constants had to be hand-tuned
-        ax.plot([-0.5, 39.5], [i*3 - 0.6, i*3 - 0.6], c='white', lw=delim_lw)
-
-    if show_xticks:
-        # Rotate the x-ticks so they're visible
-        ax.tick_params(axis='x', rotation=90)
+        x_offset = -0.5
+        ax.plot(
+            [i*3 + x_offset, i*3 + x_offset],
+            [-0.5, 39.5],
+            c='white',
+            lw=delim_lw if i != 5 else delim_lw*3
+        )
+    if show_values:
+        for (j,i), label in np.ndenumerate(arr):
+            if abs(label) > 10:
+                label = '{:g}'.format(float('{:.3g}'.format(round(label, 3))))
+            else:
+                label = '{:g}'.format(float('{:.2g}'.format(round(label, 2))))
+            ax.text(i, j, label, size=10, ha='center', va='center', color='white')
 
     return fig, ax
 
@@ -235,6 +228,7 @@ def read_to_df(filename, normalise=False):
     ('left-index-z', 'right-middle-y', etc). Each row is one instant of sensor measurements, with the
     time of those measurements given by the `milliseconds` column.
     """
+    print("`read_to_df` is deprecated. Use read_to_ndarray instead")
     should_return_nans = False
     # Read in the raw data values
     df = pd.read_csv(filename, header=None, names=fingers)
@@ -252,18 +246,22 @@ def read_to_df(filename, normalise=False):
         df.loc[start] = pd.Series(dtype='float64')
     if end not in df.index:
         df.loc[end] = pd.Series(dtype='float64')
+
+    # Remove any outliers, they're likely invalid readings
+    lower_bound = 300
+    upper_bound = 800
+    df[df < lower_bound] = np.nan
+    df[df > upper_bound] = np.nan
+
     # Resample the data so we've got values exactly every 25ms
     df = df.resample("25ms").mean().ffill()
+
+    if np.any(np.isnan(df.to_numpy())):
+        should_return_nans = True
 
     # If we've got any samples that are after 0.975 or before 0.000, drop them
     df = df[df.index <= end]
     df = df[start <= df.index]
-
-    # Clamp any outliers. Since there are exactly 1200 datapoints, this will clamp
-    # at most $floor(0.001*1200) = 12$ observations
-    lower, upper = df.stack().quantile([0.005, 0.995])
-    df[df < lower] = lower
-    df[df > upper] = upper
 
     # Normalise each column to have 0 mean and 1 std dev.
     # Means are computed per sensor, but std dev is computed over all measurements
