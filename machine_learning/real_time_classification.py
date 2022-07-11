@@ -48,62 +48,74 @@ def predict_from_serial_stream(ser):
 
     obs = np.zeros((n_timesteps, n_sensors))
     print(ser)
-    filled_cols = 0
+    timestep = 0
     last_write = int(time() * 1000)
     raw_values = None
-    old_values = None
+
     while True:
         # If it's been at least 25ms and the serial port is open
         if int(time() * 1000) - last_write >= 25 and ser.isOpen():
             last_write = int(time() * 1000)
             try:
-                if raw_values is not None:
-                    old_values = raw_values[:]
                 raw_values = ser.readline().decode('utf-8').strip().split(",")
             except serial.serialutil.SerialException:
                 # If Ergo has been disconnected, end the program
                 return
             # Occasionally a line won't be completely populated. In this case,
             # just carry over the previous readings to the new dataset
-            if len(raw_values) != 33:
-                if old_values is not None and len(old_values) == 33:
-                    raw_values = old_values[:]
-                    print('continuing old values onwards')
-                else:
-                    continue
+            if len(raw_values) != n_sensors+3:
+                print(f'raw values arent of length {n_sensors+3}: {raw_values}')
+                continue
             values = [int(val) for val in raw_values[2:-1]]
             new_values = np.array(values)
-            # Shift all the values across by one row
+
             obs[1:, :] = obs[:-1, :]
-            # Then populate the first row with the new values
             obs[0, :] = new_values
 
-            if filled_cols < obs.shape[1]:
-                filled_cols += 1
-            else:
-                flat_scaled = scaler.transform(obs.flatten()[..., np.newaxis].T)
-                prediction = model.predict_proba(flat_scaled)
-                predictions = []
-                for i, prob in enumerate(prediction[0]):
-                    predictions.append((i, prob))
-                predictions.sort(key=lambda ip: -ip[1])
+            timestep += 1
+            # Only attempt a prediction if there's valid data populating the
+            # observation
+            if timestep % 5 == 0 and timestep > n_timesteps:
+                timestep = 0
 
+                # Write the observation to disc
+                now = datetime.datetime.now().isoformat()
+                filename = f'../gesture_data/self-classified/unknown/{now}.txt'
+                with open(filename, 'w') as f:
+                    lines = []
+                    for i, arr in enumerate(obs.tolist()):
+                        joined_arr = ','.join([str(int(ai)) for ai in arr])
+                        lines.append(f'{i*25},{joined_arr}\n')
+                    f.writelines(lines)
+
+                # Then fetch the observation from disc and predict
+                predictions = predict_nicely(
+                    read_to_df(filename),
+                    clf,
+                    scaler,
+                    idx_to_gesture
+                )
+                tot = 0
+                for gesture, pred_proba in predictions:
+                    tot += pred_proba
+                    pretty = f'{pred_proba*100:.2f}%'
+                    print(f'{gesture:>11}: {pretty:<10}', end='')
+                    if tot >= 0.95:
+                        break
+                print()
                 if predictions[0][1] > 0.9:
                     # If the model is confident in the prediction, then save
                     # the observation for future analysis.
                     now = datetime.datetime.now().isoformat()
-                    gesture = idx_to_gesture[predictions[0][0]]
-                    with open(f'../gesture_data/self-classified/{gesture}/{now}.txt', 'w') as f:
-                        f.writelines([str(i*25) + ',' + ','.join([str(int(ai)) for ai in a]) + '\n' for i, a in enumerate(obs.tolist())])
-                    # Also print the prediction
-                    tot = 0
-                    for i, pred in predictions:
-                        tot += pred
-                        pretty = f'{pred*100:.2f}%'
-                        print(f'{gesture:>11}: {pretty:<10}', end='')
-                        if tot >= 0.95:
-                            break
-                    print()
+                    gesture = predictions[0][0]
+                    filename = f'../gesture_data/self-classified/{gesture}/{now}.txt'
+                    # print(f"Saving as {filename}:\n{obs[:5]}")
+                    # with open(filename, 'w') as f:
+                    #     lines = []
+                    #     for i, arr in enumerate(obs.tolist()):
+                    #         joined_arr = ','.join([str(int(ai)) for ai in arr])
+                    #         lines.append(f'{i*25},{joined_arr}\n')
+                    #     f.writelines(lines)
             ser.flush()
 
 
