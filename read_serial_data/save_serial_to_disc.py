@@ -187,9 +187,8 @@ def predict_cb(new_measurements: np.ndarray, d: dict[str, Any]) -> dict[str, Any
     scaler = utils.load_model(
         '../machine_learning/saved_models/StandardScaler().pickle'
     )
-    clf = utils.load_model(
-        '../machine_learning/saved_models/MLPClassifier(alpha=0.00023740156109408082,hidden_layer_sizes=200,max_iter=1000).pickle'
-    )
+    model_paths = sorted(['../machine_learning/saved_models/' + p for p in os.listdir('../machine_learning/saved_models/') if "Classifier" in p])
+    clf = utils.load_model(model_paths[0])
     # Calculate how much time has passed between this measurement and the
     # previous measurement, rounded to the nearest 25ms
     diff = round((d["time_ms"] - d["prev_time_ms"]) / 25) * 25
