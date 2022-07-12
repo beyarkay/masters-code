@@ -106,11 +106,13 @@ void loop() {
     if (gesture_index != 0
             && START_TIME <= time_offset
             && time_offset <= FINSH_TIME
-            && buzzer_state != 150
+            && buzzer_state == 0
     ) {
-        // sound the buzzer
-        buzzer_state = 150;
-        analogWrite(PIN_BUZZER, buzzer_state);
+        // sound the buzzer at 110Hz (A2)
+        // Gesture index is in [1,255], multiply by 8 to get [8,2040], add 50
+        // to get in human hearing range of [58,2090]
+        buzzer_state = gesture_index << 3 + 50;
+        tone(PIN_BUZZER, buzzer_state);
     }
     if (
         (time_offset < START_TIME || FINSH_TIME < time_offset)
@@ -118,7 +120,7 @@ void loop() {
     ) {
         // Reset the buzer
         buzzer_state = 0;
-        analogWrite(PIN_BUZZER, buzzer_state);
+        noTone(PIN_BUZZER);
     }
 
     right_hand_len = 0;
