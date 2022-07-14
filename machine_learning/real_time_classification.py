@@ -33,7 +33,7 @@ def main():
 
 def predict_from_serial_stream(ser):
     n_sensors = 30
-    n_timesteps = 40
+    n_timesteps = 20
     # Read in the model
     model_paths = ['saved_models/' + p for p in os.listdir('saved_models') if 'Classifier' in p]
     assert model_paths, "There must be at least one classifier in `saved_models/`"

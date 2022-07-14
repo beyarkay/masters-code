@@ -54,7 +54,7 @@ def loop_over_serial_stream(
     """Read in one set of measurements from `serial_handle` and pass to
     `callable`. Some pre-processing and error checking is done to ensure things
     happen nicely."""
-    n_timesteps = 40
+    n_timesteps = 20
     n_sensors = 30
     first_loop = True
 
@@ -67,8 +67,8 @@ def loop_over_serial_stream(
     model_paths = sorted(['../machine_learning/saved_models/' + p for p in os.listdir('../machine_learning/saved_models/') if "Classifier" in p])
     clf = utils.load_model(model_paths[0])
     cb_data: dict[str, Any] = {
-        "n_timesteps": 40,
-        "n_sensors": 30,
+        "n_timesteps": n_timesteps,
+        "n_sensors": n_sensors,
         "curr_offset": 0,
         "prev_offset": 0,
         "curr_idx": 0,
@@ -90,10 +90,11 @@ def loop_over_serial_stream(
             # duration between measurements
             cb_data["prev_time_ms"] = cb_data["time_ms"]
             cb_data["time_ms"] = int(time() * 1000)
-            raw_values: List[str] = serial_handle.readline().decode('utf-8').strip().split(",")[:-1]
+            before_split = serial_handle.readline().decode('utf-8')
+            raw_values: List[str] = before_split.strip().split(",")[:-1]
             # Ensure there are exactly 32 values
             if len(raw_values) == 0:
-                print(f"{CLR}No values found from serial connection, try unplugging the device ({raw_values=})")
+                print(f"{CLR}No values found from serial connection, try unplugging the device ({raw_values=}), {before_split=}")
                 sys.exit(1)
             if len(raw_values) != n_sensors+2:
                 print(f"{CLR}Raw values are length {len(raw_values)}, not {n_sensors+2}: {raw_values}")
@@ -112,8 +113,8 @@ def loop_over_serial_stream(
                 else:
                     first_loop = False
 
-            if cb_data["curr_idx"] == 40:
-                cb_data["curr_idx"] = 39
+            if cb_data["curr_idx"] == n_timesteps:
+                cb_data["curr_idx"] = n_timesteps - 1 
             aligned_offset = cb_data["curr_idx"] * 25
         except serial.serialutil.SerialException as e:
             print(f"Ergo has been disconnected: {e}")
@@ -129,7 +130,7 @@ def loop_over_serial_stream(
                 for val in raw_values[2:]
             ])
         except ValueError as e:
-            print("value error: {e}, {raw_values=}")
+            print(f"value error: {e}, {raw_values=}")
             continue
 
         # Call the callback
@@ -168,25 +169,34 @@ def save_to_disc_cb(new_measurements: np.ndarray, d: dict[str, Any]) -> dict[str
     # gesture has ended and we should 1) save the current observation to
     # disc and 2) set the observation to all NaNs in preparation for the
     # next gesture
-    if d["curr_offset"] < d["prev_offset"] and d["n_measurements"] >= 40:
+    if d["curr_offset"] < d["prev_offset"] and d["n_measurements"] >= d["n_timesteps"]:
         # If there was no measurement for 975ms, just use the one for 000ms
         if np.isnan(d["obs"][-1]).any():
             d["obs"][-1, :] = new_measurements
-        predictions = utils.predict_nicely(d["obs"], clf, scaler, d["idx_to_gesture"])
-        d["prediction"] = format_prediction(*predictions[0])
+        try:
+            predictions = utils.predict_nicely(d["obs"], clf, scaler, d["idx_to_gesture"])
+            d["prediction"] = format_prediction(*predictions[0])
+        except Exception as e:
+            d["prediction"] = "Classifier exception"
 
         directory = f'../gesture_data/train/gesture{d["gesture_idx"]:04}'
         now_str = datetime.datetime.now().isoformat()
-        write_obs_to_disc(d["obs"], f'{directory}/{now_str}.csv')
+        utils.write_obs_to_disc(d["obs"], f'{directory}/{now_str}.csv')
         num_obs = len(os.listdir(directory))
         print(f"\x1b[2K\r{d['n_measurements']} measurements taken, wrote observation as `{directory}/{now_str}.csv` ({num_obs} total)")
-        # Reset the observation to be all NaNs
-        d["obs"] = np.full((d["n_timesteps"], d["n_sensors"]), np.nan)
+        for idx in range(d["curr_idx"]):
+            # If the curr_idx > 0 then we've skipped over the first
+            # measurement. Therefore impute the first measurements as the mean
+            # of the last measurement of the previous observation and the new
+            # measurement of this observation.
+            d["obs"][idx, :] = np.mean((d["obs"][-1, :], new_measurements), axis=0)
+        # Reset the observation to be mostly NaNs
+        d["obs"][d["curr_idx"]:] = np.full((d["n_timesteps"]-d["curr_idx"], d["n_sensors"]), np.nan)
         d["n_measurements"] = 0
 
     # If we've skipped over an index, impute with the mean between the
     # last recorded observation and the most recent observation
-    d["obs"][d["curr_idx"], :] = new_measurements
+    d["obs"][d["curr_idx"]] = new_measurements
     for idx in range(d["prev_idx"] + 1, d["curr_idx"]):
         # print(f"imputing index {idx} using the mean of idx {d['prev_idx']} and of idx {d['curr_idx']}")
         d["obs"][idx, :] = np.mean((d["obs"][d["prev_idx"], :], d["obs"][d["curr_idx"], :]), axis=0)
@@ -196,10 +206,10 @@ def save_to_disc_cb(new_measurements: np.ndarray, d: dict[str, Any]) -> dict[str
 
     return d
 
-def format_prediction(gesture, proba):
+def format_prediction(gesture, proba, short=False, cmap='inferno'):
     gesture = gesture.replace('gesture0', 'g').replace('g0', 'g')
-    fstring = f'{gesture:>3}:{{value:<02}}%'
-    colored = get_colored_string(int(proba*100), 100, fstring=fstring)
+    fstring = f'{gesture:>3}' + (f':{{value:>02}}%' if not short else '')
+    colored = get_colored_string(int(proba*100), 100, fstring=fstring, cmap=cmap)
     return colored
 
 def predict_cb(new_measurements: np.ndarray, d: dict[str, Any]) -> dict[str, Any]:
@@ -240,19 +250,16 @@ def predict_cb(new_measurements: np.ndarray, d: dict[str, Any]) -> dict[str, Any
     print(f"{CLR}", end='')
     d["prediction"] = format_prediction(*predictions[0])
     for gesture, proba in sorted(predictions, key=lambda gp: gp[0]):
-        print(format_prediction(gesture, proba), end=' ')
+        print(format_prediction(gesture, proba, short=len(predictions) >= 20, cmap='inferno'), end=' ')
     print()
     return d
 
-def get_colored_string(value, n_values, fstring='{value:3}') -> str:
-    colours = cm.get_cmap('turbo', n_values)
+def get_colored_string(value, n_values, fstring='{value:3}', cmap='turbo') -> str:
+    colours = cm.get_cmap(cmap, n_values)
     rgb = [int(val * 255) for val in colours(value)[:-1]]
     mag = np.sqrt(sum([x * x for x in rgb]))
     coloured = color(fstring.format(value=value), 'black' if mag > 180 else 'white', f'rgb({rgb[0]},{rgb[1]},{rgb[2]})')
     return coloured
-
-def write_obs_to_disc(obs: np.ndarray, filename: str) -> None:
-    np.savetxt(filename, obs, delimiter=",", fmt='%4.0f')
 
 if __name__ == "__main__":
     try:

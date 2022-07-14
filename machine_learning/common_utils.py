@@ -42,8 +42,11 @@ for i, finger_name in enumerate(finger_names):
         else:
             fingers_short.append(f'{dimension}')
 
-n_timesteps = 40
+n_timesteps = 20
 n_sensors = 30
+
+def write_obs_to_disc(obs: np.ndarray, filename: str) -> None:
+    np.savetxt(filename, obs, delimiter=",", fmt='%4.0f')
 
 def to_flat(arr):
     """Given a 2D array, flatten it to `(n_timesteps*n_sensors,)`"""
@@ -96,7 +99,7 @@ def get_dir_files(root_path='../gesture_data/train'):
 def read_to_numpy(root_dir='../gesture_data/train', min_obs=180, verbose=0):
     """Given a root directory, read in all valid gesture observations
     in that directory and convert to a `X`, `y`, and `paths` arrays."""
-    dir_files = get_dir_files()
+    dir_files = get_dir_files(root_dir)
     gesture_info = get_gesture_info()
     max_val = 0
 
@@ -196,7 +199,7 @@ def plot_raw_gesture(
     # If no ax is specified, create one.
     if ax is None:
         # Create a new plot
-        fig, ax = plt.subplots(1, figsize=(40, 20))
+        fig, ax = plt.subplots(1, figsize=(15, 7))
         if title is not None:
             # with title referencing to the origin of the data
             fig.suptitle(title)
@@ -210,7 +213,7 @@ def plot_raw_gesture(
     assert type(arr) is np.ndarray, f"Type is {type(arr)}, not np.array"
     assert arr.shape == (n_timesteps, n_sensors), f"Shape isn't ({n_timesteps}, {n_sensors})"
 
-    time = np.array(list(range(0, 975+1, 25)))
+    time = np.array(list(range(0, (n_timesteps-1)*25+1, 25)))
 
     # Actually draw the heatmap, with square blocks.
     img = ax.imshow(arr, cmap='viridis', aspect='equal')
@@ -242,7 +245,7 @@ def plot_raw_gesture(
         x_offset = -0.5
         ax.plot(
             [i*3 + x_offset, i*3 + x_offset],
-            [-0.5, 39.5],
+            [-0.5, n_timesteps-0.5],
             c='white',
             lw=delim_lw if i != 5 else delim_lw*3
         )
@@ -252,7 +255,7 @@ def plot_raw_gesture(
                 label = '{:g}'.format(float('{:.3g}'.format(round(label, 3))))
             else:
                 label = '{:g}'.format(float('{:.2g}'.format(round(label, 2))))
-            ax.text(i, j, label, size=10, ha='center', va='center', color='white')
+            ax.text(i, j, label, size=7, ha='center', va='center', color='white')
 
     return fig, ax
 
