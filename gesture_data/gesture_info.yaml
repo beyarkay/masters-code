@@ -150,13 +150,13 @@ gestures:
     desc: r1 taps right hand little
   gesture0051: 
     description: Pronation at the left hand wrist
-    desc: Pronation at the left hand wrist
+    desc: l-wrist-pro
   gesture0052: 
-    description: Ulnar deviation at the left hand wrist
-    desc: Ulnar deviation at the left hand wrist
+    description: Radial deviation at the left hand wrist
+    desc: l-wrist-rad-dev
   gesture0053: 
-    description: Clockwise then counter clockwise rotation at the left hand wrist
-    desc: Clockwise then counter clockwise rotation at the left hand wrist
+    description: Left hand wrist flexion
+    desc: l-wrist-flx
   gesture0054: 
     description: No gesture
     desc: ng
@@ -165,13 +165,13 @@ gestures:
     desc: ng
   gesture0056: 
     description: Pronation at the right hand wrist
-    desc: Pronation at the right hand wrist
+    desc: r-wrist-pro
   gesture0057: 
-    description: Ulnar deviation at the right hand wrist
-    desc: Ulnar deviation at the right hand wrist
+    description: Radial deviation at the right hand wrist
+    desc: r-wrist-rad-dev
   gesture0058: 
-    description: Clockwise then counter clockwise rotation at the right hand wrist
-    desc: Clockwise then counter clockwise rotation at the right hand wrist
+    description: right hand wrist flexion
+    desc: r-wrist-flx
   gesture0059: 
     description: No gesture
     desc: ng
@@ -180,13 +180,13 @@ gestures:
     desc: ng
   gesture0061: 
     description: Supination at the left hand wrist
-    desc: Supination at the left hand wrist
+    desc: l-wrist-sup
   gesture0062: 
-    description: Radial deviation at the left hand wrist
-    desc: Radial deviation at the left hand wrist
+    description: Ulnar deviation at the left hand wrist
+    desc: l-wrist-uln-dev
   gesture0063: 
-    description: Counter clockwise then clockwise rotation at the left hand wrist
-    desc: Counter clockwise then clockwise rotation at the left hand wrist
+    description: Left hand wrist extension
+    desc: l-wrist-ext
   gesture0064: 
     description: No gesture
     desc: ng
@@ -195,13 +195,13 @@ gestures:
     desc: ng
   gesture0066: 
     description: Supination at the right hand wrist
-    desc: Supination at the right hand wrist
+    desc: r-wrist-sup
   gesture0067: 
-    description: Radial deviation at the right hand wrist
-    desc: Radial deviation at the right hand wrist
+    description: Ulnar deviation at the right hand wrist
+    desc: r-wrist-uln-dev
   gesture0068: 
-    description: Counter clockwise then clockwise rotation at the right hand wrist
-    desc: Counter clockwise then clockwise rotation at the right hand wrist
+    description: right hand wrist extension
+    desc: r-wrist-ext
   gesture0069: 
     description: No gesture
     desc: ng
