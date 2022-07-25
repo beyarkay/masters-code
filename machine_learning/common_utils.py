@@ -96,10 +96,12 @@ def get_dir_files(root_path='../gesture_data/train'):
     }
     return dir_files
 
-def read_to_numpy(root_dir='../gesture_data/train', min_obs=180, verbose=0):
+def read_to_numpy(root_dir='../gesture_data/train', ignore=None, min_obs=180, verbose=0):
     """Given a root directory, read in all valid gesture observations
     in that directory and convert to a `X`, `y`, and `paths` arrays."""
-    dir_files = get_dir_files(root_dir)
+    if ignore is None:
+        ignore = []
+    dir_files = {k: v for k, v in get_dir_files(root_dir).items() if k not in ignore}
     gesture_info = get_gesture_info()
     max_val = 0
 
