@@ -143,14 +143,16 @@ def read_to_numpy(root_dir='../gesture_data/train', include=None, ignore=None, m
     label_idx = 0
 
     # Iterate over every gesture
-    print(f'{len(dir_files.keys())} gestures, {n_obs} total observations')
+    if verbose >= 0:
+        print(f'{len(dir_files.keys())} gestures, {n_obs} total observations')
     for gesture_index, filenames in dir_files.items():
         if len(filenames) > min_obs:
             # Populate the idx <-> gesture mapping
             idx_to_gesture[label_idx] = gesture_index
             gesture_to_idx[gesture_index] = label_idx
             description = gesture_info.get(gesture_index, {}).get("description", "<No description>")
-            print(f'  {gesture_index}: {description:<40} ({len(filenames)} observations)')
+            if verbose > 0:
+                print(f'  {gesture_index}: {description:<40} ({len(filenames)} observations)')
 
             # Iterate over every observation for the current gesture
             for file in filenames:
@@ -174,7 +176,8 @@ def read_to_numpy(root_dir='../gesture_data/train', include=None, ignore=None, m
         pickle.dump(idx_to_gesture, f, protocol=pickle.HIGHEST_PROTOCOL)
     with open('saved_models/gesture_to_idx.pickle', 'wb') as f:
         pickle.dump(gesture_to_idx, f, protocol=pickle.HIGHEST_PROTOCOL)
-    print(f'done in {round(time() - start, 2)}s')
+    if verbose >= 0:
+        print(f'done in {round(time() - start, 2)}s')
     return X, y, np.array(paths)
 
 
