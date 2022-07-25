@@ -27,7 +27,7 @@ def main():
         print("Usage: \n\tpython3 save_serial_to_disc.py save\n\tpython3 save_serial_to_disc.py predict")
         sys.exit(1)
     # Get the correct callback dependant on the cmdline argvalues
-    callback = save_to_disc_cb if sys.argv[1].startswith('s') else predict_cb
+    callback = save_cb if sys.argv[1].startswith('s') else predict_cb
     # Get the correct serial port, exiting if none exists
     port = get_serial_port()
     # Define the baudrate (number of bits per second sent over the serial port)
@@ -92,9 +92,11 @@ def loop_over_serial_stream(
     # that we can skip it if required
     first_loop = True
 
-    # Read in the index to gesture mapping used by the machine learning model
+    # Read in the index to gesture mappings used by the machine learning model
     with open('../machine_learning/saved_models/idx_to_gesture.pickle', 'rb') as f:
         idx_to_gesture = pickle.load(f)
+    with open('../machine_learning/saved_models/gesture_to_idx.pickle', 'rb') as f:
+        gesture_to_idx = pickle.load(f)
     # Read in the scaler used by the machine learning model to scale the input
     # data
     scaler = utils.load_model(
@@ -118,10 +120,13 @@ def loop_over_serial_stream(
         "time_ms": int(time() * 1000),
         "prev_time_ms": int(time() * 1000),
         "idx_to_gesture": idx_to_gesture,
+        "gesture_to_idx": gesture_to_idx,
         "scaler": scaler,
         "clf": clf,
         "prediction": "no pred",
         "g2k": gestures_to_keystrokes(),
+        "new_X": [],
+        "new_y": [],
     }
 
     # Now that all the setup is complete, loop forever (or until the serial
@@ -214,7 +219,6 @@ def write_measurements_to_terminal(new_measurements, cb_data: dict[str, Any]):
     millis_offset = cb_data['curr_offset']
     print(f'{millis_offset: >3}ms ({aligned_offset: >3}ms) ms//25={curr_idx: >2} gesture:{gesture_idx: <3} {colors}{prediction}', end="\r")
 
-
 def format_prediction(gesture: str, proba: float, shortness=0, cmap='inferno', threshold=0.99):
     """Given a gesture and it's probability, return an ANSI coloured string
     colour mapped to it's probability."""
@@ -236,7 +240,7 @@ def get_colored_string(value: int, n_values: int, fstring='{value:3}', cmap='tur
     )
     return coloured
 
-def save_to_disc_cb(new_measurements: np.ndarray, d: dict[str, Any]) -> dict[str, Any]:
+def save_cb(new_measurements: np.ndarray, d: dict[str, Any]) -> dict[str, Any]:
     """Given a series of new measurements, populate an observation and save to
     disc as require."""
     clf = d["clf"]
@@ -256,11 +260,25 @@ def save_to_disc_cb(new_measurements: np.ndarray, d: dict[str, Any]) -> dict[str
         except Exception as e:
             d["prediction"] = "Classifier exception"
 
-        directory = f'../gesture_data/train/gesture{d["gesture_idx"]:04}'
+        gesture_idx = f'gesture{d["gesture_idx"]:04}'
+        directory = f'../gesture_data/train/{gesture_idx}'
         now_str = datetime.datetime.now().isoformat()
         utils.write_obs_to_disc(d["obs"], f'{directory}/{now_str}.csv')
+        d["new_X"].append(utils.to_flat(d["obs"]))
+        d["new_y"].append(d["gesture_to_idx"][gesture_idx])
         num_obs = len(os.listdir(directory))
-        print(f"\x1b[2K\r{d['n_measurements']} measurements taken, wrote observation as `{directory}/{now_str}.csv` ({num_obs} total)")
+        print(f"{CLR}{d['n_measurements']} measurements taken, wrote observation as `{directory}/{now_str}.csv` ({num_obs} total)")
+        # Retrain the model when a certain number of new observations have emerged
+        if num_obs % 50 == 0:
+            start = time()
+            new_X = scaler.transform(np.array(d["new_X"]))
+            new_y = np.array(d["new_y"])
+            d["clf"] = clf.partial_fit(
+                new_X, new_y, np.unique(list(d["idx_to_gesture"].keys()))
+            )
+            print(f"Updated model with {len(new_y)} new observations in {round(time() - start, 4)}s")
+            d["new_X"] = []
+            d["new_y"] = []
         for idx in range(d["curr_idx"]):
             # If the curr_idx > 0 then we've skipped over the first
             # measurement. Therefore impute the first measurements as the mean
