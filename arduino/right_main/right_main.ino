@@ -71,25 +71,32 @@ void setup() {
 }
 
 void loop() {
-    if (millis() - last_write >= MIN_MS_PER_WRITE
-        && left_hand_len > 0
-        && right_hand_len > 0) {
-        last_write = millis();
-        Serial.print(gesture_index);
-        Serial.print(",");
-        Serial.print(gesture_index == 0 ? 0 : millis() % MS_PER_TRAINING_PACKET);
-        Serial.print(",");
-        // Print out the data from the left hand
-        for (int i = 0; i < left_hand_len; i++) {
-            Serial.write(left_hand[i]);
+    if (millis() - last_write >= MIN_MS_PER_WRITE) {
+        if (left_hand_len > 0 && right_hand_len > 0) {
+            last_write = millis();
+            Serial.print(gesture_index);
+            Serial.print(",");
+            Serial.print(gesture_index == 0 ? 0 : millis() % MS_PER_TRAINING_PACKET);
+            Serial.print(",");
+            // Print out the data from the left hand
+            for (int i = 0; i < left_hand_len; i++) {
+                Serial.write(left_hand[i]);
+            }
+            left_hand_len = 0;
+            // Print out the data from the right hand
+            for (int i = 0; i < right_hand_len; i++) {
+                Serial.write(right_hand[i]);
+            }
+            right_hand_len = 0;
+            Serial.print("\n");
+        } else if (left_hand_len > 0 || right_hand_len > 0) {
+            // Errors might occur here, but I'm not sure
+            // Serial.print("FAIL,");
+            // Serial.print(left_hand_len);
+            // Serial.print(",");
+            // Serial.print(right_hand_len);
+            // Serial.println(",");
         }
-        left_hand_len = 0;
-        // Print out the data from the right hand
-        for (int i = 0; i < right_hand_len; i++) {
-            Serial.write(right_hand[i]);
-        }
-        right_hand_len = 0;
-        Serial.print("\n");
     }
     // Calculate and print out the gesture index. Read in the DIP switches
     // to figure out what gesture index we're at Init `gesture_index` to
@@ -104,14 +111,13 @@ void loop() {
     // time interval
     int time_offset = millis() % MS_PER_TRAINING_PACKET;
     if (gesture_index != 0
-            && START_TIME <= time_offset
-            && time_offset <= FINSH_TIME
+            && START_TIME <= time_offset && time_offset <= FINSH_TIME
             && buzzer_state == 0
     ) {
         // sound the buzzer at 110Hz (A2)
         // Gesture index is in [1,255], multiply by 8 to get [8,2040], add 50
         // to get in human hearing range of [58,2090]
-        buzzer_state = gesture_index << 3 + 50;
+        buzzer_state = gesture_index + 50;
         tone(PIN_BUZZER, buzzer_state);
     }
     if (
