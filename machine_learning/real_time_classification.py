@@ -269,14 +269,18 @@ def save_cb(new_measurements: np.ndarray, d: dict[str, Any]) -> dict[str, Any]:
         num_obs = len(os.listdir(directory))
         print(f"{CLR}{d['n_measurements']} measurements taken, wrote observation as `{directory}/{now_str}.csv` ({num_obs} total)")
         # Retrain the model when a certain number of new observations have emerged
-        if num_obs % 50 == 0:
+        if num_obs % 5 == 0:
             start = time()
             new_X = scaler.transform(np.array(d["new_X"]))
             new_y = np.array(d["new_y"])
             d["clf"] = clf.partial_fit(
                 new_X, new_y, np.unique(list(d["idx_to_gesture"].keys()))
             )
-            print(f"Updated model with {len(new_y)} new observations in {round(time() - start, 4)}s")
+            if num_obs % 50 == 0:
+                print(f"Updated and saved model with {len(new_y)} new observations in {round(time() - start, 4)}s")
+                utils.save_model(d["clf"])
+            else:
+                print(f"Updated model with {len(new_y)} new observations in {round(time() - start, 4)}s")
             d["new_X"] = []
             d["new_y"] = []
         for idx in range(d["curr_idx"]):
