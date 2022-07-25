@@ -12,68 +12,99 @@ import sys
 import pickle
 import yaml
 from yaml import Loader, Dumper
-script_dir = os.path.dirname( __file__ )
-utils_dir = os.path.join(script_dir, '..', 'machine_learning')
-sys.path.append(utils_dir)
 import common_utils as utils
+# Get better print options
 np.set_printoptions(threshold=sys.maxsize, linewidth=250)
+# This magic ANSI string clears a line that's been partially written
 CLR = "\x1b[2K\r"
 
 
 def main():
+    # Check that the usage is correct
     if len(sys.argv) not in [2,3]:
         print("Usage: \n\tpython3 save_serial_to_disc.py save\n\tpython3 save_serial_to_disc.py predict\n\tpython3 save_serial_to_disc.py predict <filename>")
     if len(sys.argv) == 2 and sys.argv[1] not in ['predict', 'save', 'p', 's']:
         print("Usage: \n\tpython3 save_serial_to_disc.py save\n\tpython3 save_serial_to_disc.py predict")
         sys.exit(1)
+    # Get the correct callback dependant on the cmdline argvalues
     callback = save_to_disc_cb if sys.argv[1].startswith('s') else predict_cb
+    # Get the correct serial port, exiting if none exists
     port = get_serial_port()
-    if port is None:
-        print("Port not found")
-        sys.exit(1)
+    # Define the baudrate (number of bits per second sent over the serial port)
     baudrate = 19_200
     print(f"Reading from {port} with baudrate {baudrate}")
-    with serial.Serial(port=port, baudrate=baudrate, timeout=1) as ser:
-        loop_over_serial_stream(ser, callback)
+    # Start up an infinite loop that calls the callback every time one set of
+    # new data is available over the serial port.
+    with serial.Serial(port=port, baudrate=baudrate, timeout=1) as serial_port:
+        loop_over_serial_stream(serial_port, callback)
 
-def gestures_to_keystrokes():
-    with open('../machine_learning/gestures_to_keystrokes.yaml', 'r') as f:
-        g2k = yaml.load(f.read(), Loader=Loader)
-    return g2k
+def get_serial_port() -> str:
+    """Look at the open serial ports and return one if it's correctly
+    formatted, otherwise exit with status code 1.
 
-def get_serial_port() -> str | None:
+    Only considers serial ports starting with `/dev/cu.usbmodem` and will offer
+    the user a choice if more than one port is available."""
+    # Read in all the available ports starting with `/dev/cu.usbmodem`
     ports = [p.device for p in comports() if p.device.startswith("/dev/cu.usbmodem")]
     if len(ports) > 1:
+        # If there's more than one, offer the user a choice
         for i, port in enumerate(ports):
             print(f"[{i}]: {port}")
         idx = int(input(f"Please choose a port index [0..{len(ports)-1}]: "))
         port = ports[idx]
     elif len(ports) == 0:
+        # If there are no ports available, exit with status code 1
         print("No ports beginning with `/dev/cu.usbmodem` found")
-        return
+        sys.exit(1)
     else:
+        # If there's only one port, then assign it to the variable `port`
         port = ports[0]
+    # Finally, return the port
     return port
+
+def gestures_to_keystrokes(path='gestures_to_keystrokes.yaml'):
+    """Simple utility to read in the gestures_to_keystrokes yaml file and
+    return it as a dictionary. 
+
+    The dictionary structured like Dict{gesture->keystroke} and is not
+    guaranteed to have every gesture defined. Undefined gestures should result
+    in no keys being pressed."""
+    with open(path, 'r') as f:
+        g2k = yaml.load(f.read(), Loader=Loader)
+    return g2k
 
 def loop_over_serial_stream(
     serial_handle: serial.serialposix.Serial,
     callback: Callable[[np.ndarray, dict[str, Any]], dict[str, Any]]
 ) -> None:
     """Read in one set of measurements from `serial_handle` and pass to
-    `callable`. Some pre-processing and error checking is done to ensure things
-    happen nicely."""
+    `callable`. 
+
+    Some pre-processing and error checking is done to ensure things
+    transpire nicely. The model used for predictions is the
+    alphabetically-first Classifier available in `saved_models/`. If no model
+    is there, then no predictions will be given but everything will still
+    function appropriately."""
+    # Define some constants
     n_timesteps = 20
     n_sensors = 30
+    # The first loop can sometimes contain incomplete data, so define a flag so
+    # that we can skip it if required
     first_loop = True
 
+    # Read in the index to gesture mapping used by the machine learning model
     with open('../machine_learning/saved_models/idx_to_gesture.pickle', 'rb') as f:
         idx_to_gesture = pickle.load(f)
-    # cb_data contains all data that get passed to the CallBack
+    # Read in the scaler used by the machine learning model to scale the input
+    # data
     scaler = utils.load_model(
         '../machine_learning/saved_models/StandardScaler().pickle'
     )
+    # Get a list of all model paths that are Classifiers
     model_paths = sorted(['../machine_learning/saved_models/' + p for p in os.listdir('../machine_learning/saved_models/') if "Classifier" in p])
+    # Read in the first model alphabetically
     clf = utils.load_model(model_paths[0])
+    # Create a dictionary of data to pass to the callback
     cb_data: dict[str, Any] = {
         "n_timesteps": n_timesteps,
         "n_sensors": n_sensors,
@@ -89,10 +120,13 @@ def loop_over_serial_stream(
         "idx_to_gesture": idx_to_gesture,
         "scaler": scaler,
         "clf": clf,
-        "prediction": "no prediction",
+        "prediction": "no pred",
         "g2k": gestures_to_keystrokes(),
     }
 
+    # Now that all the setup is complete, loop forever (or until the serial
+    # port is unplugged), read in the data, pre-process the data, and call
+    # the callback.
     while serial_handle.isOpen():
         try:
             # record the current and previous times so we can calculate the
@@ -100,6 +134,7 @@ def loop_over_serial_stream(
             cb_data["prev_time_ms"] = cb_data["time_ms"]
             cb_data["time_ms"] = int(time() * 1000)
             before_split = serial_handle.readline().decode('utf-8')
+            # Parse the values
             raw_values: List[str] = before_split.strip().split(",")[:-1]
             # Ensure there are exactly 32 values
             if len(raw_values) == 0:
@@ -108,12 +143,15 @@ def loop_over_serial_stream(
             if len(raw_values) != n_sensors+2:
                 print(f"{CLR}Raw values are length {len(raw_values)}, not {n_sensors+2}: {raw_values}")
                 continue
-            # TODO for some reason the observation is mostly NaNs when `gesture_idx==0`
+            # Update the dictionary with some useful values
             cb_data["prev_gesture_idx"] = cb_data["gesture_idx"]
             cb_data["gesture_idx"] = int(raw_values[0])
+            # Shuffle along the previous and current offsets
             cb_data["prev_offset"] = cb_data["curr_offset"]
             cb_data["curr_offset"] = int(raw_values[1])
-            cb_data["curr_idx"] = round(cb_data["curr_offset"] / 25)
+            # Clamp the `curr_idx` so that it doesn't cause an array index out
+            # of bounds error
+            cb_data["curr_idx"] = min(n_timesteps - 1, round(cb_data["curr_offset"] / 25))
             # If this is the first time looping through, then wait until the
             # beginning of a gesture comes around
             if first_loop:
@@ -121,52 +159,82 @@ def loop_over_serial_stream(
                     continue
                 else:
                     first_loop = False
-
-            if cb_data["curr_idx"] == n_timesteps:
-                cb_data["curr_idx"] = n_timesteps - 1 
-            aligned_offset = cb_data["curr_idx"] * 25
+            # The aligned_offset is the number of milliseconds from the start
+            # of the gesture, but rounded to the nearest 25 milliseconds
+            cb_data['aligned_offset'] = cb_data["curr_idx"] * 25
         except serial.serialutil.SerialException as e:
             print(f"Ergo has been disconnected: {e}")
             sys.exit(1)
 
-        upper_bound = 800
-        lower_bound = 300
         # Convert the values to integers and clamp between `lower_bound` and
         # `upper_bound`
+        upper_bound = 800
+        lower_bound = 300
         try:
             new_measurements = np.array([
-                min(upper_bound, max(lower_bound, int(val)))
-                for val in raw_values[2:]
+                min(upper_bound, max(lower_bound, int(val))) for val in raw_values[2:]
             ])
         except ValueError as e:
             print(f"value error: {e}, {raw_values=}")
             continue
 
-        # Call the callback
+        # Call the callback with the new measurements and the callback data
         cb_data = callback(new_measurements, cb_data)
 
-        now_str = datetime.datetime.now().isoformat()[11:-3]
-        curr_idx = cb_data["curr_idx"]
-        colors = []
-        dims = ['x', 'y', 'z']
-        for i, val in enumerate(raw_values[2:]):
-            colors.append(get_colored_string(
-                int(val) - lower_bound,
-                upper_bound - lower_bound,
-                fstring=(dims[i%3]+'{value:3}')
-            ))
-            if i == 14:
-                colors[-1] += '   '
-            elif i % 3 == 2 and i > 0:
-                colors[-1] += ' '
-            else:
-                colors[-1] += ''
-        colors = ''.join(colors)
-        print(f'{now_str} {aligned_offset: >3} [{curr_idx: >2}]: {raw_values[0]: >3} {raw_values[1]: >3} {colors}{cb_data["prediction"]}', end="\r")
-
+        # Format the new measurements nicely so they can be drawn to the
+        # terminal
+        write_measurements_to_terminal(new_measurements, cb_data)
         serial_handle.flush()
     else:
         print("Serial port closed")
+
+def write_measurements_to_terminal(new_measurements, cb_data: dict[str, Any]):
+    """Write the new measurements with some helpful information to the terminal."""
+    curr_idx = cb_data["curr_idx"]
+    colors = ['left:']
+    dims = ['x', 'y', 'z']
+    max_value = 900
+    for i, val in enumerate(new_measurements):
+        # Append an ANSI-coloured string to the colors array
+        colors.append(get_colored_string(int(val), max_value, fstring=(dims[i%3]+'{value:3}')))
+        if i == 14:
+            # The 14th value is the middle, so add a space to separate
+            colors[-1] += '   right:'
+        elif i % 3 == 2 and i > 0:
+            # Every (i%3==2) value deliminates a triplet of (x,y,z) values, so
+            # add a space to separate
+            colors[-1] += ' '
+    # Join all the colour strings together
+    colors = ''.join(colors)
+    # Finally print out the full string, ended with a `\r` so that we can write
+    # over it afterwards
+    aligned_offset = cb_data["aligned_offset"]
+    prediction = cb_data["prediction"]
+    gesture_idx = cb_data['gesture_idx']
+    millis_offset = cb_data['curr_offset']
+    print(f'{millis_offset: >3}ms ({aligned_offset: >3}ms) ms//25={curr_idx: >2} gesture:{gesture_idx: <3} {colors}{prediction}', end="\r")
+
+
+def format_prediction(gesture: str, proba: float, shortness=0, cmap='inferno', threshold=0.99):
+    """Given a gesture and it's probability, return an ANSI coloured string
+    colour mapped to it's probability."""
+    gesture = gesture.replace('gesture0', 'g').replace('g0', 'g').replace('g0', 'g')
+    gesture = gesture if shortness <= 1 else gesture.replace('g', '')
+    fstring = f'{gesture}' + (f':{{value:>02}}%' if shortness < 1 else '')
+    colored = get_colored_string(int(proba*100), 100, fstring=fstring, cmap=cmap, highlight=proba >= threshold)
+    return colored
+
+def get_colored_string(value: int, n_values: int, fstring='{value:3}', cmap='turbo', highlight=False) -> str:
+    """Given a value and the total number of values, return a colour mapped and formatted string of that value"""
+    colours = cm.get_cmap(cmap, n_values)
+    rgb = [int(val * 255) for val in colours(round(value * (1.0 if highlight else 1.0)))[:-1]]
+    mag = np.sqrt(sum([x * x for x in rgb]))
+    coloured = color(
+        fstring.format(value=value),
+        'black' if mag > 180 else 'white',
+        f'rgb({rgb[0]},{rgb[1]},{rgb[2]})',
+    )
+    return coloured
 
 def save_to_disc_cb(new_measurements: np.ndarray, d: dict[str, Any]) -> dict[str, Any]:
     """Given a series of new measurements, populate an observation and save to
@@ -214,13 +282,6 @@ def save_to_disc_cb(new_measurements: np.ndarray, d: dict[str, Any]) -> dict[str
     d["n_measurements"] += 1
 
     return d
-
-def format_prediction(gesture, proba, shortness=0, cmap='inferno', threshold=0.99):
-    gesture = gesture.replace('gesture0', 'g').replace('g0', 'g').replace('g0', 'g')
-    gesture = gesture if shortness <= 1 else gesture.replace('g', '')
-    fstring = f'{gesture}' + (f':{{value:>02}}%' if shortness < 1 else '')
-    colored = get_colored_string(int(proba*100), 100, fstring=fstring, cmap=cmap, highlight=proba >= threshold)
-    return colored
 
 def predict_cb(new_measurements: np.ndarray, d: dict[str, Any]) -> dict[str, Any]:
     """Predict the current gesture, printing the probabilities to stdout."""
@@ -272,17 +333,6 @@ def predict_cb(new_measurements: np.ndarray, d: dict[str, Any]) -> dict[str, Any
         with open(sys.argv[2], 'a') as f:
             f.write(d["g2k"].get(best_gesture, best_gesture))
     return d
-
-def get_colored_string(value, n_values, fstring='{value:3}', cmap='turbo', highlight=False) -> str:
-    colours = cm.get_cmap(cmap, n_values)
-    rgb = [int(val * 255) for val in colours(round(value * (1.0 if highlight else 1.0)))[:-1]]
-    mag = np.sqrt(sum([x * x for x in rgb]))
-    coloured = color(
-        fstring.format(value=value),
-        'black' if mag > 180 else 'white',
-        f'rgb({rgb[0]},{rgb[1]},{rgb[2]})',
-    )
-    return coloured
 
 if __name__ == "__main__":
     try:
