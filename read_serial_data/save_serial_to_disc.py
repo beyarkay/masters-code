@@ -10,6 +10,8 @@ import os
 import serial
 import sys
 import pickle
+import yaml
+from yaml import Loader, Dumper
 script_dir = os.path.dirname( __file__ )
 utils_dir = os.path.join(script_dir, '..', 'machine_learning')
 sys.path.append(utils_dir)
@@ -19,9 +21,10 @@ CLR = "\x1b[2K\r"
 
 
 def main():
-    if len(sys.argv) != 2 or sys.argv[1] not in ['predict', 'save', 'p', 's']:
+    if len(sys.argv) not in [2,3]:
+        print("Usage: \n\tpython3 save_serial_to_disc.py save\n\tpython3 save_serial_to_disc.py predict\n\tpython3 save_serial_to_disc.py predict <filename>")
+    if len(sys.argv) == 2 and sys.argv[1] not in ['predict', 'save', 'p', 's']:
         print("Usage: \n\tpython3 save_serial_to_disc.py save\n\tpython3 save_serial_to_disc.py predict")
-        print(sys.argv)
         sys.exit(1)
     callback = save_to_disc_cb if sys.argv[1].startswith('s') else predict_cb
     port = get_serial_port()
@@ -32,6 +35,11 @@ def main():
     print(f"Reading from {port} with baudrate {baudrate}")
     with serial.Serial(port=port, baudrate=baudrate, timeout=1) as ser:
         loop_over_serial_stream(ser, callback)
+
+def gestures_to_keystrokes():
+    with open('../machine_learning/gestures_to_keystrokes.yaml', 'r') as f:
+        g2k = yaml.load(f.read(), Loader=Loader)
+    return g2k
 
 def get_serial_port() -> str | None:
     ports = [p.device for p in comports() if p.device.startswith("/dev/cu.usbmodem")]
@@ -82,6 +90,7 @@ def loop_over_serial_stream(
         "scaler": scaler,
         "clf": clf,
         "prediction": "no prediction",
+        "g2k": gestures_to_keystrokes(),
     }
 
     while serial_handle.isOpen():
@@ -206,10 +215,11 @@ def save_to_disc_cb(new_measurements: np.ndarray, d: dict[str, Any]) -> dict[str
 
     return d
 
-def format_prediction(gesture, proba, short=False, cmap='inferno'):
-    gesture = gesture.replace('gesture0', 'g').replace('g0', 'g')
-    fstring = f'{gesture:>3}' + (f':{{value:>02}}%' if not short else '')
-    colored = get_colored_string(int(proba*100), 100, fstring=fstring, cmap=cmap)
+def format_prediction(gesture, proba, shortness=0, cmap='inferno', threshold=0.99):
+    gesture = gesture.replace('gesture0', 'g').replace('g0', 'g').replace('g0', 'g')
+    gesture = gesture if shortness <= 1 else gesture.replace('g', '')
+    fstring = f'{gesture}' + (f':{{value:>02}}%' if shortness < 1 else '')
+    colored = get_colored_string(int(proba*100), 100, fstring=fstring, cmap=cmap, highlight=proba >= threshold)
     return colored
 
 def predict_cb(new_measurements: np.ndarray, d: dict[str, Any]) -> dict[str, Any]:
@@ -249,16 +259,29 @@ def predict_cb(new_measurements: np.ndarray, d: dict[str, Any]) -> dict[str, Any
     predictions = utils.predict_nicely(d["obs"], clf, scaler, d["idx_to_gesture"])
     print(f"{CLR}", end='')
     d["prediction"] = format_prediction(*predictions[0])
+    # Only count a prediction if it's over 98% probable
+    best_proba = 0.98
+    best_gesture = None
     for gesture, proba in sorted(predictions, key=lambda gp: gp[0]):
-        print(format_prediction(gesture, proba, short=len(predictions) >= 20, cmap='inferno'), end=' ')
+        if proba > best_proba:
+            best_proba = proba
+            best_gesture = gesture
+        print(format_prediction(gesture, proba, shortness=len(predictions) // 25, cmap='inferno'), end=' ')
     print()
+    if len(sys.argv) == 3 and best_gesture not in [None, 'gesture0255']:
+        with open(sys.argv[2], 'a') as f:
+            f.write(d["g2k"].get(best_gesture, best_gesture))
     return d
 
-def get_colored_string(value, n_values, fstring='{value:3}', cmap='turbo') -> str:
+def get_colored_string(value, n_values, fstring='{value:3}', cmap='turbo', highlight=False) -> str:
     colours = cm.get_cmap(cmap, n_values)
-    rgb = [int(val * 255) for val in colours(value)[:-1]]
+    rgb = [int(val * 255) for val in colours(round(value * (1.0 if highlight else 1.0)))[:-1]]
     mag = np.sqrt(sum([x * x for x in rgb]))
-    coloured = color(fstring.format(value=value), 'black' if mag > 180 else 'white', f'rgb({rgb[0]},{rgb[1]},{rgb[2]})')
+    coloured = color(
+        fstring.format(value=value),
+        'black' if mag > 180 else 'white',
+        f'rgb({rgb[0]},{rgb[1]},{rgb[2]})',
+    )
     return coloured
 
 if __name__ == "__main__":
