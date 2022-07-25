@@ -10,6 +10,7 @@ import seaborn as sns
 import sys
 import os
 import datetime
+from time import time
 import ipywidgets as widgets
 from ipywidgets import interact, interact_manual
 import yaml
@@ -97,12 +98,17 @@ def get_dir_files(root_path='../gesture_data/train'):
     }
     return dir_files
 
-def read_to_numpy(root_dir='../gesture_data/train', ignore=None, min_obs=180, verbose=0):
+def read_to_numpy(root_dir='../gesture_data/train', include=None, ignore=None, min_obs=180, verbose=0):
     """Given a root directory, read in all valid gesture observations
     in that directory and convert to a `X`, `y`, and `paths` arrays."""
+    start = time()
+    if ignore is not None and include is not None:
+        raise Exception("You can only specify one of `ignore` and `include`")
     if ignore is None:
         ignore = []
     dir_files = {k: v for k, v in get_dir_files(root_dir).items() if k not in ignore}
+    if include is not None:
+        dir_files = {k: v for k, v in dir_files.items() if k in include}
     gesture_info = get_gesture_info()
     max_val = 0
 
@@ -168,7 +174,7 @@ def read_to_numpy(root_dir='../gesture_data/train', ignore=None, min_obs=180, ve
         pickle.dump(idx_to_gesture, f, protocol=pickle.HIGHEST_PROTOCOL)
     with open('saved_models/gesture_to_idx.pickle', 'wb') as f:
         pickle.dump(gesture_to_idx, f, protocol=pickle.HIGHEST_PROTOCOL)
-    print(f'done')
+    print(f'done in {round(time() - start, 2)}s')
     return X, y, np.array(paths)
 
 
