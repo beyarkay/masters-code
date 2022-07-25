@@ -229,3 +229,36 @@ These motions are all full hand rotations around the wrist.
 69. No gesture
 70. No gesture
 
+### `gesture0071..gesture0080` - Thumb taps two fingers
+
+Binary range: `??` to `???`
+
+These motions are all the thumb tapping two fingers together.
+
+71. No gesture
+72. Left thumb to left index and left middle fingers
+73. Left thumb to left middle and left ring fingers
+74. Left thumb to left ring and left little fingers
+75. Left thumb to left little and left index fingers
+76. No gesture
+77. Right thumb to right index and right middle fingers
+78. Right thumb to right middle and right ring fingers
+79. Right thumb to right ring and right little fingers
+80. Right thumb to right little and right index fingers
+
+81. Left thumb to left index and left ring fingers
+82. Left thumb to left middle and left little fingers
+
+86. Right thumb to right index and right ring fingers
+87. Right thumb to right middle and right little fingers
+
+91. No gesture
+92. Left thumb to left index, middle, and ring fingers
+93. Left thumb to left middle, ring, and little fingers
+94. Left thumb to left ring, little, and index fingers
+95. Left thumb to left little, index, and middle fingers
+96. No gesture
+97. Right thumb to right index, middle, and ring fingers
+98. Right thumb to right middle, ring, and little fingers
+99. Right thumb to right ring, little, and index fingers
+10. Right thumb to right little, index, and middle fingers
