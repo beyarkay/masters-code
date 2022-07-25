@@ -9,6 +9,7 @@ import pandas as pd
 import seaborn as sns
 import sys
 import os
+import datetime
 import ipywidgets as widgets
 from ipywidgets import interact, interact_manual
 import yaml
@@ -346,7 +347,8 @@ def save_model(model):
     """Given a model, save it to the directory `./saved_models/` as a pickle.
 
     Returns the filepath to which it was saved."""
-    filepath = re.sub(r'\s+', '', f'saved_models/{model}.pickle')
+    now_str = datetime.datetime.now().isoformat()
+    filepath = re.sub(r'\s+', '', f'saved_models/{now_str}_{model}.pickle')
     with open(filepath, "wb") as f:
         pickle.dump(model, f, protocol=pickle.HIGHEST_PROTOCOL)
     return filepath
