@@ -71,6 +71,8 @@ brew install --cask arduino
 pip install -r requirements.txt
 ```
 
+- Link to include: https://www.rokoko.com/products/smartgloves
+
 ## Troubleshooting
 
 - (2022-05-10) The multiplexor has 16 inputs, but only 15 are used. This means
