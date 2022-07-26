@@ -17,6 +17,7 @@ import yaml
 from yaml import Loader, Dumper
 import re
 import pickle
+import random
 
 # sklearn imports
 from sklearn.model_selection import train_test_split
@@ -98,7 +99,7 @@ def get_dir_files(root_path='../gesture_data/train'):
     }
     return dir_files
 
-def read_to_numpy(root_dir='../gesture_data/train', include=None, ignore=None, min_obs=180, verbose=0):
+def read_to_numpy(root_dir='../gesture_data/train', include=None, ignore=None, min_obs=180, verbose=0, frac_of_total=1.0):
     """Given a root directory, read in all valid gesture observations
     in that directory and convert to a `X`, `y`, and `paths` arrays."""
     start = time()
@@ -111,6 +112,9 @@ def read_to_numpy(root_dir='../gesture_data/train', include=None, ignore=None, m
         dir_files = {k: v for k, v in dir_files.items() if k in include}
     gesture_info = get_gesture_info()
     max_val = 0
+
+    # Only include `frac_of_total` observations from each group
+    dir_files = {d: random.sample(files, k=int(frac_of_total * len(files))) for d, files in dir_files.items()}
 
     if verbose > 1:
         format_string = "\n- ".join([
