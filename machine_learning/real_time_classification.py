@@ -23,14 +23,17 @@ CLR = "\x1b[2K\r"
 
 def main():
     # Check that the usage is correct
-    if len(sys.argv) not in [2,3]:
-        print("Usage: \n\tpython3 save_serial_to_disc.py save\n\tpython3 save_serial_to_disc.py predict\n\tpython3 save_serial_to_disc.py predict <filename>")
-        sys.exit(1)
-    if len(sys.argv) == 2 and sys.argv[1] not in ['predict', 'save', 'p', 's']:
-        print("Usage: \n\tpython3 save_serial_to_disc.py save\n\tpython3 save_serial_to_disc.py predict")
+    if len(sys.argv) not in [2,3] or sys.argv[1] not in ['predict', 'save', 'drive', 'p', 's', 'd']:
+        print("Usage: \n\tpython3 save_serial_to_disc.py save\n\tpython3 save_serial_to_disc.py predict\n\tpython3 save_serial_to_disc.py drive [<FILENAME>]")
         sys.exit(1)
     # Get the correct callback dependant on the cmdline argvalues
-    callback = save_cb if sys.argv[1].startswith('s') else predict_cb
+    callback = None
+    if sys.argv[1].startswith('s'):
+        callback = save_cb
+    elif sys.argv[1].startswith('p'):
+        callback = predict_cb
+    elif sys.argv[1].startswith('d'):
+        callback = driver_cb
     # Get the correct serial port, exiting if none exists
     port = get_serial_port()
     # Define the baudrate (number of bits per second sent over the serial port)
@@ -150,7 +153,7 @@ def loop_over_serial_stream(
                 print(f"{CLR}No values found from serial connection, try unplugging the device ({raw_values=}), {before_split=}")
                 sys.exit(1)
             if len(raw_values) != n_sensors+2:
-                print(f"{CLR}Raw values are length {len(raw_values)}, not {n_sensors+2}: {raw_values}")
+                # print(f"{CLR}Raw values are length {len(raw_values)}, not {n_sensors+2}: {raw_values}")
                 continue
             # Update the dictionary with some useful values
             cb_data["prev_gesture_idx"] = cb_data["gesture_idx"]
@@ -370,9 +373,70 @@ def predict_cb(new_measurements: np.ndarray, d: dict[str, Any]) -> dict[str, Any
             best_gesture = gesture
         print(format_prediction(gesture, proba, shortness=len(predictions) // 25, cmap='inferno'), end=' ')
     print()
-    if len(sys.argv) == 3 and best_gesture not in [None, 'gesture0255']:
-        with open(sys.argv[2], 'a') as f:
-            f.write(d["g2k"].get(best_gesture, best_gesture))
+    return d
+
+def driver_cb(new_measurements: np.ndarray, d: dict[str, Any]) -> dict[str, Any]:
+    """Take the predicted gesture and convert it to a character, writing to
+    stdout."""
+    if 'bucket' not in d:
+        d['bucket'] = 0
+        d['curr_gesture'] = None
+    # Calculate how much time has passed between this measurement and the
+    # previous measurement, rounded to the nearest 25ms
+    diff = round((d["time_ms"] - d["prev_time_ms"]) / 25) * 25
+    if diff == 0:
+        # If no time has passed, just replace the most recent measurement with
+        # the new measurement
+        d["obs"][0, :] = new_measurements
+    elif diff == 25:
+        # If 25ms has passed, shuffle all measurements along and then insert
+        # the new measurement
+        d["obs"][1:, :] = d["obs"][:-1, :]
+        d["obs"][0, :] = new_measurements
+    elif diff > 25:
+        # If more than 25ms has passed, shuffle all measurements along by the
+        # number of 25ms increments
+        shift_by = diff // 25
+        d["obs"][shift_by:, :] = d["obs"][:-shift_by, :]
+        # Then add the new measurements to the first slot
+        d["obs"][0, :] = new_measurements
+        # And impute the missing values as the mean of the most recent
+        # measurements and the new measurements
+        avg = np.mean((d["obs"][0, :], d["obs"][shift_by, :]), axis=0)
+        for idx in range(1, shift_by):
+            d["obs"][idx, :] = avg
+
+    # If we have any NaNs, don't try predict anything
+    if np.isnan(d["obs"]).any():
+        print(f"{CLR}Not predicting, (obs contains {(np.isnan(d['obs'])).sum()} NaNs)")
+        return d
+
+    predictions = utils.predict_nicely(d["obs"], d["clf"], d["scaler"], d["idx_to_gesture"])
+    print(f"{CLR}", end='')
+    d["prediction"] = format_prediction(*predictions[0])
+    # Only count a prediction if it's over 98% probable
+    best_proba = 0.0
+    best_gesture = None
+    for gesture, proba in sorted(predictions, key=lambda gp: gp[0]):
+        if proba > best_proba:
+            best_proba = proba
+            best_gesture = gesture
+
+    MIN_PROBABILITY = 0.98
+    REQ_BUCKET_QUANTITY = 2
+
+    # print(f'\t\t{best_gesture} with {best_proba} and bucket={d["bucket"]}, current={d["curr_gesture"]}')
+    if best_proba > MIN_PROBABILITY:
+        if best_gesture != d['curr_gesture']:
+            d['bucket'] = 0
+            d['curr_gesture'] = best_gesture
+        d['bucket'] += 1
+        if d['bucket'] == REQ_BUCKET_QUANTITY and best_gesture != 'gesture0255':
+            now_str = datetime.datetime.now().isoformat()
+            print(now_str, d["g2k"].get(best_gesture, best_gesture), f" <{best_gesture}>")
+            if len(sys.argv) == 3:
+                with open(sys.argv[2], 'a') as f:
+                    f.write(d["g2k"].get(best_gesture, best_gesture))
     return d
 
 if __name__ == "__main__":
