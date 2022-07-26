@@ -1,4 +1,5 @@
 print("Importing libraries")
+import threading
 from colors import color
 from matplotlib import cm
 from serial.tools.list_ports import comports
@@ -13,6 +14,7 @@ import pickle
 import yaml
 from yaml import Loader, Dumper
 import common_utils as utils
+from sklearn.neural_network import MLPClassifier
 # Get better print options
 np.set_printoptions(threshold=sys.maxsize, linewidth=250)
 # This magic ANSI string clears a line that's been partially written
@@ -23,6 +25,7 @@ def main():
     # Check that the usage is correct
     if len(sys.argv) not in [2,3]:
         print("Usage: \n\tpython3 save_serial_to_disc.py save\n\tpython3 save_serial_to_disc.py predict\n\tpython3 save_serial_to_disc.py predict <filename>")
+        sys.exit(1)
     if len(sys.argv) == 2 and sys.argv[1] not in ['predict', 'save', 'p', 's']:
         print("Usage: \n\tpython3 save_serial_to_disc.py save\n\tpython3 save_serial_to_disc.py predict")
         sys.exit(1)
@@ -93,17 +96,17 @@ def loop_over_serial_stream(
     first_loop = True
 
     # Read in the index to gesture mappings used by the machine learning model
-    with open('../machine_learning/saved_models/idx_to_gesture.pickle', 'rb') as f:
+    with open('saved_models/idx_to_gesture.pickle', 'rb') as f:
         idx_to_gesture = pickle.load(f)
-    with open('../machine_learning/saved_models/gesture_to_idx.pickle', 'rb') as f:
+    with open('saved_models/gesture_to_idx.pickle', 'rb') as f:
         gesture_to_idx = pickle.load(f)
     # Read in the scaler used by the machine learning model to scale the input
     # data
     scaler = utils.load_model(
-        '../machine_learning/saved_models/StandardScaler().pickle'
+        'saved_models/StandardScaler().pickle'
     )
     # Get a list of all model paths that are Classifiers
-    model_paths = sorted(['../machine_learning/saved_models/' + p for p in os.listdir('../machine_learning/saved_models/') if "Classifier" in p])
+    model_paths = sorted(['saved_models/' + p for p in os.listdir('saved_models/') if "Classifier" in p], reverse=True)
     # Read in the first model alphabetically
     clf = utils.load_model(model_paths[0])
     # Create a dictionary of data to pass to the callback
@@ -127,6 +130,7 @@ def loop_over_serial_stream(
         "g2k": gestures_to_keystrokes(),
         "new_X": [],
         "new_y": [],
+        "thread": None,
     }
 
     # Now that all the setup is complete, loop forever (or until the serial
@@ -193,7 +197,7 @@ def loop_over_serial_stream(
     else:
         print("Serial port closed")
 
-def write_measurements_to_terminal(new_measurements, cb_data: dict[str, Any]):
+def write_measurements_to_terminal(new_measurements, cb_data: dict[str, Any], end='\r'):
     """Write the new measurements with some helpful information to the terminal."""
     curr_idx = cb_data["curr_idx"]
     colors = ['left:']
@@ -217,7 +221,7 @@ def write_measurements_to_terminal(new_measurements, cb_data: dict[str, Any]):
     prediction = cb_data["prediction"]
     gesture_idx = cb_data['gesture_idx']
     millis_offset = cb_data['curr_offset']
-    print(f'{millis_offset: >3}ms ({aligned_offset: >3}ms) ms//25={curr_idx: >2} gesture:{gesture_idx: <3} {colors}{prediction}', end="\r")
+    print(f'{millis_offset: >3}ms ({aligned_offset: >3}ms) ms//25={curr_idx: >2} gesture:{gesture_idx: <3} {colors}{prediction}', end=end)
 
 def format_prediction(gesture: str, proba: float, shortness=0, cmap='inferno', threshold=0.99):
     """Given a gesture and it's probability, return an ANSI coloured string
@@ -231,7 +235,7 @@ def format_prediction(gesture: str, proba: float, shortness=0, cmap='inferno', t
 def get_colored_string(value: int, n_values: int, fstring='{value:3}', cmap='turbo', highlight=False) -> str:
     """Given a value and the total number of values, return a colour mapped and formatted string of that value"""
     colours = cm.get_cmap(cmap, n_values)
-    rgb = [int(val * 255) for val in colours(round(value * (1.0 if highlight else 1.0)))[:-1]]
+    rgb = [int(val * 255) for val in colours(round(value * (1.0 if highlight else 0.8)))[:-1]]
     mag = np.sqrt(sum([x * x for x in rgb]))
     coloured = color(
         fstring.format(value=value),
@@ -268,21 +272,19 @@ def save_cb(new_measurements: np.ndarray, d: dict[str, Any]) -> dict[str, Any]:
         d["new_y"].append(d["gesture_to_idx"][gesture_idx])
         num_obs = len(os.listdir(directory))
         print(f"{CLR}{d['n_measurements']} measurements taken, wrote observation as `{directory}/{now_str}.csv` ({num_obs} total)")
+        for gesture, proba in sorted(predictions, key=lambda gp: gp[0]):
+            print(format_prediction(gesture, proba, shortness=len(predictions) // 25, cmap='inferno'), end=' ')
+        print()
         # Retrain the model when a certain number of new observations have emerged
-        if num_obs % 5 == 0:
-            start = time()
-            new_X = scaler.transform(np.array(d["new_X"]))
-            new_y = np.array(d["new_y"])
-            d["clf"] = clf.partial_fit(
-                new_X, new_y, np.unique(list(d["idx_to_gesture"].keys()))
-            )
-            if num_obs % 50 == 0:
-                print(f"Updated and saved model with {len(new_y)} new observations in {round(time() - start, 4)}s")
-                utils.save_model(d["clf"])
-            else:
-                print(f"Updated model with {len(new_y)} new observations in {round(time() - start, 4)}s")
-            d["new_X"] = []
-            d["new_y"] = []
+        if num_obs % 100 == 0:
+            if d["thread"] is not None and d["thread"].is_alive():
+                print("Waiting for thread to join")
+                d["thread"].join()
+            model_paths = sorted(['saved_models/' + p for p in os.listdir('saved_models/') if "Classifier" in p], reverse=True)
+            print(f"Starting thread to train new model, current model is: {model_paths[0]}")
+            d["clf"] = utils.load_model(model_paths[0])
+            d["thread"] = threading.Thread(target=train_model, args=(d,), kwargs={})
+            d["thread"].start()
         for idx in range(d["curr_idx"]):
             # If the curr_idx > 0 then we've skipped over the first
             # measurement. Therefore impute the first measurements as the mean
@@ -304,6 +306,23 @@ def save_cb(new_measurements: np.ndarray, d: dict[str, Any]) -> dict[str, Any]:
     d["n_measurements"] += 1
 
     return d
+
+def train_model(d):
+    start = time()
+    X, y, paths = utils.read_to_numpy(
+            include=list(d['gesture_to_idx'].keys()),
+            min_obs=0,
+            verbose=-1,
+    )
+    n_classes = np.unique(y).shape[0]
+    X_train, X_test, y_train, y_test, paths_train, paths_test = utils.train_test_split_scale(X, y, paths)
+    start = time()
+    d["clf"] = d["clf"].fit(X_train, y_train)
+    score = d["clf"].score(X_test, y_test)
+    path = utils.save_model(d["clf"])
+    d["new_X"] = []
+    d["new_y"] = []
+    print(f'{CLR}Trained classifier with {len(y)} observations in {time() - start:.3f}s, {score=:.4f}, {path=}\n')
 
 def predict_cb(new_measurements: np.ndarray, d: dict[str, Any]) -> dict[str, Any]:
     """Predict the current gesture, printing the probabilities to stdout."""
