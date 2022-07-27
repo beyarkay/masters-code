@@ -18,6 +18,7 @@ from yaml import Loader, Dumper
 import re
 import pickle
 import random
+from typing import List, Tuple
 
 # sklearn imports
 from sklearn.model_selection import train_test_split
@@ -328,7 +329,7 @@ def read_to_df(filename, normalise=False):
         df.loc[:] = np.nan
     return df
 
-def predict_nicely(obs, clf, scaler, idx_to_gesture):
+def predict_nicely(obs, clf, scaler, idx_to_gesture) -> List[Tuple[int, float]]:
     """Given a single observation, a classifier, and a scaler, return a list of
     predictions in the format [(gesture, probability), ...].
 
