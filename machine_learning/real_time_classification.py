@@ -116,7 +116,7 @@ def loop_over_serial_stream(
         gesture_to_idx = pickle.load(f)
     # Read in the scaler used by the machine learning model to scale the input
     # data
-    scaler_paths = ['saved_models/' + p for p in os.listdir('saved_models') if 'Scaler' in p]
+    scaler_paths = sorted(['saved_models/' + p for p in os.listdir('saved_models') if 'Scaler' in p], reverse=True)
     scaler = utils.load_model(scaler_paths[0])
 
     # Get a list of all model paths that are Classifiers
