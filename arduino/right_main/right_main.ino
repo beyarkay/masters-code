@@ -71,8 +71,7 @@ void setup() {
 }
 
 void loop() {
-    if (millis() - last_write >= MIN_MS_PER_WRITE) {
-        if (left_hand_len > 0 && right_hand_len > 0) {
+    if (millis() - last_write >= MIN_MS_PER_WRITE && left_hand_len > 0 && right_hand_len > 0) {
             last_write = millis();
             Serial.print(gesture_index);
             Serial.print(",");
@@ -89,14 +88,9 @@ void loop() {
             }
             right_hand_len = 0;
             Serial.print("\n");
-        } else if (left_hand_len > 0 || right_hand_len > 0) {
-            // Errors might occur here, but I'm not sure
-            // Serial.print("FAIL,");
-            // Serial.print(left_hand_len);
-            // Serial.print(",");
-            // Serial.print(right_hand_len);
-            // Serial.println(",");
-        }
+    } else {
+        // Serial.print("# Heartbeat, millis: ");
+        // Serial.println(millis());
     }
     // Calculate and print out the gesture index. Read in the DIP switches
     // to figure out what gesture index we're at Init `gesture_index` to
