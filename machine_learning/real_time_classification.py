@@ -141,6 +141,7 @@ def loop_over_serial_stream(
         "scaler": scaler,
         "clf": clf,
         "prediction": "no pred",
+        "prediction_history": [],
         "g2k": gestures_to_keystrokes(),
         "thread": None,
     }
@@ -270,9 +271,22 @@ def save_cb(new_measurements: np.ndarray, d: dict[str, Any]) -> dict[str, Any]:
         try:
             predictions = utils.predict_nicely(d["obs"], d["clf"], d["scaler"], d["idx_to_gesture"])
             d["prediction"] = format_prediction(*predictions[0])
-            # if gesture_idx != predictions[0][0]:
-            #     print(f"Saving bad prediction {gesture_idx} != {predictions[0][0]}")
+            d["prediction_history"].append(predictions)
+            # If we're predicting something that's not the actual gesture
+            if predictions[0][0] not in [gesture_idx, 'gesture0255'] and len(d['prediction_history']) > 20:
+                # Then save this observation as a misclassified item
+                directory = f'../gesture_data/misclassified/{gesture_idx}'
+                now_str = datetime.datetime.now().isoformat()
+                obs_path = f'{directory}/{now_str}_observation.csv'
+                hist_path = f'{directory}/{now_str}_history.csv'
+                print(f"Saving bad prediction to {obs_path}: (actual {gesture_idx} != {predictions[0][0]} predicted)")
+                utils.write_obs_to_disc(d["obs"], obs_path)
+                # Also save the recent history
+                with open(hist_path, 'w') as f:
+                    for prediction in d['prediction_history'][-20:]:
+                        f.write(','.join(f'{g}:{p:.4f}' for (g, p) in sorted(prediction, key=lambda x: x[0])) + '\n')
         except Exception as e:
+            print(f"Exception {e}")
             d["prediction"] = "Classifier exception"
 
     # If the current time offset is < the previous time offset, then the
