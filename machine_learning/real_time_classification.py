@@ -116,9 +116,9 @@ def loop_over_serial_stream(
         gesture_to_idx = pickle.load(f)
     # Read in the scaler used by the machine learning model to scale the input
     # data
-    scaler = utils.load_model(
-        'saved_models/StandardScaler().pickle'
-    )
+    scaler_paths = ['saved_models/' + p for p in os.listdir('saved_models') if 'Scaler' in p]
+    scaler = utils.load_model(scaler_paths[0])
+
     # Get a list of all model paths that are Classifiers
     model_paths = sorted(['saved_models/' + p for p in os.listdir('saved_models/') if "Classifier" in p], reverse=True)
     # Read in the first model alphabetically
@@ -307,6 +307,8 @@ def save_cb(new_measurements: np.ndarray, d: dict[str, Any]) -> dict[str, Any]:
     return d
 
 def train_model_cb(new_measurements: np.ndarray, d: dict[str, Any]) -> dict[str, Any]:
+    """Train an ML model in a separate thread. Only spawns a new thread if the
+    previous one isn't still active."""
     # Only attempt to train the model if the previous model has finished
     # training (or if there is no previous model)
     if d["thread"] is None or not d["thread"].is_alive():
