@@ -265,8 +265,15 @@ def get_colored_string(value: int, n_values: int, fstring='{value:3}', cmap='tur
 def save_cb(new_measurements: np.ndarray, d: dict[str, Any]) -> dict[str, Any]:
     """Given a series of new measurements, populate an observation and save to
     disc as require."""
-    clf = d["clf"]
-    scaler = d["scaler"]
+    if not np.isnan(d["obs"]).any().any():
+        gesture_idx = f'gesture{d["gesture_idx"]:04}'
+        try:
+            predictions = utils.predict_nicely(d["obs"], d["clf"], d["scaler"], d["idx_to_gesture"])
+            d["prediction"] = format_prediction(*predictions[0])
+            # if gesture_idx != predictions[0][0]:
+            #     print(f"Saving bad prediction {gesture_idx} != {predictions[0][0]}")
+        except Exception as e:
+            d["prediction"] = "Classifier exception"
 
     # If the current time offset is < the previous time offset, then the
     # gesture has ended and we should save the current observation to disc
@@ -274,14 +281,8 @@ def save_cb(new_measurements: np.ndarray, d: dict[str, Any]) -> dict[str, Any]:
         # If there was no measurement for 975ms, just use the one for 000ms
         if np.isnan(d["obs"][-1]).any():
             d["obs"][-1, :] = new_measurements
-        try:
-            predictions = utils.predict_nicely(d["obs"], clf, scaler, d["idx_to_gesture"])
-            d["prediction"] = format_prediction(*predictions[0])
-        except Exception as e:
-            d["prediction"] = "Classifier exception"
 
-        gesture_idx = f'gesture{d["gesture_idx"]:04}'
-        directory = f'../gesture_data/train/{gesture_idx}'
+        directory = f'../gesture_data/train/gesture{d["gesture_idx"]:04}'
         now_str = datetime.datetime.now().isoformat()
         utils.write_obs_to_disc(d["obs"], f'{directory}/{now_str}.csv')
         num_obs = len(os.listdir(directory))
@@ -336,8 +337,6 @@ def train_model(d):
 
 def predict_cb(new_measurements: np.ndarray, d: dict[str, Any]) -> dict[str, Any]:
     """Predict the current gesture, printing the probabilities to stdout."""
-    clf = d["clf"]
-    scaler = d["scaler"]
     # Calculate how much time has passed between this measurement and the
     # previous measurement, rounded to the nearest 25ms
     diff = round((d["time_ms"] - d["prev_time_ms"]) / 25) * 25
