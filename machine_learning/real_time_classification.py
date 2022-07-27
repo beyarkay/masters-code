@@ -33,12 +33,14 @@ def main():
             callbacks.append(predict_cb)
         elif arg in ['save', 's']:
             callbacks.append(save_cb)
+        elif arg in ['train', 't']:
+            callbacks.append(train_model_cb)
         elif arg in ['drive', 'd']:
             callbacks.append(driver_cb)
             has_filename = True
         else:
             print("Usage: \
-                    python3 real_time_classification.py [drive|d] [save|s] [predict|p] [filename]\
+                    python3 real_time_classification.py [drive|d] [train|t] [save|s] [predict|p] [filename]\
                     ")
             sys.exit(1)
 
@@ -140,8 +142,6 @@ def loop_over_serial_stream(
         "clf": clf,
         "prediction": "no pred",
         "g2k": gestures_to_keystrokes(),
-        "new_X": [],
-        "new_y": [],
         "thread": None,
     }
 
@@ -269,9 +269,7 @@ def save_cb(new_measurements: np.ndarray, d: dict[str, Any]) -> dict[str, Any]:
     scaler = d["scaler"]
 
     # If the current time offset is < the previous time offset, then the
-    # gesture has ended and we should 1) save the current observation to
-    # disc and 2) set the observation to all NaNs in preparation for the
-    # next gesture
+    # gesture has ended and we should save the current observation to disc
     if d["curr_offset"] < d["prev_offset"] and d["n_measurements"] >= d["n_timesteps"]:
         # If there was no measurement for 975ms, just use the one for 000ms
         if np.isnan(d["obs"][-1]).any():
@@ -286,20 +284,8 @@ def save_cb(new_measurements: np.ndarray, d: dict[str, Any]) -> dict[str, Any]:
         directory = f'../gesture_data/train/{gesture_idx}'
         now_str = datetime.datetime.now().isoformat()
         utils.write_obs_to_disc(d["obs"], f'{directory}/{now_str}.csv')
-        d["new_X"].append(utils.to_flat(d["obs"]))
-        d["new_y"].append(d["gesture_to_idx"][gesture_idx])
         num_obs = len(os.listdir(directory))
         print(f"{CLR}{d['n_measurements']} measurements taken, wrote observation as `{directory}/{now_str}.csv` ({num_obs} total)")
-        # Retrain the model when a certain number of new observations have emerged
-        if num_obs % 100 == 0:
-            if d["thread"] is not None and d["thread"].is_alive():
-                print("Waiting for thread to join")
-                d["thread"].join()
-            model_paths = sorted(['saved_models/' + p for p in os.listdir('saved_models/') if "Classifier" in p], reverse=True)
-            print(f"Starting thread to train new model, current model is: {model_paths[0]}")
-            d["clf"] = utils.load_model(model_paths[0])
-            d["thread"] = threading.Thread(target=train_model, args=(d,), kwargs={})
-            d["thread"].start()
         for idx in range(d["curr_idx"]):
             # If the curr_idx > 0 then we've skipped over the first
             # measurement. Therefore impute the first measurements as the mean
@@ -307,7 +293,6 @@ def save_cb(new_measurements: np.ndarray, d: dict[str, Any]) -> dict[str, Any]:
             # measurement of this observation.
             d["obs"][idx, :] = np.mean((d["obs"][-1, :], new_measurements), axis=0)
         # Reset the observation to be mostly NaNs
-        # d["obs"][d["curr_idx"]:] = np.full((d["n_timesteps"]-d["curr_idx"], d["n_sensors"]), np.nan)
         d["n_measurements"] = 0
 
     # If we've skipped over an index, impute with the mean between the
@@ -319,7 +304,17 @@ def save_cb(new_measurements: np.ndarray, d: dict[str, Any]) -> dict[str, Any]:
     d["prev_idx"] = d["curr_idx"]
     # Place this observation at it's place in curr_idx
     d["n_measurements"] += 1
+    return d
 
+def train_model_cb(new_measurements: np.ndarray, d: dict[str, Any]) -> dict[str, Any]:
+    # Only attempt to train the model if the previous model has finished
+    # training (or if there is no previous model)
+    if d["thread"] is None or not d["thread"].is_alive():
+        model_paths = sorted(['saved_models/' + p for p in os.listdir('saved_models/') if "Classifier" in p], reverse=True)
+        print(f"Starting thread to train new model, current model is: {model_paths[0]}")
+        d["clf"] = utils.load_model(model_paths[0])
+        d["thread"] = threading.Thread(target=train_model, args=(d,), kwargs={})
+        d["thread"].start()
     return d
 
 def train_model(d):
@@ -335,8 +330,6 @@ def train_model(d):
     d["clf"] = d["clf"].fit(X_train, y_train)
     score = d["clf"].score(X_test, y_test)
     path = utils.save_model(d["clf"])
-    d["new_X"] = []
-    d["new_y"] = []
     print(f'{CLR}Trained classifier with {len(y)} observations in {time() - start:.3f}s, {score=:.4f}, {path=}\n')
 
 def predict_cb(new_measurements: np.ndarray, d: dict[str, Any]) -> dict[str, Any]:
