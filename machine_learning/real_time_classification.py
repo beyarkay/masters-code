@@ -7,6 +7,7 @@ from typing import Callable, List, Any
 import datetime
 import numpy as np
 from time import time
+from time import sleep
 import os
 import serial
 import sys
@@ -22,18 +23,26 @@ CLR = "\x1b[2K\r"
 
 
 def main():
-    # Check that the usage is correct
-    if len(sys.argv) not in [2,3] or sys.argv[1] not in ['predict', 'save', 'drive', 'p', 's', 'd']:
-        print("Usage: \n\tpython3 save_serial_to_disc.py save\n\tpython3 save_serial_to_disc.py predict\n\tpython3 save_serial_to_disc.py drive [<FILENAME>]")
-        sys.exit(1)
     # Get the correct callback dependant on the cmdline argvalues
-    callback = None
-    if sys.argv[1].startswith('s'):
-        callback = save_cb
-    elif sys.argv[1].startswith('p'):
-        callback = predict_cb
-    elif sys.argv[1].startswith('d'):
-        callback = driver_cb
+    callbacks = []
+    has_filename = False
+    for i, arg in enumerate(sys.argv[1:]):
+        if i+1 == len(sys.argv[1:]) and has_filename:
+            break
+        if arg in ['predict', 'p']:
+            callbacks.append(predict_cb)
+        elif arg in ['save', 's']:
+            callbacks.append(save_cb)
+        elif arg in ['drive', 'd']:
+            callbacks.append(driver_cb)
+            has_filename = True
+        else:
+            print("Usage: \
+                    python3 real_time_classification.py [drive|d] [save|s] [predict|p] [filename]\
+                    ")
+            sys.exit(1)
+
+
     # Get the correct serial port, exiting if none exists
     port = get_serial_port()
     # Define the baudrate (number of bits per second sent over the serial port)
@@ -42,7 +51,7 @@ def main():
     # Start up an infinite loop that calls the callback every time one set of
     # new data is available over the serial port.
     with serial.Serial(port=port, baudrate=baudrate, timeout=1) as serial_port:
-        loop_over_serial_stream(serial_port, callback)
+        loop_over_serial_stream(serial_port, callbacks)
 
 def get_serial_port() -> str:
     """Look at the open serial ports and return one if it's correctly
@@ -81,7 +90,7 @@ def gestures_to_keystrokes(path='gestures_to_keystrokes.yaml'):
 
 def loop_over_serial_stream(
     serial_handle: serial.serialposix.Serial,
-    callback: Callable[[np.ndarray, dict[str, Any]], dict[str, Any]]
+    callbacks: List[Callable[[np.ndarray, dict[str, Any]], dict[str, Any]]]
 ) -> None:
     """Read in one set of measurements from `serial_handle` and pass to
     `callable`. 
@@ -146,6 +155,9 @@ def loop_over_serial_stream(
             cb_data["prev_time_ms"] = cb_data["time_ms"]
             cb_data["time_ms"] = int(time() * 1000)
             before_split = serial_handle.readline().decode('utf-8')
+            # Comments starting with `#` act as heartbeats
+            if before_split.startswith("#"):
+                continue
             # Parse the values
             raw_values: List[str] = before_split.strip().split(",")[:-1]
             # Ensure there are exactly 32 values
@@ -157,6 +169,8 @@ def loop_over_serial_stream(
                 continue
             # Update the dictionary with some useful values
             cb_data["prev_gesture_idx"] = cb_data["gesture_idx"]
+            if not raw_values[0]:
+                continue
             cb_data["gesture_idx"] = int(raw_values[0])
             # Shuffle along the previous and current offsets
             cb_data["prev_offset"] = cb_data["curr_offset"]
@@ -180,7 +194,7 @@ def loop_over_serial_stream(
 
         # Convert the values to integers and clamp between `lower_bound` and
         # `upper_bound`
-        upper_bound = 800
+        upper_bound = 900
         lower_bound = 300
         try:
             new_measurements = np.array([
@@ -191,16 +205,17 @@ def loop_over_serial_stream(
             continue
 
         # Call the callback with the new measurements and the callback data
-        cb_data = callback(new_measurements, cb_data)
+        for callback in callbacks:
+            cb_data = callback(new_measurements, cb_data)
 
         # Format the new measurements nicely so they can be drawn to the
         # terminal
-        write_measurements_to_terminal(new_measurements, cb_data)
+        write_debug_line(new_measurements, cb_data)
         serial_handle.flush()
     else:
         print("Serial port closed")
 
-def write_measurements_to_terminal(new_measurements, cb_data: dict[str, Any], end='\r'):
+def write_debug_line(new_measurements, cb_data: dict[str, Any], end='\r'):
     """Write the new measurements with some helpful information to the terminal."""
     curr_idx = cb_data["curr_idx"]
     colors = ['left:']
@@ -275,9 +290,6 @@ def save_cb(new_measurements: np.ndarray, d: dict[str, Any]) -> dict[str, Any]:
         d["new_y"].append(d["gesture_to_idx"][gesture_idx])
         num_obs = len(os.listdir(directory))
         print(f"{CLR}{d['n_measurements']} measurements taken, wrote observation as `{directory}/{now_str}.csv` ({num_obs} total)")
-        for gesture, proba in sorted(predictions, key=lambda gp: gp[0]):
-            print(format_prediction(gesture, proba, shortness=len(predictions) // 25, cmap='inferno'), end=' ')
-        print()
         # Retrain the model when a certain number of new observations have emerged
         if num_obs % 100 == 0:
             if d["thread"] is not None and d["thread"].is_alive():
@@ -295,7 +307,7 @@ def save_cb(new_measurements: np.ndarray, d: dict[str, Any]) -> dict[str, Any]:
             # measurement of this observation.
             d["obs"][idx, :] = np.mean((d["obs"][-1, :], new_measurements), axis=0)
         # Reset the observation to be mostly NaNs
-        d["obs"][d["curr_idx"]:] = np.full((d["n_timesteps"]-d["curr_idx"], d["n_sensors"]), np.nan)
+        # d["obs"][d["curr_idx"]:] = np.full((d["n_timesteps"]-d["curr_idx"], d["n_sensors"]), np.nan)
         d["n_measurements"] = 0
 
     # If we've skipped over an index, impute with the mean between the
@@ -356,12 +368,17 @@ def predict_cb(new_measurements: np.ndarray, d: dict[str, Any]) -> dict[str, Any
         for idx in range(1, shift_by):
             d["obs"][idx, :] = avg
 
+    d = try_print_probabilities(d)
+    return d
+
+def try_print_probabilities(d):
+    """Attempt to predict the gesture based on the observation in `d`."""
     # If we have any NaNs, don't try predict anything
     if np.isnan(d["obs"]).any():
         print(f"{CLR}Not predicting, (obs contains {(np.isnan(d['obs'])).sum()} NaNs)")
         return d
 
-    predictions = utils.predict_nicely(d["obs"], clf, scaler, d["idx_to_gesture"])
+    predictions = utils.predict_nicely(d["obs"], d["clf"], d["scaler"], d["idx_to_gesture"])
     print(f"{CLR}", end='')
     d["prediction"] = format_prediction(*predictions[0])
     # Only count a prediction if it's over 98% probable
@@ -377,7 +394,7 @@ def predict_cb(new_measurements: np.ndarray, d: dict[str, Any]) -> dict[str, Any
 
 def driver_cb(new_measurements: np.ndarray, d: dict[str, Any]) -> dict[str, Any]:
     """Take the predicted gesture and convert it to a character, writing to
-    stdout."""
+    stdout (and to sys.argv[-1])."""
     if 'bucket' not in d:
         d['bucket'] = 0
         d['curr_gesture'] = None
@@ -425,7 +442,6 @@ def driver_cb(new_measurements: np.ndarray, d: dict[str, Any]) -> dict[str, Any]
     MIN_PROBABILITY = 0.98
     REQ_BUCKET_QUANTITY = 2
 
-    # print(f'\t\t{best_gesture} with {best_proba} and bucket={d["bucket"]}, current={d["curr_gesture"]}')
     if best_proba > MIN_PROBABILITY:
         if best_gesture != d['curr_gesture']:
             d['bucket'] = 0
@@ -434,8 +450,8 @@ def driver_cb(new_measurements: np.ndarray, d: dict[str, Any]) -> dict[str, Any]
         if d['bucket'] == REQ_BUCKET_QUANTITY and best_gesture != 'gesture0255':
             now_str = datetime.datetime.now().isoformat()
             print(now_str, d["g2k"].get(best_gesture, best_gesture), f" <{best_gesture}>")
-            if len(sys.argv) == 3:
-                with open(sys.argv[2], 'a') as f:
+            if len(sys.argv) > 2:
+                with open(sys.argv[-1], 'a') as f:
                     f.write(d["g2k"].get(best_gesture, best_gesture))
     return d
 
