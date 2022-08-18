@@ -1,25 +1,29 @@
 print("Importing libraries")
-import threading
 from colors import color
+import colorsys
 from matplotlib import cm
 from serial.tools.list_ports import comports
-from typing import Callable, List, Any
-import datetime
-import numpy as np
-from time import time
+from sklearn.neural_network import MLPClassifier
 from time import sleep
-import os
-import serial
-import sys
-import pickle
-import yaml
+from time import time
+from typing import Callable, List, Any
 from yaml import Loader, Dumper
 import common_utils as utils
-from sklearn.neural_network import MLPClassifier
+import datetime
+import keyboard
+import numpy as np
+import os
+import pickle
+import random
+import serial
+import sys
+import threading
+import yaml
 # Get better print options
 np.set_printoptions(threshold=sys.maxsize, linewidth=250)
 # This magic ANSI string clears a line that's been partially written
 CLR = "\x1b[2K\r"
+should_create_new_file = True
 
 
 def main():
@@ -44,6 +48,41 @@ def main():
                     ")
             sys.exit(1)
 
+    # Add a listener that will remove the last 80 lines (2 seconds) from the
+    # training data. Just in case some poor gesture data gets recorded by
+    # mistake
+    def burn_most_recent_observations():
+        global should_create_new_file
+        should_create_new_file = True
+        root = '../gesture_data/train/'
+        paths = [f for f in sorted(os.listdir(root)) if f.endswith('.csv')]
+        path = root + paths[-1]
+        num_newlines = 80
+        # Delete the last `num_newlines` lines efficiently
+        # https://stackoverflow.com/a/10289740/14555505
+        with open(path, "r+", encoding="utf-8") as file:
+            # Move the pointer to the end of the file
+            file.seek(0, os.SEEK_END)
+            # Seek to the final character. We pass over the \0 byte at the end
+            # of the file in the first iteration of the while loop.
+            cursor_pos = file.tell()
+            # Read backwards from pos until we've found `num_newlines` newlines
+            while cursor_pos > 0 and num_newlines > 0:
+                cursor_pos -= 1
+                file.seek(cursor_pos, os.SEEK_SET)
+                if file.read(1) == "\n":
+                    num_newlines -= 1
+
+            # Check that we didn't get to the beginning of the file, then
+            # delete all characters from `cursor_pos` to the end
+            cursor_pos = max(cursor_pos, 0)
+            file.seek(cursor_pos, os.SEEK_SET)
+            file.truncate()
+        print(CLR, color(
+            f"Burnt the last 80 lines (2 seconds) of data from {path}",
+            bg='firebrick',
+        ))
+    keyboard.add_hotkey('space', burn_most_recent_observations)
 
     # Get the correct serial port, exiting if none exists
     port = get_serial_port()
@@ -89,6 +128,11 @@ def gestures_to_keystrokes(path='gestures_to_keystrokes.yaml'):
     with open(path, 'r') as f:
         g2k = yaml.load(f.read(), Loader=Loader)
     return g2k
+
+def gesture_info(path='../gesture_data/gesture_info.yaml'):
+    with open(path, 'r') as f:
+        gesture_info = yaml.load(f.read(), Loader=Loader)['gestures']
+    return gesture_info
 
 def loop_over_serial_stream(
     serial_handle: serial.serialposix.Serial,
@@ -143,6 +187,7 @@ def loop_over_serial_stream(
         "prediction": "no pred",
         "prediction_history": [],
         "g2k": gestures_to_keystrokes(),
+        "gesture_info": gesture_info(),
         "thread": None,
     }
 
@@ -211,14 +256,19 @@ def loop_over_serial_stream(
 
         # Format the new measurements nicely so they can be drawn to the
         # terminal
-        write_debug_line(new_measurements, cb_data)
+        cb_data = write_debug_line(new_measurements, cb_data)
         serial_handle.flush()
     else:
         print("Serial port closed")
 
 def write_debug_line(new_measurements, cb_data: dict[str, Any], end='\r'):
     """Write the new measurements with some helpful information to the terminal."""
+    gestures = list(cb_data['gesture_info'].keys())[:10]
     curr_idx = cb_data["curr_idx"]
+    countdown_ms = 2_000
+    cb_data['last_gesture'] = cb_data.get('last_gesture', time_ms())
+    cb_data['lineup'] = cb_data.get('lineup', random.sample(gestures, 5))
+
     colors = ['left:']
     dims = ['x', 'y', 'z']
     max_value = 900
@@ -232,6 +282,7 @@ def write_debug_line(new_measurements, cb_data: dict[str, Any], end='\r'):
             # Every (i%3==2) value deliminates a triplet of (x,y,z) values, so
             # add a space to separate
             colors[-1] += ' '
+
     # Join all the colour strings together
     colors = ''.join(colors)
     # Finally print out the full string, ended with a `\r` so that we can write
@@ -240,7 +291,33 @@ def write_debug_line(new_measurements, cb_data: dict[str, Any], end='\r'):
     prediction = cb_data["prediction"]
     gesture_idx = cb_data['gesture_idx']
     millis_offset = cb_data['curr_offset']
-    print(f'{millis_offset: >3}ms ({aligned_offset: >3}ms) ms//25={curr_idx: >2} gesture:{gesture_idx: <3} {colors}{prediction}', end=end)
+    # print(f'{millis_offset: >3}ms ({aligned_offset: >3}ms) ms//25={curr_idx: >2} gesture:{gesture_idx: <3} {colors}{prediction}', end=end)
+
+    gesture = cb_data['lineup'][0]
+    description = cb_data['gesture_info'].get(gesture)['description'] 
+    curr_gesture_str = (f"{gesture}: {description: <20}"
+                            .replace("thumb", "1")
+                            .replace("index", "2")
+                            .replace("middle", "3")
+                            .replace("ring", "4")
+                            .replace("little", "5")
+                            .replace("Right", "->")
+                            .replace("Left", "<-"))
+    progress = len(curr_gesture_str) - round(((time_ms() - cb_data['last_gesture']) / countdown_ms) * len(curr_gesture_str))
+    regular = color(curr_gesture_str[:progress], fg='white', bg=get_color(gesture), style='bold')
+    inverse = color(curr_gesture_str[progress:], fg=get_color(gesture), bg='white', style='bold')
+    if time_ms() - cb_data['last_gesture'] >= countdown_ms:
+        global should_create_new_file
+        if should_create_new_file:
+            print(f"{CLR}Creating new file")
+            should_create_new_file = False
+        print(f"{CLR}{color_bg(gesture)} saved to `some/filename/here.csv`")
+        cb_data['last_gesture'] = time_ms()
+        cb_data['lineup'].pop(0)
+        cb_data['lineup'].append(random.choice(gestures))
+    countdown = cb_data['lineup'][0]
+    print(f'{regular}{inverse} {colors}{prediction}', end=end)
+    return cb_data
 
 def format_prediction(gesture: str, proba: float, shortness=0, cmap='inferno', threshold=0.99):
     """Given a gesture and it's probability, return an ANSI coloured string
@@ -462,6 +539,32 @@ def driver_cb(new_measurements: np.ndarray, d: dict[str, Any]) -> dict[str, Any]
                 with open(sys.argv[-1], 'a') as f:
                     f.write(d["g2k"].get(best_gesture, best_gesture))
     return d
+
+def time_ms() -> float:
+    """Get the time in milliseconds."""
+    return time() * 1_000
+
+def color_bg(string) -> str:
+    """Just a wrapper to color a string and use that string as a seed to
+    dictate what color to use."""
+    return color(string, bg=get_color(string))
+
+def get_color(string) -> str:
+    """Use the given string as a seed to get a deterministic background color.
+    See https://www.mattgroeber.com/utilities/random-color-generator"""
+    random.seed(string)
+    # Hue in [0, 360]
+    h_range = (0., 1.)
+    # Saturation in [30%, 52%]
+    s_range = (.30, .60)
+    # Light in [27%, 39%]
+    l_range = (.30, .40)
+    r, g, b = colorsys.hls_to_rgb(
+        random.random() * (h_range[1] - h_range[0]) + h_range[0],
+        random.random() * (l_range[1] - l_range[0]) + l_range[0],
+        random.random() * (s_range[1] - s_range[0]) + s_range[0],
+    )
+    return f'rgb({int(r * 255)}, {int(g * 255)}, {int(b * 255)})'
 
 if __name__ == "__main__":
     try:
