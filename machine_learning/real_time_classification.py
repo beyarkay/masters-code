@@ -19,6 +19,7 @@ import serial
 import sys
 import threading
 import yaml
+
 # Get better print options
 np.set_printoptions(threshold=sys.maxsize, linewidth=250)
 # This magic ANSI string clears a line that's been partially written
@@ -31,21 +32,23 @@ def main():
     callbacks = []
     has_filename = False
     for i, arg in enumerate(sys.argv[1:]):
-        if i+1 == len(sys.argv[1:]) and has_filename:
+        if i + 1 == len(sys.argv[1:]) and has_filename:
             break
-        if arg in ['predict', 'p']:
+        if arg in ["predict", "p"]:
             callbacks.append(predict_cb)
-        elif arg in ['save', 's']:
+        elif arg in ["save", "s"]:
             callbacks.append(save_cb)
-        elif arg in ['train', 't']:
+        elif arg in ["train", "t"]:
             callbacks.append(train_model_cb)
-        elif arg in ['drive', 'd']:
+        elif arg in ["drive", "d"]:
             callbacks.append(driver_cb)
             has_filename = True
         else:
-            print("Usage: \
+            print(
+                "Usage: \
                     python3 real_time_classification.py [drive|d] [train|t] [save|s] [predict|p] [filename]\
-                    ")
+                    "
+            )
             sys.exit(1)
 
     # Add a listener that will remove the last 80 lines (2 seconds) from the
@@ -54,8 +57,8 @@ def main():
     def burn_most_recent_observations():
         global should_create_new_file
         should_create_new_file = True
-        root = '../gesture_data/train/'
-        paths = [f for f in sorted(os.listdir(root)) if f.endswith('.csv')]
+        root = "../gesture_data/train/"
+        paths = [f for f in sorted(os.listdir(root)) if f.endswith(".csv")]
         path = root + paths[-1]
         num_newlines = 80
         # Delete the last `num_newlines` lines efficiently
@@ -78,11 +81,15 @@ def main():
             cursor_pos = max(cursor_pos, 0)
             file.seek(cursor_pos, os.SEEK_SET)
             file.truncate()
-        print(CLR, color(
-            f"Burnt the last 80 lines (2 seconds) of data from {path}",
-            bg='firebrick',
-        ))
-    keyboard.add_hotkey('space', burn_most_recent_observations)
+        print(
+            CLR,
+            color(
+                f"Burnt the last 80 lines (2 seconds) of data from {path}",
+                bg="firebrick",
+            ),
+        )
+
+    keyboard.add_hotkey("space", burn_most_recent_observations)
 
     # Get the correct serial port, exiting if none exists
     port = get_serial_port()
@@ -93,6 +100,7 @@ def main():
     # new data is available over the serial port.
     with serial.Serial(port=port, baudrate=baudrate, timeout=1) as serial_port:
         loop_over_serial_stream(serial_port, callbacks)
+
 
 def get_serial_port() -> str:
     """Look at the open serial ports and return one if it's correctly
@@ -118,28 +126,31 @@ def get_serial_port() -> str:
     # Finally, return the port
     return port
 
-def gestures_to_keystrokes(path='gestures_to_keystrokes.yaml'):
+
+def gestures_to_keystrokes(path="gestures_to_keystrokes.yaml"):
     """Simple utility to read in the gestures_to_keystrokes yaml file and
-    return it as a dictionary. 
+    return it as a dictionary.
 
     The dictionary structured like Dict{gesture->keystroke} and is not
     guaranteed to have every gesture defined. Undefined gestures should result
     in no keys being pressed."""
-    with open(path, 'r') as f:
+    with open(path, "r") as f:
         g2k = yaml.load(f.read(), Loader=Loader)
     return g2k
 
-def gesture_info(path='../gesture_data/gesture_info.yaml'):
-    with open(path, 'r') as f:
-        gesture_info = yaml.load(f.read(), Loader=Loader)['gestures']
+
+def gesture_info(path="../gesture_data/gesture_info.yaml"):
+    with open(path, "r") as f:
+        gesture_info = yaml.load(f.read(), Loader=Loader)["gestures"]
     return gesture_info
+
 
 def loop_over_serial_stream(
     serial_handle: serial.serialposix.Serial,
-    callbacks: List[Callable[[np.ndarray, dict[str, Any]], dict[str, Any]]]
+    callbacks: List[Callable[[np.ndarray, dict[str, Any]], dict[str, Any]]],
 ) -> None:
     """Read in one set of measurements from `serial_handle` and pass to
-    `callable`. 
+    `callable`.
 
     Some pre-processing and error checking is done to ensure things
     transpire nicely. The model used for predictions is the
@@ -154,17 +165,23 @@ def loop_over_serial_stream(
     first_loop = True
 
     # Read in the index to gesture mappings used by the machine learning model
-    with open('saved_models/idx_to_gesture.pickle', 'rb') as f:
+    with open("saved_models/idx_to_gesture.pickle", "rb") as f:
         idx_to_gesture = pickle.load(f)
-    with open('saved_models/gesture_to_idx.pickle', 'rb') as f:
+    with open("saved_models/gesture_to_idx.pickle", "rb") as f:
         gesture_to_idx = pickle.load(f)
     # Read in the scaler used by the machine learning model to scale the input
     # data
-    scaler_paths = sorted(['saved_models/' + p for p in os.listdir('saved_models') if 'Scaler' in p], reverse=True)
+    scaler_paths = sorted(
+        ["saved_models/" + p for p in os.listdir("saved_models") if "Scaler" in p],
+        reverse=True,
+    )
     scaler = utils.load_model(scaler_paths[0])
 
     # Get a list of all model paths that are Classifiers
-    model_paths = sorted(['saved_models/' + p for p in os.listdir('saved_models/') if "Classifier" in p], reverse=True)
+    model_paths = sorted(
+        ["saved_models/" + p for p in os.listdir("saved_models/") if "Classifier" in p],
+        reverse=True,
+    )
     # Read in the first model alphabetically
     clf = utils.load_model(model_paths[0])
     # Create a dictionary of data to pass to the callback
@@ -200,7 +217,7 @@ def loop_over_serial_stream(
             # duration between measurements
             cb_data["prev_time_ms"] = cb_data["time_ms"]
             cb_data["time_ms"] = int(time() * 1000)
-            before_split = serial_handle.readline().decode('utf-8')
+            before_split = serial_handle.readline().decode("utf-8")
             # Comments starting with `#` act as heartbeats
             if before_split.startswith("#"):
                 continue
@@ -208,9 +225,11 @@ def loop_over_serial_stream(
             raw_values: List[str] = before_split.strip().split(",")[:-1]
             # Ensure there are exactly 32 values
             if len(raw_values) == 0:
-                print(f"{CLR}No values found from serial connection, try unplugging the device ({raw_values=}), {before_split=}")
+                print(
+                    f"{CLR}No values found from serial connection, try unplugging the device ({raw_values=}), {before_split=}"
+                )
                 sys.exit(1)
-            if len(raw_values) != n_sensors+2:
+            if len(raw_values) != n_sensors + 2:
                 # print(f"{CLR}Raw values are length {len(raw_values)}, not {n_sensors+2}: {raw_values}")
                 continue
             # Update the dictionary with some useful values
@@ -223,7 +242,9 @@ def loop_over_serial_stream(
             cb_data["curr_offset"] = int(raw_values[1])
             # Clamp the `curr_idx` so that it doesn't cause an array index out
             # of bounds error
-            cb_data["curr_idx"] = min(n_timesteps - 1, round(cb_data["curr_offset"] / 25))
+            cb_data["curr_idx"] = min(
+                n_timesteps - 1, round(cb_data["curr_offset"] / 25)
+            )
             # If this is the first time looping through, then wait until the
             # beginning of a gesture comes around
             if first_loop:
@@ -233,7 +254,7 @@ def loop_over_serial_stream(
                     first_loop = False
             # The aligned_offset is the number of milliseconds from the start
             # of the gesture, but rounded to the nearest 25 milliseconds
-            cb_data['aligned_offset'] = cb_data["curr_idx"] * 25
+            cb_data["aligned_offset"] = cb_data["curr_idx"] * 25
         except serial.serialutil.SerialException as e:
             print(f"Ergo has been disconnected: {e}")
             sys.exit(1)
@@ -243,9 +264,9 @@ def loop_over_serial_stream(
         upper_bound = 900
         lower_bound = 300
         try:
-            new_measurements = np.array([
-                min(upper_bound, max(lower_bound, int(val))) for val in raw_values[2:]
-            ])
+            new_measurements = np.array(
+                [min(upper_bound, max(lower_bound, int(val))) for val in raw_values[2:]]
+            )
         except ValueError as e:
             print(f"value error: {e}, {raw_values=}")
             continue
@@ -261,84 +282,106 @@ def loop_over_serial_stream(
     else:
         print("Serial port closed")
 
-def write_debug_line(new_measurements, cb_data: dict[str, Any], end='\r'):
+
+def write_debug_line(new_measurements, cb_data: dict[str, Any], end="\r"):
     """Write the new measurements with some helpful information to the terminal."""
-    gestures = list(cb_data['gesture_info'].keys())[:10]
+    gestures = list(cb_data["gesture_info"].keys())[:10]
     curr_idx = cb_data["curr_idx"]
     countdown_ms = 2_000
-    cb_data['last_gesture'] = cb_data.get('last_gesture', time_ms())
-    cb_data['lineup'] = cb_data.get('lineup', random.sample(gestures, 5))
+    cb_data["last_gesture"] = cb_data.get("last_gesture", time_ms())
+    cb_data["lineup"] = cb_data.get("lineup", random.sample(gestures, 5))
 
-    colors = ['left:']
-    dims = ['x', 'y', 'z']
+    colors = ["left:"]
+    dims = ["x", "y", "z"]
     max_value = 900
     for i, val in enumerate(new_measurements):
         # Append an ANSI-coloured string to the colors array
-        colors.append(get_colored_string(int(val), max_value, fstring=(dims[i%3]+'{value:3}')))
+        colors.append(
+            get_colored_string(int(val), max_value, fstring=(dims[i % 3] + "{value:3}"))
+        )
         if i == 14:
             # The 14th value is the middle, so add a space to separate
-            colors[-1] += '   right:'
+            colors[-1] += "   right:"
         elif i % 3 == 2 and i > 0:
             # Every (i%3==2) value deliminates a triplet of (x,y,z) values, so
             # add a space to separate
-            colors[-1] += ' '
+            colors[-1] += " "
 
     # Join all the colour strings together
-    colors = ''.join(colors)
+    colors = "".join(colors)
     # Finally print out the full string, ended with a `\r` so that we can write
     # over it afterwards
     aligned_offset = cb_data["aligned_offset"]
     prediction = cb_data["prediction"]
-    gesture_idx = cb_data['gesture_idx']
-    millis_offset = cb_data['curr_offset']
+    gesture_idx = cb_data["gesture_idx"]
+    millis_offset = cb_data["curr_offset"]
     # print(f'{millis_offset: >3}ms ({aligned_offset: >3}ms) ms//25={curr_idx: >2} gesture:{gesture_idx: <3} {colors}{prediction}', end=end)
 
-    gesture = cb_data['lineup'][0]
-    description = cb_data['gesture_info'].get(gesture)['description'] 
-    curr_gesture_str = (f"{gesture}: {description: <20}"
-                            .replace("thumb", "1")
-                            .replace("index", "2")
-                            .replace("middle", "3")
-                            .replace("ring", "4")
-                            .replace("little", "5")
-                            .replace("Right", "->")
-                            .replace("Left", "<-"))
-    progress = len(curr_gesture_str) - round(((time_ms() - cb_data['last_gesture']) / countdown_ms) * len(curr_gesture_str))
-    regular = color(curr_gesture_str[:progress], fg='white', bg=get_color(gesture), style='bold')
-    inverse = color(curr_gesture_str[progress:], fg=get_color(gesture), bg='white', style='bold')
-    if time_ms() - cb_data['last_gesture'] >= countdown_ms:
+    gesture = cb_data["lineup"][0]
+    description = cb_data["gesture_info"].get(gesture)["description"]
+    curr_gesture_str = (
+        f"{gesture}: {description: <20}".replace("thumb", "1")
+        .replace("index", "2")
+        .replace("middle", "3")
+        .replace("ring", "4")
+        .replace("little", "5")
+        .replace("Right", "->")
+        .replace("Left", "<-")
+    )
+    progress = len(curr_gesture_str) - round(
+        ((time_ms() - cb_data["last_gesture"]) / countdown_ms) * len(curr_gesture_str)
+    )
+    regular = color(
+        curr_gesture_str[:progress], fg="white", bg=get_color(gesture), style="bold"
+    )
+    inverse = color(
+        curr_gesture_str[progress:], fg=get_color(gesture), bg="white", style="bold"
+    )
+    if time_ms() - cb_data["last_gesture"] >= countdown_ms:
         global should_create_new_file
         if should_create_new_file:
             print(f"{CLR}Creating new file")
             should_create_new_file = False
         print(f"{CLR}{color_bg(gesture)} saved to `some/filename/here.csv`")
-        cb_data['last_gesture'] = time_ms()
-        cb_data['lineup'].pop(0)
-        cb_data['lineup'].append(random.choice(gestures))
-    countdown = cb_data['lineup'][0]
-    print(f'{regular}{inverse} {colors}{prediction}', end=end)
+        cb_data["last_gesture"] = time_ms()
+        cb_data["lineup"].pop(0)
+        cb_data["lineup"].append(random.choice(gestures))
+    countdown = cb_data["lineup"][0]
+    print(f"{regular}{inverse} {colors}{prediction}", end=end)
     return cb_data
 
-def format_prediction(gesture: str, proba: float, shortness=0, cmap='inferno', threshold=0.99):
+
+def format_prediction(
+    gesture: str, proba: float, shortness=0, cmap="inferno", threshold=0.99
+):
     """Given a gesture and it's probability, return an ANSI coloured string
     colour mapped to it's probability."""
-    gesture = gesture.replace('gesture0', 'g').replace('g0', 'g').replace('g0', 'g')
-    gesture = gesture if shortness <= 1 else gesture.replace('g', '')
-    fstring = f'{gesture}' + (f':{{value:>02}}%' if shortness < 1 else '')
-    colored = get_colored_string(int(proba*100), 100, fstring=fstring, cmap=cmap, highlight=proba >= threshold)
+    gesture = gesture.replace("gesture0", "g").replace("g0", "g").replace("g0", "g")
+    gesture = gesture if shortness <= 1 else gesture.replace("g", "")
+    fstring = f"{gesture}" + (f":{{value:>02}}%" if shortness < 1 else "")
+    colored = get_colored_string(
+        int(proba * 100), 100, fstring=fstring, cmap=cmap, highlight=proba >= threshold
+    )
     return colored
 
-def get_colored_string(value: int, n_values: int, fstring='{value:3}', cmap='turbo', highlight=False) -> str:
+
+def get_colored_string(
+    value: int, n_values: int, fstring="{value:3}", cmap="turbo", highlight=False
+) -> str:
     """Given a value and the total number of values, return a colour mapped and formatted string of that value"""
     colours = cm.get_cmap(cmap, n_values)
-    rgb = [int(val * 255) for val in colours(round(value * (1.0 if highlight else 0.8)))[:-1]]
+    rgb = [
+        int(val * 255)
+        for val in colours(round(value * (1.0 if highlight else 0.8)))[:-1]
+    ]
     mag = np.sqrt(sum([x * x for x in rgb]))
     coloured = color(
         fstring.format(value=value),
-        'black' if mag > 180 else 'white',
-        f'rgb({rgb[0]},{rgb[1]},{rgb[2]})',
+        "black" if mag > 180 else "white",
+        f"rgb({rgb[0]},{rgb[1]},{rgb[2]})",
     )
     return coloured
+
 
 def save_cb(new_measurements: np.ndarray, d: dict[str, Any]) -> dict[str, Any]:
     """Given a series of new measurements, populate an observation and save to
@@ -346,22 +389,35 @@ def save_cb(new_measurements: np.ndarray, d: dict[str, Any]) -> dict[str, Any]:
     if not np.isnan(d["obs"]).any().any():
         gesture_idx = f'gesture{d["gesture_idx"]:04}'
         try:
-            predictions = utils.predict_nicely(d["obs"], d["clf"], d["scaler"], d["idx_to_gesture"])
+            predictions = utils.predict_nicely(
+                d["obs"], d["clf"], d["scaler"], d["idx_to_gesture"]
+            )
             d["prediction"] = format_prediction(*predictions[0])
             d["prediction_history"].append(predictions)
             # If we're predicting something that's not the actual gesture
-            if predictions[0][0] not in [gesture_idx, 'gesture0255'] and len(d['prediction_history']) > 20:
+            if (
+                predictions[0][0] not in [gesture_idx, "gesture0255"]
+                and len(d["prediction_history"]) > 20
+            ):
                 # Then save this observation as a misclassified item
-                directory = f'../gesture_data/misclassified/{gesture_idx}'
+                directory = f"../gesture_data/misclassified/{gesture_idx}"
                 now_str = datetime.datetime.now().isoformat()
-                obs_path = f'{directory}/{now_str}_observation.csv'
-                hist_path = f'{directory}/{now_str}_history.csv'
-                print(f"Saving bad prediction to {obs_path}: (actual {gesture_idx} != {predictions[0][0]} predicted)")
+                obs_path = f"{directory}/{now_str}_observation.csv"
+                hist_path = f"{directory}/{now_str}_history.csv"
+                print(
+                    f"Saving bad prediction to {obs_path}: (actual {gesture_idx} != {predictions[0][0]} predicted)"
+                )
                 utils.write_obs_to_disc(d["obs"], obs_path)
                 # Also save the recent history
-                with open(hist_path, 'w') as f:
-                    for prediction in d['prediction_history'][-20:]:
-                        f.write(','.join(f'{g}:{p:.4f}' for (g, p) in sorted(prediction, key=lambda x: x[0])) + '\n')
+                with open(hist_path, "w") as f:
+                    for prediction in d["prediction_history"][-20:]:
+                        f.write(
+                            ",".join(
+                                f"{g}:{p:.4f}"
+                                for (g, p) in sorted(prediction, key=lambda x: x[0])
+                            )
+                            + "\n"
+                        )
         except Exception as e:
             print(f"Exception {e}")
             d["prediction"] = "Classifier exception"
@@ -375,9 +431,11 @@ def save_cb(new_measurements: np.ndarray, d: dict[str, Any]) -> dict[str, Any]:
 
         directory = f'../gesture_data/train/gesture{d["gesture_idx"]:04}'
         now_str = datetime.datetime.now().isoformat()
-        utils.write_obs_to_disc(d["obs"], f'{directory}/{now_str}.csv')
+        utils.write_obs_to_disc(d["obs"], f"{directory}/{now_str}.csv")
         num_obs = len(os.listdir(directory))
-        print(f"{CLR}{d['n_measurements']} measurements taken, wrote observation as `{directory}/{now_str}.csv` ({num_obs} total)")
+        print(
+            f"{CLR}{d['n_measurements']} measurements taken, wrote observation as `{directory}/{now_str}.csv` ({num_obs} total)"
+        )
         for idx in range(d["curr_idx"]):
             # If the curr_idx > 0 then we've skipped over the first
             # measurement. Therefore impute the first measurements as the mean
@@ -392,11 +450,14 @@ def save_cb(new_measurements: np.ndarray, d: dict[str, Any]) -> dict[str, Any]:
     d["obs"][d["curr_idx"]] = new_measurements
     for idx in range(d["prev_idx"] + 1, d["curr_idx"]):
         # print(f"imputing index {idx} using the mean of idx {d['prev_idx']} and of idx {d['curr_idx']}")
-        d["obs"][idx, :] = np.mean((d["obs"][d["prev_idx"], :], d["obs"][d["curr_idx"], :]), axis=0)
+        d["obs"][idx, :] = np.mean(
+            (d["obs"][d["prev_idx"], :], d["obs"][d["curr_idx"], :]), axis=0
+        )
     d["prev_idx"] = d["curr_idx"]
     # Place this observation at it's place in curr_idx
     d["n_measurements"] += 1
     return d
+
 
 def train_model_cb(new_measurements: np.ndarray, d: dict[str, Any]) -> dict[str, Any]:
     """Train an ML model in a separate thread. Only spawns a new thread if the
@@ -404,27 +465,45 @@ def train_model_cb(new_measurements: np.ndarray, d: dict[str, Any]) -> dict[str,
     # Only attempt to train the model if the previous model has finished
     # training (or if there is no previous model)
     if d["thread"] is None or not d["thread"].is_alive():
-        model_paths = sorted(['saved_models/' + p for p in os.listdir('saved_models/') if "Classifier" in p], reverse=True)
+        model_paths = sorted(
+            [
+                "saved_models/" + p
+                for p in os.listdir("saved_models/")
+                if "Classifier" in p
+            ],
+            reverse=True,
+        )
         print(f"Starting thread to train new model, current model is: {model_paths[0]}")
         d["clf"] = utils.load_model(model_paths[0])
         d["thread"] = threading.Thread(target=train_model, args=(d,), kwargs={})
         d["thread"].start()
     return d
 
+
 def train_model(d):
     start = time()
     X, y, paths = utils.read_to_numpy(
-            include=list(d['gesture_to_idx'].keys()),
-            min_obs=0,
-            verbose=-1,
+        include=list(d["gesture_to_idx"].keys()),
+        min_obs=0,
+        verbose=-1,
     )
     n_classes = np.unique(y).shape[0]
-    X_train, X_test, y_train, y_test, paths_train, paths_test = utils.train_test_split_scale(X, y, paths)
+    (
+        X_train,
+        X_test,
+        y_train,
+        y_test,
+        paths_train,
+        paths_test,
+    ) = utils.train_test_split_scale(X, y, paths)
     start = time()
     d["clf"] = d["clf"].fit(X_train, y_train)
     score = d["clf"].score(X_test, y_test)
     path = utils.save_model(d["clf"])
-    print(f'{CLR}Trained classifier with {len(y)} observations in {time() - start:.3f}s, {score=:.4f}, {path=}\n')
+    print(
+        f"{CLR}Trained classifier with {len(y)} observations in {time() - start:.3f}s, {score=:.4f}, {path=}\n"
+    )
+
 
 def predict_cb(new_measurements: np.ndarray, d: dict[str, Any]) -> dict[str, Any]:
     """Predict the current gesture, printing the probabilities to stdout."""
@@ -456,6 +535,7 @@ def predict_cb(new_measurements: np.ndarray, d: dict[str, Any]) -> dict[str, Any
     d = try_print_probabilities(d)
     return d
 
+
 def try_print_probabilities(d):
     """Attempt to predict the gesture based on the observation in `d`."""
     # If we have any NaNs, don't try predict anything
@@ -463,8 +543,10 @@ def try_print_probabilities(d):
         print(f"{CLR}Not predicting, (obs contains {(np.isnan(d['obs'])).sum()} NaNs)")
         return d
 
-    predictions = utils.predict_nicely(d["obs"], d["clf"], d["scaler"], d["idx_to_gesture"])
-    print(f"{CLR}", end='')
+    predictions = utils.predict_nicely(
+        d["obs"], d["clf"], d["scaler"], d["idx_to_gesture"]
+    )
+    print(f"{CLR}", end="")
     d["prediction"] = format_prediction(*predictions[0])
     # Only count a prediction if it's over 98% probable
     best_proba = 0.98
@@ -473,16 +555,22 @@ def try_print_probabilities(d):
         if proba > best_proba:
             best_proba = proba
             best_gesture = gesture
-        print(format_prediction(gesture, proba, shortness=len(predictions) // 25, cmap='inferno'), end=' ')
+        print(
+            format_prediction(
+                gesture, proba, shortness=len(predictions) // 25, cmap="inferno"
+            ),
+            end=" ",
+        )
     print()
     return d
+
 
 def driver_cb(new_measurements: np.ndarray, d: dict[str, Any]) -> dict[str, Any]:
     """Take the predicted gesture and convert it to a character, writing to
     stdout (and to sys.argv[-1])."""
-    if 'bucket' not in d:
-        d['bucket'] = 0
-        d['curr_gesture'] = None
+    if "bucket" not in d:
+        d["bucket"] = 0
+        d["curr_gesture"] = None
     # Calculate how much time has passed between this measurement and the
     # previous measurement, rounded to the nearest 25ms
     diff = round((d["time_ms"] - d["prev_time_ms"]) / 25) * 25
@@ -513,8 +601,10 @@ def driver_cb(new_measurements: np.ndarray, d: dict[str, Any]) -> dict[str, Any]
         print(f"{CLR}Not predicting, (obs contains {(np.isnan(d['obs'])).sum()} NaNs)")
         return d
 
-    predictions = utils.predict_nicely(d["obs"], d["clf"], d["scaler"], d["idx_to_gesture"])
-    print(f"{CLR}", end='')
+    predictions = utils.predict_nicely(
+        d["obs"], d["clf"], d["scaler"], d["idx_to_gesture"]
+    )
+    print(f"{CLR}", end="")
     d["prediction"] = format_prediction(*predictions[0])
     # Only count a prediction if it's over 98% probable
     best_proba = 0.0
@@ -528,43 +618,49 @@ def driver_cb(new_measurements: np.ndarray, d: dict[str, Any]) -> dict[str, Any]
     REQ_BUCKET_QUANTITY = 2
 
     if best_proba > MIN_PROBABILITY:
-        if best_gesture != d['curr_gesture']:
-            d['bucket'] = 0
-            d['curr_gesture'] = best_gesture
-        d['bucket'] += 1
-        if d['bucket'] == REQ_BUCKET_QUANTITY and best_gesture != 'gesture0255':
+        if best_gesture != d["curr_gesture"]:
+            d["bucket"] = 0
+            d["curr_gesture"] = best_gesture
+        d["bucket"] += 1
+        if d["bucket"] == REQ_BUCKET_QUANTITY and best_gesture != "gesture0255":
             now_str = datetime.datetime.now().isoformat()
-            print(now_str, d["g2k"].get(best_gesture, best_gesture), f" <{best_gesture}>")
+            print(
+                now_str, d["g2k"].get(best_gesture, best_gesture), f" <{best_gesture}>"
+            )
             if len(sys.argv) > 2:
-                with open(sys.argv[-1], 'a') as f:
+                with open(sys.argv[-1], "a") as f:
                     f.write(d["g2k"].get(best_gesture, best_gesture))
     return d
+
 
 def time_ms() -> float:
     """Get the time in milliseconds."""
     return time() * 1_000
+
 
 def color_bg(string) -> str:
     """Just a wrapper to color a string and use that string as a seed to
     dictate what color to use."""
     return color(string, bg=get_color(string))
 
+
 def get_color(string) -> str:
     """Use the given string as a seed to get a deterministic background color.
     See https://www.mattgroeber.com/utilities/random-color-generator"""
     random.seed(string)
     # Hue in [0, 360]
-    h_range = (0., 1.)
+    h_range = (0.0, 1.0)
     # Saturation in [30%, 52%]
-    s_range = (.30, .60)
+    s_range = (0.30, 0.60)
     # Light in [27%, 39%]
-    l_range = (.30, .40)
+    l_range = (0.30, 0.40)
     r, g, b = colorsys.hls_to_rgb(
         random.random() * (h_range[1] - h_range[0]) + h_range[0],
         random.random() * (l_range[1] - l_range[0]) + l_range[0],
         random.random() * (s_range[1] - s_range[0]) + s_range[0],
     )
-    return f'rgb({int(r * 255)}, {int(g * 255)}, {int(b * 255)})'
+    return f"rgb({int(r * 255)}, {int(g * 255)}, {int(b * 255)})"
+
 
 if __name__ == "__main__":
     try:
