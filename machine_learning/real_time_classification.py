@@ -36,6 +36,8 @@ def main():
             break
         if arg in ["predict", "p"]:
             callbacks.append(predict_cb)
+        elif arg in ["incremental", "i"]:
+            callbacks.append(save_incremental_cb)
         elif arg in ["save", "s"]:
             callbacks.append(save_cb)
         elif arg in ["train", "t"]:
@@ -46,8 +48,8 @@ def main():
         else:
             print(
                 "Usage: \
-                    python3 real_time_classification.py [drive|d] [train|t] [save|s] [predict|p] [filename]\
-                    "
+                            python3 real_time_classification.py [drive|d] [train|t] [save|s] [predict|p] [filename]\
+                            "
             )
             sys.exit(1)
 
@@ -61,6 +63,7 @@ def main():
         paths = [f for f in sorted(os.listdir(root)) if f.endswith(".csv")]
         path = root + paths[-1]
         num_newlines = 80
+        cursor_pos = 0
         # Delete the last `num_newlines` lines efficiently
         # https://stackoverflow.com/a/10289740/14555505
         with open(path, "r+", encoding="utf-8") as file:
@@ -81,6 +84,9 @@ def main():
             cursor_pos = max(cursor_pos, 0)
             file.seek(cursor_pos, os.SEEK_SET)
             file.truncate()
+        # If we've removed every line of a file, just delete it
+        if cursor_pos == 0:
+            os.remove(path)
         print(
             CLR,
             color(
@@ -317,6 +323,11 @@ def write_debug_line(new_measurements, cb_data: dict[str, Any], end="\r"):
     millis_offset = cb_data["curr_offset"]
     # print(f'{millis_offset: >3}ms ({aligned_offset: >3}ms) ms//25={curr_idx: >2} gesture:{gesture_idx: <3} {colors}{prediction}', end=end)
 
+    if time_ms() - cb_data["last_gesture"] >= countdown_ms:
+        cb_data["last_gesture"] = time_ms()
+        cb_data["lineup"].pop(0)
+        cb_data["lineup"].append(random.choice(gestures))
+
     gesture = cb_data["lineup"][0]
     description = cb_data["gesture_info"].get(gesture)["description"]
     curr_gesture_str = (
@@ -337,15 +348,7 @@ def write_debug_line(new_measurements, cb_data: dict[str, Any], end="\r"):
     inverse = color(
         curr_gesture_str[progress:], fg=get_color(gesture), bg="white", style="bold"
     )
-    if time_ms() - cb_data["last_gesture"] >= countdown_ms:
-        global should_create_new_file
-        if should_create_new_file:
-            print(f"{CLR}Creating new file")
-            should_create_new_file = False
-        print(f"{CLR}{color_bg(gesture)} saved to `some/filename/here.csv`")
-        cb_data["last_gesture"] = time_ms()
-        cb_data["lineup"].pop(0)
-        cb_data["lineup"].append(random.choice(gestures))
+    cb_data["gesture_idx"] = int(gesture.replace("gesture", ""))
     countdown = cb_data["lineup"][0]
     print(f"{regular}{inverse} {colors}{prediction}", end=end)
     return cb_data
@@ -381,6 +384,25 @@ def get_colored_string(
         f"rgb({rgb[0]},{rgb[1]},{rgb[2]})",
     )
     return coloured
+
+
+def save_incremental_cb(
+    new_measurements: np.ndarray, d: dict[str, Any]
+) -> dict[str, Any]:
+    root = f"../gesture_data/train/"
+    now_str = datetime.datetime.now().isoformat()
+    global should_create_new_file
+    if should_create_new_file:
+        path = root + now_str + ".csv"
+        should_create_new_file = False
+    else:
+        paths = [f for f in sorted(os.listdir(root)) if f.endswith(".csv")]
+        path = root + paths[-1]
+    with open(path, "a") as f:
+        f.write(
+            ",".join([now_str] + [f"{m:.0f}" for m in new_measurements.tolist()]) + "\n"
+        )
+    return d
 
 
 def save_cb(new_measurements: np.ndarray, d: dict[str, Any]) -> dict[str, Any]:
