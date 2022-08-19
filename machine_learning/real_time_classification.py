@@ -25,6 +25,8 @@ np.set_printoptions(threshold=sys.maxsize, linewidth=250)
 # This magic ANSI string clears a line that's been partially written
 CLR = "\x1b[2K\r"
 should_create_new_file = True
+COUNTDOWN_MS = 2_000
+GESTURE_WINDOW_MS = 30
 
 
 def main():
@@ -48,12 +50,12 @@ def main():
         else:
             print(
                 "Usage: \
-                            python3 real_time_classification.py [drive|d] [train|t] [save|s] [predict|p] [filename]\
+                            python3 real_time_classification.py [incremental|i] [drive|d] [train|t] [save|s] [predict|p] [filename]\
                             "
             )
             sys.exit(1)
 
-    # Add a listener that will remove the last 80 lines (2 seconds) from the
+    # Add a listener that will remove the last 120 lines (3 seconds) from the
     # training data. Just in case some poor gesture data gets recorded by
     # mistake
     def burn_most_recent_observations():
@@ -62,7 +64,8 @@ def main():
         root = "../gesture_data/train/"
         paths = [f for f in sorted(os.listdir(root)) if f.endswith(".csv")]
         path = root + paths[-1]
-        num_newlines = 80
+        num_seconds = 3
+        num_newlines = 40 * num_seconds
         cursor_pos = 0
         # Delete the last `num_newlines` lines efficiently
         # https://stackoverflow.com/a/10289740/14555505
@@ -94,11 +97,15 @@ def main():
                 bg="firebrick",
             ),
         )
+        sleep(2)
 
     keyboard.add_hotkey("space", burn_most_recent_observations)
 
     # Get the correct serial port, exiting if none exists
     port = get_serial_port()
+    # Sleep for a little bit so the user can get into position
+    print("Sleeping for 1 second")
+    sleep(1)
     # Define the baudrate (number of bits per second sent over the serial port)
     baudrate = 19_200
     print(f"Reading from {port} with baudrate {baudrate}")
@@ -199,7 +206,7 @@ def loop_over_serial_stream(
         "curr_idx": 0,
         "prev_idx": 0,
         "n_measurements": 0,
-        "gesture_idx": 0,
+        "gesture_idx": None,
         "obs": np.full((n_timesteps, n_sensors), np.nan),
         "time_ms": int(time() * 1000),
         "prev_time_ms": int(time() * 1000),
@@ -242,7 +249,7 @@ def loop_over_serial_stream(
             cb_data["prev_gesture_idx"] = cb_data["gesture_idx"]
             if not raw_values[0]:
                 continue
-            cb_data["gesture_idx"] = int(raw_values[0])
+            # cb_data["gesture_idx"] = int(raw_values[0])
             # Shuffle along the previous and current offsets
             cb_data["prev_offset"] = cb_data["curr_offset"]
             cb_data["curr_offset"] = int(raw_values[1])
@@ -289,11 +296,12 @@ def loop_over_serial_stream(
         print("Serial port closed")
 
 
-def write_debug_line(new_measurements, cb_data: dict[str, Any], end="\r"):
+def write_debug_line(
+    new_measurements, cb_data: dict[str, Any], end="\r"
+) -> dict[str, Any]:
     """Write the new measurements with some helpful information to the terminal."""
-    gestures = list(cb_data["gesture_info"].keys())[:10]
+    gestures = list(cb_data["gesture_info"].keys())[:5]
     curr_idx = cb_data["curr_idx"]
-    countdown_ms = 2_000
     cb_data["last_gesture"] = cb_data.get("last_gesture", time_ms())
     cb_data["lineup"] = cb_data.get("lineup", random.sample(gestures, 5))
 
@@ -315,15 +323,8 @@ def write_debug_line(new_measurements, cb_data: dict[str, Any], end="\r"):
 
     # Join all the colour strings together
     colors = "".join(colors)
-    # Finally print out the full string, ended with a `\r` so that we can write
-    # over it afterwards
-    aligned_offset = cb_data["aligned_offset"]
-    prediction = cb_data["prediction"]
-    gesture_idx = cb_data["gesture_idx"]
-    millis_offset = cb_data["curr_offset"]
-    # print(f'{millis_offset: >3}ms ({aligned_offset: >3}ms) ms//25={curr_idx: >2} gesture:{gesture_idx: <3} {colors}{prediction}', end=end)
 
-    if time_ms() - cb_data["last_gesture"] >= countdown_ms:
+    if time_ms() - cb_data["last_gesture"] >= COUNTDOWN_MS:
         cb_data["last_gesture"] = time_ms()
         cb_data["lineup"].pop(0)
         cb_data["lineup"].append(random.choice(gestures))
@@ -340,7 +341,7 @@ def write_debug_line(new_measurements, cb_data: dict[str, Any], end="\r"):
         .replace("Left", "<-")
     )
     progress = len(curr_gesture_str) - round(
-        ((time_ms() - cb_data["last_gesture"]) / countdown_ms) * len(curr_gesture_str)
+        ((time_ms() - cb_data["last_gesture"]) / COUNTDOWN_MS) * len(curr_gesture_str)
     )
     regular = color(
         curr_gesture_str[:progress], fg="white", bg=get_color(gesture), style="bold"
@@ -349,6 +350,8 @@ def write_debug_line(new_measurements, cb_data: dict[str, Any], end="\r"):
         curr_gesture_str[progress:], fg=get_color(gesture), bg="white", style="bold"
     )
     cb_data["gesture_idx"] = int(gesture.replace("gesture", ""))
+    # print(CLR, gesture, cb_data["gesture_idx"])
+    prediction = cb_data["prediction"]
     countdown = cb_data["lineup"][0]
     print(f"{regular}{inverse} {colors}{prediction}", end=end)
     return cb_data
@@ -389,6 +392,9 @@ def get_colored_string(
 def save_incremental_cb(
     new_measurements: np.ndarray, d: dict[str, Any]
 ) -> dict[str, Any]:
+    # only write to file if we've got a non-None gesture index
+    if d["gesture_idx"] is None:
+        return d
     root = f"../gesture_data/train/"
     now_str = datetime.datetime.now().isoformat()
     global should_create_new_file
@@ -399,9 +405,14 @@ def save_incremental_cb(
         paths = [f for f in sorted(os.listdir(root)) if f.endswith(".csv")]
         path = root + paths[-1]
     with open(path, "a") as f:
-        f.write(
-            ",".join([now_str] + [f"{m:.0f}" for m in new_measurements.tolist()]) + "\n"
-        )
+        # Only label the measurements as being an actual gesture (as opposed
+        # to the null 0255 gesture) in the final 50ms of the countdown.
+        if COUNTDOWN_MS - (time_ms() - d["last_gesture"]) <= GESTURE_WINDOW_MS:
+            gesture = f'gesture{d["gesture_idx"]:04}'
+        else:
+            gesture = "gesture0255"
+        items = [now_str, gesture] + [f"{m:.0f}" for m in new_measurements.tolist()]
+        f.write(",".join(items) + "\n")
     return d
 
 
@@ -471,7 +482,6 @@ def save_cb(new_measurements: np.ndarray, d: dict[str, Any]) -> dict[str, Any]:
     # last recorded observation and the most recent observation
     d["obs"][d["curr_idx"]] = new_measurements
     for idx in range(d["prev_idx"] + 1, d["curr_idx"]):
-        # print(f"imputing index {idx} using the mean of idx {d['prev_idx']} and of idx {d['curr_idx']}")
         d["obs"][idx, :] = np.mean(
             (d["obs"][d["prev_idx"], :], d["obs"][d["curr_idx"], :]), axis=0
         )
