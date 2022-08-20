@@ -230,10 +230,10 @@ def plot_raw_gesture(
     assert type(arr) is np.ndarray, f"Type is {type(arr)}, not np.array"
     assert arr.shape == (n_timesteps, n_sensors), f"Shape isn't ({n_timesteps}, {n_sensors})"
 
-    time = np.array(list(range(0, (n_timesteps-1)*25+1, 25)))
+    time = np.array(list(range(0, (n_timesteps-1)*25+1, 25)))[::-1]
 
     # Actually draw the heatmap, with square blocks.
-    img = ax.imshow(arr, cmap='viridis', aspect='equal')
+    img = ax.imshow(arr[::-1, :], cmap='viridis', aspect='equal')
     if show_cbar:
         fig.colorbar(img, ax=ax)
     if show_yticks:
