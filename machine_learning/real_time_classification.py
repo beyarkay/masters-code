@@ -1,6 +1,6 @@
 print("Importing libraries")
+from collections import Counter
 from colors import color
-import colorsys
 from matplotlib import cm
 from serial.tools.list_ports import comports
 from sklearn.neural_network import MLPClassifier
@@ -8,6 +8,7 @@ from time import sleep
 from time import time
 from typing import Callable, List, Any
 from yaml import Loader, Dumper
+import colorsys
 import common_utils as utils
 import datetime
 import keyboard
@@ -25,8 +26,9 @@ np.set_printoptions(threshold=sys.maxsize, linewidth=250)
 # This magic ANSI string clears a line that's been partially written
 CLR = "\x1b[2K\r"
 should_create_new_file = True
-COUNTDOWN_MS = 2_000
+COUNTDOWN_MS = 1_500
 GESTURE_WINDOW_MS = 30
+GESTURES_RANGE = (5, 10)
 
 
 def main():
@@ -103,9 +105,6 @@ def main():
 
     # Get the correct serial port, exiting if none exists
     port = get_serial_port()
-    # Sleep for a little bit so the user can get into position
-    print("Sleeping for 1 second")
-    sleep(1)
     # Define the baudrate (number of bits per second sent over the serial port)
     baudrate = 19_200
     print(f"Reading from {port} with baudrate {baudrate}")
@@ -300,7 +299,9 @@ def write_debug_line(
     new_measurements, cb_data: dict[str, Any], end="\r"
 ) -> dict[str, Any]:
     """Write the new measurements with some helpful information to the terminal."""
-    gestures = list(cb_data["gesture_info"].keys())[:5]
+    gestures = list(cb_data["gesture_info"].keys())[
+        GESTURES_RANGE[0] : GESTURES_RANGE[1]
+    ]
     curr_idx = cb_data["curr_idx"]
     cb_data["last_gesture"] = cb_data.get("last_gesture", time_ms())
     cb_data["lineup"] = cb_data.get("lineup", random.sample(gestures, 5))
@@ -327,7 +328,9 @@ def write_debug_line(
     if time_ms() - cb_data["last_gesture"] >= COUNTDOWN_MS:
         cb_data["last_gesture"] = time_ms()
         cb_data["lineup"].pop(0)
+        random.seed(time_ms())
         cb_data["lineup"].append(random.choice(gestures))
+        print(CLR, get_gesture_counts())
 
     gesture = cb_data["lineup"][0]
     description = cb_data["gesture_info"].get(gesture)["description"]
@@ -400,6 +403,8 @@ def save_incremental_cb(
     global should_create_new_file
     if should_create_new_file:
         path = root + now_str + ".csv"
+        print(f"{CLR}Sleeping due to burnt observations, new path is {path}")
+        sleep(2)
         should_create_new_file = False
     else:
         paths = [f for f in sorted(os.listdir(root)) if f.endswith(".csv")]
@@ -692,6 +697,18 @@ def get_color(string) -> str:
         random.random() * (s_range[1] - s_range[0]) + s_range[0],
     )
     return f"rgb({int(r * 255)}, {int(g * 255)}, {int(b * 255)})"
+
+
+def get_gesture_counts() -> Counter:
+    root = "../gesture_data/train/"
+    paths = os.listdir(root)
+    counter = Counter()
+    for path in paths:
+        with open(root + path, "r") as f:
+            # Extract just the gesture from the lines
+            gestures = ["g" + l[35:39] for l in f.readlines()]
+            counter.update(gestures)
+    return counter
 
 
 if __name__ == "__main__":
