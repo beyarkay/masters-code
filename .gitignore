@@ -1,25 +1,38 @@
+# Ignore MacOS specific things
 .DS_Store
 */.DS_Store
 
+# Vim swap files
 *.swp
 */*.swp
 
+# Rust build files
 read_serial_data/target/
 
+# Python virtual environments
 .venv
 */.venv
 
+# Ipython Notebook checkpoints
 .ipynb_checkpoints/
 */.ipynb_checkpoints/
 
+# Python Cache
 __pycache__/
 */__pycache__/
 
+# Training data
 gesture_data/**/*.csv
 gesture_data/**/*.txt
 
+# Weights and Biases logs
 machine_learning/wandb/
 
+# General purpose logs and model save files
+machine_learning/logs/
+machine_learning/models/
+
+# Images and PDFs
 *.png
 *.pdf
 *.jpg
