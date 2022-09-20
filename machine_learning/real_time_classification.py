@@ -26,7 +26,7 @@ np.set_printoptions(threshold=sys.maxsize, linewidth=250)
 # This magic ANSI string clears a line that's been partially written
 CLR = "\x1b[2K\r"
 should_create_new_file = True
-COUNTDOWN_MS = 1_500
+COUNTDOWN_MS = 1_000
 GESTURE_WINDOW_MS = 30
 GESTURES_RANGE = (5, 10)
 
@@ -66,9 +66,11 @@ def main():
         root = "../gesture_data/train/"
         paths = [f for f in sorted(os.listdir(root)) if f.endswith(".csv")]
         path = root + paths[-1]
-        num_seconds = 3
-        num_newlines = 40 * num_seconds
+        num_seconds = 1.5
+        newlines_per_second = 40
+        num_newlines = newlines_per_second * num_seconds
         cursor_pos = 0
+        print(f"{CLR}{num_newlines=}, {num_seconds=}")
         # Delete the last `num_newlines` lines efficiently
         # https://stackoverflow.com/a/10289740/14555505
         with open(path, "r+", encoding="utf-8") as file:
@@ -95,13 +97,16 @@ def main():
         print(
             CLR,
             color(
-                f"Burnt the last 80 lines (2 seconds) of data from {path}",
+                f"Burnt the last {int(newlines_per_second * num_seconds)} lines ({int(num_seconds)} seconds) of data from {path}",
                 bg="firebrick",
             ),
         )
         sleep(2)
 
     keyboard.add_hotkey("space", burn_most_recent_observations)
+
+    gestures = list(gesture_info().keys())[GESTURES_RANGE[0] : GESTURES_RANGE[1]]
+    print(f"{CLR}Possible gestures: {gestures}")
 
     # Get the correct serial port, exiting if none exists
     port = get_serial_port()
@@ -304,7 +309,9 @@ def write_debug_line(
     ]
     curr_idx = cb_data["curr_idx"]
     cb_data["last_gesture"] = cb_data.get("last_gesture", time_ms())
-    cb_data["lineup"] = cb_data.get("lineup", random.sample(gestures, 5))
+    cb_data["lineup"] = cb_data.get(
+        "lineup", random.sample(gestures, min(len(gestures), 5))
+    )
 
     colors = ["left:"]
     dims = ["x", "y", "z"]
@@ -335,7 +342,7 @@ def write_debug_line(
     gesture = cb_data["lineup"][0]
     description = cb_data["gesture_info"].get(gesture)["description"]
     curr_gesture_str = (
-        f"{gesture}: {description: <20}".replace("thumb", "1")
+        f"{gesture.replace('gesture0', 'g')}: {description: <20}".replace("thumb", "1")
         .replace("index", "2")
         .replace("middle", "3")
         .replace("ring", "4")
@@ -706,7 +713,7 @@ def get_gesture_counts() -> Counter:
     for path in paths:
         with open(root + path, "r") as f:
             # Extract just the gesture from the lines
-            gestures = ["g" + l[35:39] for l in f.readlines()]
+            gestures = ["g" + l[35:38] for l in f.readlines()]
             counter.update(gestures)
     return counter
 

@@ -1,9 +1,10 @@
 import matplotlib.pyplot as plt
 import matplotlib.image as mplimg
 import matplotlib as mpl
+
 # By default use a larger figure size
-mpl.rcParams['figure.figsize'] = [12, 12]
-mpl.rcParams['figure.dpi'] = 200
+mpl.rcParams["figure.figsize"] = [12, 12]
+mpl.rcParams["figure.dpi"] = 200
 import numpy as np
 import pandas as pd
 import seaborn as sns
@@ -30,39 +31,56 @@ sns.set()
 
 # Define some variables for creating feature names like 'left-thumb-x' or 'right-index-z'
 finger_names = [
-    'little', 'ring', 'middle', 'index', 'thumb',
-    'thumb', 'index',  'middle',  'ring',  'little',
+    "little",
+    "ring",
+    "middle",
+    "index",
+    "thumb",
+    "thumb",
+    "index",
+    "middle",
+    "ring",
+    "little",
 ]
-dimensions = ['x', 'y', 'z']
+dimensions = ["x", "y", "z"]
 # Actually create some feature names to give the data meaningful labels
 fingers = []
 fingers_short = []
 for i, finger_name in enumerate(finger_names):
     for dimension in dimensions:
-        hand = ['left', 'right'][i // 5]
-        fingers.append(f'{hand}-{finger_name}-{dimension}')
+        hand = ["left", "right"][i // 5]
+        fingers.append(f"{hand}-{finger_name}-{dimension}")
         if dimension == dimensions[1]:
-            fingers_short.append(f'{dimension}\n{finger_name}\n{hand}')
+            fingers_short.append(f"{dimension}\n{finger_name}\n{hand}")
         else:
-            fingers_short.append(f'{dimension}')
+            fingers_short.append(f"{dimension}")
 
 n_timesteps = 20
 n_sensors = 30
 
+
 def write_obs_to_disc(obs: np.ndarray, filename: str) -> None:
-    np.savetxt(filename, obs, delimiter=",", fmt='%4.0f')
+    np.savetxt(filename, obs, delimiter=",", fmt="%4.0f")
+
 
 def to_flat(arr):
     """Given a 2D array, flatten it to `(n_timesteps*n_sensors,)`"""
     if type(arr) is pd.core.frame.DataFrame:
         arr = arr.to_numpy()
-    assert arr.shape == (n_timesteps, n_sensors), f"Shape isn't ({n_timesteps}, {n_sensors})"
+    assert arr.shape == (
+        n_timesteps,
+        n_sensors,
+    ), f"Shape isn't ({n_timesteps}, {n_sensors})"
     return arr.flatten()
+
 
 def from_flat(flat):
     """Given a flattened array, reshape it to `(n_timesteps, n_sensors)`"""
-    assert flat.shape == (n_timesteps*n_sensors,), f"Shape isn't ({n_timesteps*n_sensors},)"
+    assert flat.shape == (
+        n_timesteps * n_sensors,
+    ), f"Shape isn't ({n_timesteps*n_sensors},)"
     return flat.reshape((n_timesteps, n_sensors))
+
 
 def scale_single(arr, scaler):
     """Scale a single observation by the given scaler.
@@ -71,36 +89,46 @@ def scale_single(arr, scaler):
     if type(arr) is pd.core.frame.DataFrame:
         arr = to_flat(arr)
     assert arr.shape != (n_sensors, n_timesteps), f"Shape is transposed"
-    if arr.shape == (n_timesteps, n_sensors,):
+    if arr.shape == (
+        n_timesteps,
+        n_sensors,
+    ):
         arr = to_flat(arr)
-    assert arr.shape == (n_timesteps*n_sensors,), f"Shape isn't ({n_timesteps*n_sensors},)"
+    assert arr.shape == (
+        n_timesteps * n_sensors,
+    ), f"Shape isn't ({n_timesteps*n_sensors},)"
 
     return scaler.transform(np.array([arr]))[0].reshape(input_shape)
 
 
 def get_gesture_info():
     """Get a dictionary of gestures to their text descriptions."""
-    with open('../gesture_data/gesture_info.yaml', 'r') as f:
+    with open("../gesture_data/gesture_info.yaml", "r") as f:
         gesture_info = yaml.load(f.read(), Loader=Loader)
-    return gesture_info['gestures']
+    return gesture_info["gestures"]
 
-def get_dir_files(root_path='../gesture_data/train'):
+
+def get_dir_files(root_path="../gesture_data/train"):
     """Get a dictionary of directories to a list of raw gesture files."""
     # Get a listing of all directories and their files
     dir_files = {
-        d: os.listdir(f'{root_path}/{d}')
+        d: os.listdir(f"{root_path}/{d}")
         for d in os.listdir(root_path)
         if d != ".DS_Store"
     }
     # Filter out all directories which don't have any files in them
-    dir_files = {
-        d: files
-        for d, files in sorted(dir_files.items())
-        if len(files) > 0
-    }
+    dir_files = {d: files for d, files in sorted(dir_files.items()) if len(files) > 0}
     return dir_files
 
-def read_to_numpy(root_dir='../gesture_data/train', include=None, ignore=None, min_obs=180, verbose=0, frac_of_total=1.0):
+
+def read_to_numpy(
+    root_dir="../gesture_data/train",
+    include=None,
+    ignore=None,
+    min_obs=180,
+    verbose=0,
+    frac_of_total=1.0,
+):
     """Given a root directory, read in all valid gesture observations
     in that directory and convert to a `X`, `y`, and `paths` arrays."""
     start = time()
@@ -115,20 +143,25 @@ def read_to_numpy(root_dir='../gesture_data/train', include=None, ignore=None, m
     max_val = 0
 
     # Only include `frac_of_total` observations from each group
-    dir_files = {d: random.sample(files, k=int(frac_of_total * len(files))) for d, files in dir_files.items()}
+    dir_files = {
+        d: random.sample(files, k=int(frac_of_total * len(files)))
+        for d, files in dir_files.items()
+    }
 
     if verbose > 1:
-        format_string = "\n- ".join([
-            f'{k}: {gesture_info.get(k, {}).get("description", "<No description>"):<40} ({len(v)} files)'
-            for k,v in dir_files.items()
-        ])
-        print(f'The following gestures have data recorded for them:\n- {format_string}')
+        format_string = "\n- ".join(
+            [
+                f'{k}: {gesture_info.get(k, {}).get("description", "<No description>"):<40} ({len(v)} files)'
+                for k, v in dir_files.items()
+            ]
+        )
+        print(f"The following gestures have data recorded for them:\n- {format_string}")
 
     # Exclude all classes which do not have at least `min_obs` observations
-    n_classes = len([d for d,fs in dir_files.items() if len(fs) > min_obs])
+    n_classes = len([d for d, fs in dir_files.items() if len(fs) > min_obs])
     n_obs = sum([len(fs) for d, fs in dir_files.items() if len(fs) > min_obs])
     if verbose > 0:
-        print(f'{n_classes=}, {n_obs=}')
+        print(f"{n_classes=}, {n_obs=}")
 
     # Create arrays to store the observations and labels
     X = np.zeros((n_obs, n_timesteps * n_sensors))
@@ -149,19 +182,23 @@ def read_to_numpy(root_dir='../gesture_data/train', include=None, ignore=None, m
 
     # Iterate over every gesture
     if verbose >= 0:
-        print(f'{len(dir_files.keys())} gestures, {n_obs} total observations')
+        print(f"{len(dir_files.keys())} gestures, {n_obs} total observations")
     for gesture_index, filenames in dir_files.items():
         if len(filenames) > min_obs:
             # Populate the idx <-> gesture mapping
             idx_to_gesture[label_idx] = gesture_index
             gesture_to_idx[gesture_index] = label_idx
-            description = gesture_info.get(gesture_index, {}).get("description", "<No description>")
+            description = gesture_info.get(gesture_index, {}).get(
+                "description", "<No description>"
+            )
             if verbose > 0:
-                print(f'  {gesture_index}: {description:<40} ({len(filenames)} observations)')
+                print(
+                    f"  {gesture_index}: {description:<40} ({len(filenames)} observations)"
+                )
 
             # Iterate over every observation for the current gesture
             for file in filenames:
-                path = f'{root_dir}/{gesture_index}/{file}'
+                path = f"{root_dir}/{gesture_index}/{file}"
                 # Read in the raw sensor data.
                 df = read_to_ndarray(path)
                 # Make sure the data is the correct shape
@@ -170,21 +207,20 @@ def read_to_numpy(root_dir='../gesture_data/train', include=None, ignore=None, m
                 obs = to_flat(df)
                 max_val = max(max_val, df.max().max())
                 if np.any(np.isnan(obs)):
-                    print(f'rm {path}')
+                    print(f"rm {path}")
                 paths.append(path)
                 X[obs_idx] = obs
                 y[obs_idx] = label_idx
                 obs_idx += 1
             label_idx += 1
 
-    with open('saved_models/idx_to_gesture.pickle', 'wb') as f:
+    with open("saved_models/idx_to_gesture.pickle", "wb") as f:
         pickle.dump(idx_to_gesture, f, protocol=pickle.HIGHEST_PROTOCOL)
-    with open('saved_models/gesture_to_idx.pickle', 'wb') as f:
+    with open("saved_models/gesture_to_idx.pickle", "wb") as f:
         pickle.dump(gesture_to_idx, f, protocol=pickle.HIGHEST_PROTOCOL)
     if verbose >= 0:
-        print(f'done in {round(time() - start, 2)}s')
+        print(f"done in {round(time() - start, 2)}s")
     return X, y, np.array(paths)
-
 
 
 def train_test_split_scale(X, y, paths):
@@ -211,7 +247,7 @@ def plot_raw_gesture(
     show_values=False,
     delim_lw=2.5,
 ):
-    """ Given an array of data, create a heatmap of the sensor data.
+    """Given an array of data, create a heatmap of the sensor data.
     Returns the fig and ax"""
     # If no ax is specified, create one.
     if ax is None:
@@ -228,12 +264,15 @@ def plot_raw_gesture(
             ax.title.set_text(title)
 
     assert type(arr) is np.ndarray, f"Type is {type(arr)}, not np.array"
-    assert arr.shape == (n_timesteps, n_sensors), f"Shape isn't ({n_timesteps}, {n_sensors})"
+    assert arr.shape == (
+        n_timesteps,
+        n_sensors,
+    ), f"Shape isn't ({n_timesteps}, {n_sensors})"
 
-    time = np.array(list(range(0, (n_timesteps-1)*25+1, 25)))[::-1]
+    time = np.array(list(range(0, (n_timesteps - 1) * 25 + 1, 25)))[::-1]
 
     # Actually draw the heatmap, with square blocks.
-    img = ax.imshow(arr[::-1, :], cmap='viridis', aspect='equal')
+    img = ax.imshow(arr[::-1, :], cmap="viridis", aspect="equal")
     if show_cbar:
         fig.colorbar(img, ax=ax)
     if show_yticks:
@@ -249,7 +288,7 @@ def plot_raw_gesture(
         ax.set_xticks(range(len(fingers)))
         ax.set_xticklabels(fingers_short)
         # Rotate the x-ticks so they're visible
-        ax.tick_params(axis='x', rotation=0)
+        ax.tick_params(axis="x", rotation=0)
     else:
         ax.set_xticks([])
 
@@ -261,27 +300,28 @@ def plot_raw_gesture(
         # These constants had to be hand-tuned
         x_offset = -0.5
         ax.plot(
-            [i*3 + x_offset, i*3 + x_offset],
-            [-0.5, n_timesteps-0.5],
-            c='white',
-            lw=delim_lw if i != 5 else delim_lw*3
+            [i * 3 + x_offset, i * 3 + x_offset],
+            [-0.5, n_timesteps - 0.5],
+            c="white",
+            lw=delim_lw if i != 5 else delim_lw * 3,
         )
     if show_values:
-        for (j,i), label in np.ndenumerate(arr):
+        for (j, i), label in np.ndenumerate(arr):
             if abs(label) > 10:
-                label = '{:g}'.format(float('{:.3g}'.format(round(label, 3))))
+                label = "{:g}".format(float("{:.3g}".format(round(label, 3))))
             else:
-                label = '{:g}'.format(float('{:.2g}'.format(round(label, 2))))
-            ax.text(i, j, label, size=7, ha='center', va='center', color='white')
+                label = "{:g}".format(float("{:.2g}".format(round(label, 2))))
+            ax.text(i, j, label, size=7, ha="center", va="center", color="white")
 
     return fig, ax
 
 
 def read_to_ndarray(filename):
-    return np.loadtxt(filename, delimiter=',')
+    return np.loadtxt(filename, delimiter=",")
+
 
 def read_to_df(filename, normalise=False):
-    """ Given a filename, read in the file to a Pandas DataFrame.
+    """Given a filename, read in the file to a Pandas DataFrame.
     The columns are 'milliseconds' along with one column for each finger+dimension
     ('left-index-z', 'right-middle-y', etc). Each row is one instant of sensor measurements, with the
     time of those measurements given by the `milliseconds` column.
@@ -291,19 +331,19 @@ def read_to_df(filename, normalise=False):
     # Read in the raw data values
     df = pd.read_csv(filename, header=None, names=fingers)
     # Set the index to be a timedelta index
-    df.index = pd.TimedeltaIndex(df.index, unit='ms', name='offset_ms')
+    df.index = pd.TimedeltaIndex(df.index, unit="ms", name="offset_ms")
 
     # Check to see that we've got enough measurements to roughly fill the df
     if len(df.index) < 28:
         # And if not, return a df of NaNs
         should_return_nans = True
     # If the start and end items don't explicitly exist => add them
-    start = pd.Timedelta('0 days 00:00:00.000')
-    end = pd.Timedelta('0 days 00:00:00.975')
+    start = pd.Timedelta("0 days 00:00:00.000")
+    end = pd.Timedelta("0 days 00:00:00.975")
     if start not in df.index:
-        df.loc[start] = pd.Series(dtype='float64')
+        df.loc[start] = pd.Series(dtype="float64")
     if end not in df.index:
-        df.loc[end] = pd.Series(dtype='float64')
+        df.loc[end] = pd.Series(dtype="float64")
 
     # Remove any outliers, they're likely invalid readings
     lower_bound = 300
@@ -329,6 +369,7 @@ def read_to_df(filename, normalise=False):
         df.loc[:] = np.nan
     return df
 
+
 def predict_nicely(obs, clf, scaler, idx_to_gesture) -> List[Tuple[int, float]]:
     """Given a single observation, a classifier, and a scaler, return a list of
     predictions in the format [(gesture, probability), ...].
@@ -347,7 +388,10 @@ def predict_nicely(obs, clf, scaler, idx_to_gesture) -> List[Tuple[int, float]]:
     """
     if type(obs) is pd.core.frame.DataFrame:
         obs = obs.to_numpy()
-    assert obs.shape == (n_timesteps, n_sensors), "shape must be (n_timesteps, n_sensors)"
+    assert obs.shape == (
+        n_timesteps,
+        n_sensors,
+    ), "shape must be (n_timesteps, n_sensors)"
     # Scalar transform the observation and predict the gesture from it
     wrap_scale_flat = np.array([to_flat(scale_single(obs, scaler))])
     predict_proba = clf.predict_proba(wrap_scale_flat)
@@ -362,10 +406,11 @@ def save_model(model):
 
     Returns the filepath to which it was saved."""
     now_str = datetime.datetime.now().isoformat()
-    filepath = re.sub(r'\s+', '', f'saved_models/{now_str}_{model}.pickle')
+    filepath = re.sub(r"\s+", "", f"saved_models/{now_str}_{model}.pickle")
     with open(filepath, "wb") as f:
         pickle.dump(model, f, protocol=pickle.HIGHEST_PROTOCOL)
     return filepath
+
 
 def load_model(filepath):
     """Load and return the model located at `filepath`."""
