@@ -1,15 +1,16 @@
 print("Importing libraries")
+# import pyqtgraph as pg
+import common_utils as utils
+import tensorflow as tf
+from tensorflow import keras
 from collections import Counter
 from colors import color
 from matplotlib import cm
 from serial.tools.list_ports import comports
-from sklearn.neural_network import MLPClassifier
-from time import sleep
-from time import time
+from time import sleep, time
 from typing import Callable, List, Any
 from yaml import Loader, Dumper
 import colorsys
-import common_utils as utils
 import datetime
 import keyboard
 import numpy as np
@@ -18,17 +19,19 @@ import pickle
 import random
 import serial
 import sys
-import threading
 import yaml
+import pandas as pd
+
+# from sklearn.neural_network import MLPClassifier
 
 # Get better print options
 np.set_printoptions(threshold=sys.maxsize, linewidth=250)
 # This magic ANSI string clears a line that's been partially written
 CLR = "\x1b[2K\r"
 should_create_new_file = True
-COUNTDOWN_MS = 1_000
 GESTURE_WINDOW_MS = 30
-GESTURES_RANGE = (5, 10)
+GESTURES_RANGE = (45, 50)
+COUNTDOWN_MS = 1000
 
 
 def main():
@@ -40,20 +43,29 @@ def main():
             break
         if arg in ["predict", "p"]:
             callbacks.append(predict_cb)
+        elif arg in ["view", "v"]:
+            callbacks.append(view_cb)
         elif arg in ["incremental", "i"]:
             callbacks.append(save_incremental_cb)
         elif arg in ["save", "s"]:
             callbacks.append(save_cb)
         elif arg in ["train", "t"]:
             callbacks.append(train_model_cb)
+            import threading
         elif arg in ["drive", "d"]:
             callbacks.append(driver_cb)
             has_filename = True
         else:
             print(
-                "Usage: \
-                            python3 real_time_classification.py [incremental|i] [drive|d] [train|t] [save|s] [predict|p] [filename]\
-                            "
+                """
+Usage: 
+    sudo python3 real_time_classification.py [incremental|i] [drive|d] [train|t] [save|s] [predict|p] [view|v] [filename] 
+    - [i]ncremental: Incrementally append data line-by-line to a csv file
+    - [d]rive: Take the predicted gesture and convert it to a character, writing to stdout (and to sys.argv[-1]).
+    - [t]rain: Train an ML model in a separate thread.
+    - [s]ave: Given a series of new measurements, populate an observation and save to disc as required
+    - [p]redict: Predict the current gesture, printing the probabilities to stdout.
+    - [v]iew: Open up a plot to watch the data in real time."""
             )
             sys.exit(1)
 
@@ -103,10 +115,10 @@ def main():
         )
         sleep(2)
 
-    keyboard.add_hotkey("space", burn_most_recent_observations)
-
-    gestures = list(gesture_info().keys())[GESTURES_RANGE[0] : GESTURES_RANGE[1]]
-    print(f"{CLR}Possible gestures: {gestures}")
+    if any(arg.startswith("i") for arg in sys.argv[1:]):
+        keyboard.add_hotkey("space", burn_most_recent_observations)
+        gestures = list(gesture_info().keys())[GESTURES_RANGE[0] : GESTURES_RANGE[1]]
+        print(f"{CLR}Possible gestures: {gestures}")
 
     # Get the correct serial port, exiting if none exists
     port = get_serial_port()
@@ -129,10 +141,28 @@ def get_serial_port() -> str:
     ports = [p.device for p in comports() if p.device.startswith("/dev/cu.usbmodem")]
     if len(ports) > 1:
         # If there's more than one, offer the user a choice
+        filtered_ports = []
         for i, port in enumerate(ports):
-            print(f"[{i}]: {port}")
-        idx = int(input(f"Please choose a port index [0..{len(ports)-1}]: "))
-        port = ports[idx]
+            try:
+                with serial.Serial(
+                    port=port, baudrate=19_200, timeout=1
+                ) as serial_port:
+                    if serial_port.isOpen():
+                        line = serial_port.readline().decode("utf-8")
+                        if line:
+                            filtered_ports.append(port)
+            except Exception as e:
+                continue
+        if len(filtered_ports) != 1:
+            for i, port in filtered_ports:
+                print(f"[{i}]: {port}")
+            idx = int(input(f"Please choose a port index [0..{len(ports)-1}]: "))
+            port = ports[idx]
+        elif len(filtered_ports) == 0:
+            print("No ports beginning with `/dev/cu.usbmodem` found")
+            sys.exit(1)
+        else:
+            port = filtered_ports[0]
     elif len(ports) == 0:
         # If there are no ports available, exit with status code 1
         print("No ports beginning with `/dev/cu.usbmodem` found")
@@ -144,16 +174,12 @@ def get_serial_port() -> str:
     return port
 
 
-def gestures_to_keystrokes(path="gestures_to_keystrokes.yaml"):
-    """Simple utility to read in the gestures_to_keystrokes yaml file and
-    return it as a dictionary.
-
-    The dictionary structured like Dict{gesture->keystroke} and is not
-    guaranteed to have every gesture defined. Undefined gestures should result
-    in no keys being pressed."""
+def gestures_to_keystrokes(path="../gesture_data/gesture_info.yaml"):
+    """Simple utility to read in the yaml file and
+    return it as a dictionary."""
     with open(path, "r") as f:
-        g2k = yaml.load(f.read(), Loader=Loader)
-    return g2k
+        g2k = yaml.safe_load(f.read()).get("gestures", {})
+    return {k: v.get("key", "unknown") for k, v in g2k.items()}
 
 
 def gesture_info(path="../gesture_data/gesture_info.yaml"):
@@ -174,8 +200,13 @@ def loop_over_serial_stream(
     alphabetically-first Classifier available in `saved_models/`. If no model
     is there, then no predictions will be given but everything will still
     function appropriately."""
+    model_path = "models/2022-10-17T19:20:09.048391"
+    if not os.path.exists(model_path):
+        model_path = "."
+    # Get the config
+    config = utils.load_config(model_path + "/config.yaml")
     # Define some constants
-    n_timesteps = 20
+    n_timesteps = config["window_size"]
     n_sensors = 30
     # The first loop can sometimes contain incomplete data, so define a flag so
     # that we can skip it if required
@@ -199,8 +230,17 @@ def loop_over_serial_stream(
         ["saved_models/" + p for p in os.listdir("saved_models/") if "Classifier" in p],
         reverse=True,
     )
-    # Read in the first model alphabetically
-    clf = utils.load_model(model_paths[0])
+    # # Read in the first model alphabetically
+    # clf = utils.load_model(model_paths[0])
+    # Load the sklearn model
+    with open("./models/255_vs_rest.pickle", "rb") as f:
+        clf = pickle.load(f)
+    if any(arg.startswith("p") for arg in sys.argv[1:]):
+        # Load the TensorFlow model
+        model = keras.models.load_model(model_path)
+    else:
+        model = None
+
     # Create a dictionary of data to pass to the callback
     cb_data: dict[str, Any] = {
         "n_timesteps": n_timesteps,
@@ -218,6 +258,8 @@ def loop_over_serial_stream(
         "gesture_to_idx": gesture_to_idx,
         "scaler": scaler,
         "clf": clf,
+        "model": model,
+        "config": config,
         "prediction": "no pred",
         "prediction_history": [],
         "g2k": gestures_to_keystrokes(),
@@ -234,6 +276,7 @@ def loop_over_serial_stream(
             # duration between measurements
             cb_data["prev_time_ms"] = cb_data["time_ms"]
             cb_data["time_ms"] = int(time() * 1000)
+            # print(CLR, cb_data["prev_time_ms"], cb_data["time_ms"])
             before_split = serial_handle.readline().decode("utf-8")
             # Comments starting with `#` act as heartbeats
             if before_split.startswith("#"):
@@ -309,9 +352,7 @@ def write_debug_line(
     ]
     curr_idx = cb_data["curr_idx"]
     cb_data["last_gesture"] = cb_data.get("last_gesture", time_ms())
-    cb_data["lineup"] = cb_data.get(
-        "lineup", random.sample(gestures, min(len(gestures), 5))
-    )
+    cb_data["lineup"] = cb_data.get("lineup", gestures)
 
     colors = ["left:"]
     dims = ["x", "y", "z"]
@@ -334,13 +375,19 @@ def write_debug_line(
 
     if time_ms() - cb_data["last_gesture"] >= COUNTDOWN_MS:
         cb_data["last_gesture"] = time_ms()
-        cb_data["lineup"].pop(0)
+        popped = cb_data["lineup"].pop(0)
         random.seed(time_ms())
-        cb_data["lineup"].append(random.choice(gestures))
+        cb_data["lineup"].append(popped)
         print(CLR, get_gesture_counts())
 
     gesture = cb_data["lineup"][0]
-    description = cb_data["gesture_info"].get(gesture)["description"]
+    description = (
+        cb_data["gesture_info"]
+        .get(gesture)["description"]
+        .lower()
+        .replace("left", "l")
+        .replace("right", "r")
+    )
     curr_gesture_str = (
         f"{gesture.replace('gesture0', 'g')}: {description: <20}".replace("thumb", "1")
         .replace("index", "2")
@@ -359,6 +406,9 @@ def write_debug_line(
     inverse = color(
         curr_gesture_str[progress:], fg=get_color(gesture), bg="white", style="bold"
     )
+    if not any(arg.startswith("i") for arg in sys.argv[1:]):
+        inverse = ""
+        regular = ""
     cb_data["gesture_idx"] = int(gesture.replace("gesture", ""))
     # print(CLR, gesture, cb_data["gesture_idx"])
     prediction = cb_data["prediction"]
@@ -368,15 +418,33 @@ def write_debug_line(
 
 
 def format_prediction(
-    gesture: str, proba: float, shortness=0, cmap="inferno", threshold=0.99
+    gesture: str,
+    proba: float,
+    shortness=0,
+    cmap="inferno",
+    threshold=0.99,
+    g2k=None,
 ):
     """Given a gesture and it's probability, return an ANSI coloured string
     colour mapped to it's probability."""
-    gesture = gesture.replace("gesture0", "g").replace("g0", "g").replace("g0", "g")
-    gesture = gesture if shortness <= 1 else gesture.replace("g", "")
-    fstring = f"{gesture}" + (f":{{value:>02}}%" if shortness < 1 else "")
+    if g2k is not None and gesture != "gesture0255":
+        gesture = g2k.get(gesture, gesture)
+        if gesture == "\n":
+            gesture = r"\n"
+        elif gesture == "\t":
+            gesture = r"\t"
+    else:
+        gesture = (
+            gesture.replace("gesture0", "g").replace("g0", "g").replace("g0", "g") + " "
+        )
+        gesture = gesture if shortness <= 1 else gesture.replace("g", "")
+    fstring = f"{gesture}" + (f"{{value:>2}}%" if shortness < 1 else "")
     colored = get_colored_string(
-        int(proba * 100), 100, fstring=fstring, cmap=cmap, highlight=proba >= threshold
+        min(99, int(proba * 100)),
+        100,
+        fstring=fstring,
+        cmap=cmap,
+        highlight=proba >= threshold,
     )
     return colored
 
@@ -399,9 +467,26 @@ def get_colored_string(
     return coloured
 
 
+def view_cb(new_measurements: np.ndarray, d: dict[str, Any]) -> dict[str, Any]:
+    """Create a plot with the data"""
+    print(f"{CLR}Plotting")
+
+    for i in range(2):
+        axs.append([])
+        for j in range(5):
+            data = (
+                10000
+                + 15000 * pg.gaussianFilter(np.random.random(size=10000), 10)
+                + 3000 * np.random.random(size=10000)
+            )
+            axs[i][j].plot(data)
+    return d
+
+
 def save_incremental_cb(
     new_measurements: np.ndarray, d: dict[str, Any]
 ) -> dict[str, Any]:
+    """Append data line-by-line to a csv file"""
     # only write to file if we've got a non-None gesture index
     if d["gesture_idx"] is None:
         return d
@@ -434,10 +519,15 @@ def save_cb(new_measurements: np.ndarray, d: dict[str, Any]) -> dict[str, Any]:
     if not np.isnan(d["obs"]).any().any():
         gesture_idx = f'gesture{d["gesture_idx"]:04}'
         try:
-            predictions = utils.predict_nicely(
-                d["obs"], d["clf"], d["scaler"], d["idx_to_gesture"]
+            # predictions = utils.predict_nicely(
+            #     d["obs"], d["clf"], d["scaler"], d["idx_to_gesture"]
+            # )
+            predictions = utils.predict_tf(
+                d["obs"], d["clf"], d["config"], d["model"], d["idx_to_gesture"]
             )
-            d["prediction"] = format_prediction(*predictions[0])
+            d["prediction"] = (
+                format_prediction(*predictions[0]) if predictions[0][1] > 0.98 else ""
+            )
             d["prediction_history"].append(predictions)
             # If we're predicting something that's not the actual gesture
             if (
@@ -572,6 +662,7 @@ def predict_cb(new_measurements: np.ndarray, d: dict[str, Any]) -> dict[str, Any
         d["obs"][0, :] = new_measurements
         # And impute the missing values as the mean of the most recent
         # measurements and the new measurements
+        # print(diff, shift_by)
         avg = np.mean((d["obs"][0, :], d["obs"][shift_by, :]), axis=0)
         for idx in range(1, shift_by):
             d["obs"][idx, :] = avg
@@ -584,24 +675,31 @@ def try_print_probabilities(d):
     """Attempt to predict the gesture based on the observation in `d`."""
     # If we have any NaNs, don't try predict anything
     if np.isnan(d["obs"]).any():
-        print(f"{CLR}Not predicting, (obs contains {(np.isnan(d['obs'])).sum()} NaNs)")
+        # print(f"{CLR}Not predicting, (obs contains {(np.isnan(d['obs'])).sum()} NaNs)")
         return d
 
-    predictions = utils.predict_nicely(
-        d["obs"], d["clf"], d["scaler"], d["idx_to_gesture"]
+    predictions = utils.predict_tf(
+        d["obs"], d["clf"], d["config"], d["model"], d["idx_to_gesture"]
     )
     print(f"{CLR}", end="")
-    d["prediction"] = format_prediction(*predictions[0])
+    # save the best prediction to the callback dictionary
+    d["prediction"] = (
+        format_prediction(*predictions[0]) if predictions[0][1] > 0.98 else ""
+    )
     # Only count a prediction if it's over 98% probable
     best_proba = 0.98
     best_gesture = None
     for gesture, proba in sorted(predictions, key=lambda gp: gp[0]):
-        if proba > best_proba:
+        if proba >= best_proba:
             best_proba = proba
             best_gesture = gesture
         print(
             format_prediction(
-                gesture, proba, shortness=len(predictions) // 25, cmap="inferno"
+                gesture,
+                proba,
+                shortness=len(predictions) // 25,
+                cmap="inferno",
+                g2k=d["g2k"],
             ),
             end=" ",
         )
@@ -642,15 +740,16 @@ def driver_cb(new_measurements: np.ndarray, d: dict[str, Any]) -> dict[str, Any]
 
     # If we have any NaNs, don't try predict anything
     if np.isnan(d["obs"]).any():
-        print(f"{CLR}Not predicting, (obs contains {(np.isnan(d['obs'])).sum()} NaNs)")
         return d
 
-    predictions = utils.predict_nicely(
-        d["obs"], d["clf"], d["scaler"], d["idx_to_gesture"]
+    predictions = utils.predict_tf(
+        d["obs"], d["clf"], d["config"], d["model"], d["idx_to_gesture"]
     )
     print(f"{CLR}", end="")
-    d["prediction"] = format_prediction(*predictions[0])
-    # Only count a prediction if it's over 98% probable
+    d["prediction"] = (
+        format_prediction(*predictions[0]) if predictions[0][1] > 0.98 else ""
+    )
+
     best_proba = 0.0
     best_gesture = None
     for gesture, proba in sorted(predictions, key=lambda gp: gp[0]):
@@ -658,22 +757,35 @@ def driver_cb(new_measurements: np.ndarray, d: dict[str, Any]) -> dict[str, Any]
             best_proba = proba
             best_gesture = gesture
 
+    # Only count a prediction if it's MIN_PROBABILITY% probable and has
+    # occured at least REQ_BUCKET_QUANTITY times in a row
     MIN_PROBABILITY = 0.98
-    REQ_BUCKET_QUANTITY = 2
+    REQ_BUCKET_QUANTITY = 1
 
-    if best_proba > MIN_PROBABILITY:
+    if best_gesture != "gesture0255" and best_proba >= MIN_PROBABILITY:
         if best_gesture != d["curr_gesture"]:
             d["bucket"] = 0
             d["curr_gesture"] = best_gesture
         d["bucket"] += 1
-        if d["bucket"] == REQ_BUCKET_QUANTITY and best_gesture != "gesture0255":
+        if d["bucket"] == REQ_BUCKET_QUANTITY:
             now_str = datetime.datetime.now().isoformat()
-            print(
-                now_str, d["g2k"].get(best_gesture, best_gesture), f" <{best_gesture}>"
-            )
-            if len(sys.argv) > 2:
-                with open(sys.argv[-1], "a") as f:
+            # If there's a text file provided, write to it
+            file_idx = sys.argv.index("d") + 1
+            if file_idx < len(sys.argv):
+                with open(sys.argv[file_idx], "a") as f:
                     f.write(d["g2k"].get(best_gesture, best_gesture))
+            else:
+                keycode = (
+                    d["g2k"].get(best_gesture, best_gesture).encode("string_escape")
+                )
+                if keycode == "\n":
+                    keycode = r"\n"
+                elif keycode == "\t":
+                    keycode = r"\t"
+                print(f"{now_str}{keycode}<{best_gesture}>")
+
+    else:
+        d["curr_gesture"] = "gesture0255"
     return d
 
 

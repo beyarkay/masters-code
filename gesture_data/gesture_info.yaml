@@ -1,311 +1,61 @@
 gestures:
-  gesture0001:
-    description: Left thumb IP flexion
-    desc: l1-ip-flx
-  gesture0002:
-    description: Left index PIP flexion
-    desc: l2-pip-flx
-  gesture0003:
-    description: Left middle PIP flexion
-    desc: l3-pip-flx
-  gesture0004:
-    description: Left ring PIP flexion
-    desc: l4-pip-flx
-  gesture0005:
-    description: Left little PIP flexion
-    desc: l5-pip-flx
 
-  gesture0006:
-    description: Right thumb IP flexion
-    desc: r1-ip-flx
-  gesture0007:
-    description: Right index PIP flexion
-    desc: r2-pip-flx
-  gesture0008:
-    description: Right middle PIP flexion
-    desc: r3-pip-flx
-  gesture0009:
-    description: Right ring PIP flexion
-    desc: r4-pip-flx
-  gesture0010:
-    description: Right little PIP flexion
-    desc: r5-pip-flx
+  gesture0000: { description: 000 l 5, key:  z }
+  gesture0001: { description: 000 l 4, key:  x }
+  gesture0002: { description: 000 l 3, key:  c }
+  gesture0003: { description: 000 l 2, key:  v }
+  gesture0004: { description: 000 l 1, key:  b }
+  gesture0005: { description: 000 r 1, key:  n }
+  gesture0006: { description: 000 r 2, key:  m }
+  gesture0007: { description: 000 r 3, key: ","}
+  gesture0008: { description: 000 r 4, key:  . }
+  gesture0009: { description: 000 r 5, key:  / }
 
-  gesture0011:
-    description: Left thumb IP extension
-    desc: l1-ip-ext
-  gesture0012:
-    description: Left index PIP extension
-    desc: l2-pip-ext
-  gesture0013:
-    description: Left middle PIP extension
-    desc: l3-pip-ext
-  gesture0014:
-    description: Left ring PIP extension
-    desc: l4-pip-ext
-  gesture0015:
-    description: Left little PIP extension
-    desc: l5-pip-ext
+  gesture0010: { description: 045 l 5, key:  a }
+  gesture0011: { description: 045 l 4, key:  s }
+  gesture0012: { description: 045 l 3, key:  d }
+  gesture0013: { description: 045 l 2, key:  f }
+  gesture0014: { description: 045 l 1, key:  g }
+  gesture0015: { description: 045 r 1, key:  h }
+  gesture0016: { description: 045 r 2, key:  j }
+  gesture0017: { description: 045 r 3, key:  k }
+  gesture0018: { description: 045 r 4, key:  l }
+  gesture0019: { description: 045 r 5, key:  ; }
 
-  gesture0016:
-    description: Right thumb IP extension
-    desc: r1-ip-ext
-  gesture0017:
-    description: Right index PIP extension
-    desc: r2-pip-ext
-  gesture0018:
-    description: Right middle PIP extension
-    desc: r3-pip-ext
-  gesture0019:
-    description: Right ring PIP extension
-    desc: r4-pip-ext
-  gesture0020:
-    description: Right little PIP extension
-    desc: r5-pip-ext
+  gesture0020: { description: 090 l 5, key:  q }
+  gesture0021: { description: 090 l 4, key:  w }
+  gesture0022: { description: 090 l 3, key:  e }
+  gesture0023: { description: 090 l 2, key:  r }
+  gesture0024: { description: 090 l 1, key:  t }
+  gesture0025: { description: 090 r 1, key:  y }
+  gesture0026: { description: 090 r 2, key:  u }
+  gesture0027: { description: 090 r 3, key:  i }
+  gesture0028: { description: 090 r 4, key:  o }
+  gesture0029: { description: 090 r 5, key:  p }
 
-  gesture0021:
-    description: Left thumb CMC flexion
-    desc: l1-cmc-flx
-  gesture0022:
-    description: Left index MCP flexion
-    desc: l2-mcp-flx
-  gesture0023:
-    description: Left middle MCP flexion
-    desc: l3-mcp-flx
-  gesture0024:
-    description: Left ring MCP flexion
-    desc: l4-mcp-flx
-  gesture0025:
-    description: Left little MCP flexion
-    desc: l5-mcp-flx
+  gesture0030: { description: 135 l 5, key:  1 }
+  gesture0031: { description: 135 l 4, key:  2 }
+  gesture0032: { description: 135 l 3, key:  3 }
+  gesture0033: { description: 135 l 2, key:  4 }
+  gesture0034: { description: 135 l 1, key:  5 }
+  gesture0035: { description: 135 r 1, key:  6 }
+  gesture0036: { description: 135 r 2, key:  7 }
+  gesture0037: { description: 135 r 3, key:  8 }
+  gesture0038: { description: 135 r 4, key:  9 }
+  gesture0039: { description: 135 r 5, key:  0 }
 
-  gesture0026:
-    description: Right thumb CMC flexion
-    desc: r1-cmc-flx
-  gesture0027:
-    description: Right index MCP flexion
-    desc: r2-mcp-flx
-  gesture0028:
-    description: Right middle MCP flexion
-  gesture0029:
-    description: Right ring MCP flexion
-    desc: r4-mcp-flx
-  gesture0030:
-    description: Right little MCP flexion
-    desc: r5-mcp-flx
+  gesture0040: { description: 180 l 5, key: "-"}
+  gesture0041: { description: 180 l 4, key: "["}
+  gesture0042: { description: 180 l 3, key: "'"}
+  gesture0043: { description: 180 l 2, key: "§"}
+  gesture0044: { description: 180 l 1, key: "180-l-1"}
+  gesture0045: { description: 180 r 1, key: "="}
+  gesture0046: { description: 180 r 2, key: "]"}
+  gesture0047: { description: 180 r 3, key: "\\"}
+  gesture0048: { description: 180 r 4, key: "`"}
+  gesture0049: { description: 180 r 5, key: "180-r-5"}
 
-  gesture0031:
-    description: Left thumb CMC extension
-    desc: l1-cmc-ext
-  gesture0032:
-    description: Left index MCP extension
-    desc: l2-mcp-ext
-  gesture0033:
-    description: Left middle MCP extension
-    desc: l3-mcp-ext
-  gesture0034:
-    description: Left ring MCP extension
-    desc: l4-mcp-ext
-  gesture0035:
-    description: Left little MCP extension
-    desc: l5-mcp-ext
-
-  gesture0036:
-    description: Right thumb CMC extension
-    desc: r1-cmc-ext
-  gesture0037:
-    description: Right index MCP extension
-    desc: r2-mcp-ext
-  gesture0038:
-    description: Right middle MCP extension
-    desc: r3-mcp-ext
-  gesture0039:
-    description: Right ring MCP extension
-    desc: r4-mcp-ext
-  gesture0040:
-    description: Right little MCP extension
-    desc: r5-mcp-ext
-
-  gesture0041:
-    description: No gesture
-    desc: ng
-  gesture0042: # 0b 0010 1010
-    description: Left thumb taps left index
-    desc: l1 taps l2
-  gesture0043:
-    description: Left thumb taps left middle
-    desc: l1 taps l3
-  gesture0044:
-    description: Left thumb taps left ring
-    desc: l1 taps l4
-  gesture0045:
-    description: Left thumb taps left little
-    desc: l1 taps l5
-
-  gesture0046:
-    description: No gesture
-    desc: ng
-  gesture0047: # 0b 0010 1111
-    description: Right thumb taps right index
-    desc: r1 taps r2
-  gesture0048:
-    description: Right thumb taps right middle
-    desc: r1 taps r3
-  gesture0049:
-    description: Right thumb taps right ring
-    desc: r1 taps r4
-  gesture0050:
-    description: Right thumb taps right little
-    desc: r1 taps r5
-
-  gesture0051:
-    description: Left wrist pronation
-    desc: l-wrist-pro
-  gesture0052:
-    description: Left wrist radial deviation
-    desc: l-wrist-rad-dev
-  gesture0053:
-    description: Left wrist flexion
-    desc: l-wrist-flx
-  gesture0054:
-    description: No gesture
-    desc: ng
-  gesture0055:
-    description: No gesture
-    desc: ng
-
-  gesture0056:  # 0b 0011 1000
-    description: Right wrist pronation
-    desc: r-wrist-pro
-  gesture0057:
-    description: Right wrist radial deviation
-    desc: r-wrist-rad-dev
-  gesture0058:
-    description: Right wrist flexion
-    desc: r-wrist-flx
-  gesture0059:
-    description: No gesture
-    desc: ng
-  gesture0060:
-    description: No gesture
-    desc: ng
-
-  gesture0061:
-    description: Left wrist supination
-    desc: l-wrist-sup
-  gesture0062:
-    description: Left wrist ulnar deviation
-    desc: l-wrist-uln-dev
-  gesture0063:
-    description: Left wrist extension
-    desc: l-wrist-ext
-  gesture0064:
-    description: No gesture
-    desc: ng
-  gesture0065:
-    description: No gesture
-    desc: ng
-
-  gesture0066:
-    description: Right wrist supination
-    desc: r-wrist-sup
-  gesture0067:
-    description: Right wrist ulnar deviation
-    desc: r-wrist-uln-dev
-  gesture0068:
-    description: Right wrist extension
-    desc: r-wrist-ext
-  gesture0069:
-    description: No gesture
-    desc: ng
-  gesture0070:
-    description: No gesture
-    desc: ng
-
-  gesture0071:
-    description: No gesture
-    desc: No gesture
-  gesture0072: # 0b 0100 1000
-    description: l1 to left index and left middle
-    desc: l1 to l2+l3
-  gesture0073: # 0b 0100 1001
-    description: l1 to left middle and left ring
-    desc: l1 to l3+l4
-  gesture0074: # 0b 0100 1010
-    description: l1 to left ring and left little
-    desc: l1 to l4+l5
-  gesture0075: # 0b 0100 1011
-    description: l1 to left little and left index
-    desc: l1 to l5+l2
-
-  gesture0076:
-    description: No gesture
-    desc: No gesture
-  gesture0077: # 0b 0100 1101
-    description: r1 to right index and right middle
-    desc: r1 to r2 and r3
-  gesture0078: # 0b 0100 1110
-    description: r1 to right middle and right ring
-    desc: r1 to r3 and r4
-  gesture0079: # 0b 0100 1111
-    description: r1 to right ring and right little
-    desc: r1 to r4 and r5
-  gesture0080: # 0b 0101 0000
-    description: r1 to right little and right index
-    desc: r1 to r5 and r2
-
-  gesture0081: # 0b 0101 0001
-    description: l1 to left index and left ring
-    desc: l1 to l2 and l4
-  gesture0082: # 0b 0101 0010
-    description: l1 to left middle and left little
-    desc: l1 to l3 and l5
-
-  gesture0086: # 0b 0101 0110
-    description: r1 to right index and right ring
-    desc: r1 to r2 and r4
-  gesture0087: # 0b 0101 0111
-    description: r1 to right middle and right little
-    desc: r1 to r3 and r5
-
-  gesture0091:
-    description: No gesture
-    desc: No gesture
-  gesture0092: # 0b 0101 1100
-    description: l1 to left index, middle, and ring
-    desc: l1 to l2, middle, and ring
-  gesture0093: # 0b 0101 1101
-    description: l1 to left middle, ring, and little
-    desc: l1 to l3, ring, and little
-  gesture0094: # 0b 0101 1110
-    description: l1 to left ring, little, and index
-    desc: l1 to l4, little, and index
-  gesture0095: # 0b 0101 1111
-    description: l1 to left little, index, and middle
-    desc: l1 to l5, index, and middle
-
-  gesture0096:
-    description: No gesture
-    desc: No gesture
-  gesture0097: # 0b 0110 0001
-    description: r1 to right index, middle, and ring
-    desc: r1 to r2, middle, and ring
-  gesture0098: # 0b 0110 0010
-    description: r1 to right middle, ring, and little
-    desc: r1 to r3, ring, and little
-  gesture0099: # 0b 0110 0011
-    description: r1 to right ring, little, and index
-    desc: r1 to r4, little, and index
-  gesture0100: # 0b 0110 0100
-    description: r1 to right little, index, and middle
-    desc: r1 to r5, index, and middle
-
-  gesture0253:
-    description: Gestures for which the actual label is unknown
-    desc: unknown
-  gesture0254:
-    description: The gesture corresponding to *Ergo* resting on a table
-    desc: on table
+  # Auxiliary gestures
   gesture0255:
     description: The "no movement" gesture
     desc: no mvmt
