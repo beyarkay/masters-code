@@ -1,0 +1,23 @@
+activation: softmax
+architecture: ffnn
+batch_size: 2048
+center_label: true
+dropout_frac: 0.5
+epochs: 500
+g255_vs_rest: false
+gestures: null
+label_after: 10
+label_before: 10
+label_expansion: 5
+label_offset: 0
+label_size_over_window_size: 0.5
+loss_fn: sparse_categorical_crossentropy
+n_hidden_units:
+  1: 128
+  2: 128
+omit_0255: false
+optimiser: adam
+test_frac: 0.25
+use_class_weights: true
+window_size: 10
+window_skip: 1

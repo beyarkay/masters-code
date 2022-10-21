@@ -228,6 +228,7 @@ pyobjc-framework-Virtualization==8.5
 pyobjc-framework-Vision==8.5
 pyobjc-framework-WebKit==8.5
 pyparsing==3.0.9
+pyqtgraph==0.13.1
 pyrsistent==0.18.1
 pyserial==3.5
 PySocks==1.7.1

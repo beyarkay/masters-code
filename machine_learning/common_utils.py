@@ -1,33 +1,35 @@
 import matplotlib.pyplot as plt
-import matplotlib.image as mplimg
 import matplotlib as mpl
-
-# By default use a larger figure size
-mpl.rcParams["figure.figsize"] = [12, 12]
-mpl.rcParams["figure.dpi"] = 200
 import numpy as np
 import pandas as pd
-import seaborn as sns
 import sys
 import os
 import datetime
 from time import time
-import ipywidgets as widgets
-from ipywidgets import interact, interact_manual
 import yaml
-from yaml import Loader, Dumper
 import re
 import pickle
 import random
 from typing import List, Tuple
-
-# sklearn imports
 from sklearn.model_selection import train_test_split
 from sklearn.preprocessing import StandardScaler
-from sklearn.preprocessing import RobustScaler
 
+# By default use a larger figure size
+mpl.rcParams["figure.figsize"] = [12, 12]
+mpl.rcParams["figure.dpi"] = 200
+
+CLR = "\x1b[2K\r"
+
+# from ipywidgets import interact, interact_manual
+# import matplotlib.image as mplimg
+# import tensorflow as tf
+# from tensorflow import keras
+# import seaborn as sns
+# import ipywidgets as widgets
+# from yaml import Loader, Dumper
+# from sklearn.preprocessing import RobustScaler
 # Setup seaborn
-sns.set()
+# sns.set()
 
 # Define some variables for creating feature names like 'left-thumb-x' or 'right-index-z'
 finger_names = [
@@ -104,7 +106,7 @@ def scale_single(arr, scaler):
 def get_gesture_info():
     """Get a dictionary of gestures to their text descriptions."""
     with open("../gesture_data/gesture_info.yaml", "r") as f:
-        gesture_info = yaml.load(f.read(), Loader=Loader)
+        gesture_info = yaml.safe_load(f.read())
     return gesture_info["gestures"]
 
 
@@ -368,6 +370,31 @@ def read_to_df(filename, normalise=False):
     if should_return_nans:
         df.loc[:] = np.nan
     return df
+
+
+def load_config(path="config.yaml") -> dict[str, any]:
+    """Load the config file and return the dictionary representation of it."""
+    with open(path, "r") as file:
+        return yaml.safe_load(file)
+
+
+def update_config(config, new_additions) -> dict[str, any]:
+    """Update the given config, save the update to disc, and return it."""
+    config.update(new_additions)
+    with open("config.yaml", "w") as file:
+        yaml.dump(config, file)
+    return config
+
+
+def predict_tf(obs, clf, config, model, idx_to_gesture) -> List[Tuple[int, float]]:
+    # is_g255 = clf.predict(np.array([obs.reshape(-1)]))[0]
+    probabilities = model(np.array([obs])).numpy()[0]
+    obs_pred = np.argmax(probabilities)
+
+    # Sort the predictions
+    predictions = sorted(enumerate(probabilities), key=lambda ip: -ip[1])
+    # Convert the indexes to gestures and return the predictions
+    return [(idx_to_gesture[idx], proba) for idx, proba in predictions]
 
 
 def predict_nicely(obs, clf, scaler, idx_to_gesture) -> List[Tuple[int, float]]:
