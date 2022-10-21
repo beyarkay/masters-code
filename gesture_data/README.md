@@ -261,4 +261,22 @@ These motions are all the thumb tapping two fingers together.
 97. Right thumb to right index, middle, and ring fingers
 98. Right thumb to right middle, ring, and little fingers
 99. Right thumb to right ring, little, and index fingers
-10. Right thumb to right little, index, and middle fingers
+100. Right thumb to right little, index, and middle fingers
+
+### `gesture0101..gesture0146` two finger flexions
+
+These gestures all involve two fingers in the state of flexion at the same
+time. Since there are 10 fingers, this results in `10*(10-1)*0.5=`45 gestures
+
+r1 and 1 of (r2, r3, r4, r5, l1, l2, l3, l4, l5)
+r2 and 1 of (r3, r4, r5, l1, l2, l3, l4, l5)
+r3 and 1 of (r4, r5, l1, l2, l3, l4, l5)
+r4 and 1 of (r5, l1, l2, l3, l4, l5)
+r5 and 1 of (l1, l2, l3, l4, l5)
+l1 and 1 of (l2, l3, l4, l5)
+l2 and 1 of (l3, l4, l5)
+l3 and 1 of (l4, l5)
+l4 and 1 of (l5)
+
+
+
