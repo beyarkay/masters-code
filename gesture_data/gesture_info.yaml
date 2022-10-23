@@ -48,12 +48,12 @@ gestures:
   gesture0041: { description: 180 l 4, key: "["}
   gesture0042: { description: 180 l 3, key: "'"}
   gesture0043: { description: 180 l 2, key: "§"}
-  gesture0044: { description: 180 l 1, key: "180-l-1"}
+  gesture0044: { description: 180 l 1, key: "Control"}
   gesture0045: { description: 180 r 1, key: "="}
   gesture0046: { description: 180 r 2, key: "]"}
   gesture0047: { description: 180 r 3, key: "\\"}
   gesture0048: { description: 180 r 4, key: "`"}
-  gesture0049: { description: 180 r 5, key: "180-r-5"}
+  gesture0049: { description: 180 r 5, key: "Shift"}
 
   # Auxiliary gestures
   gesture0255:

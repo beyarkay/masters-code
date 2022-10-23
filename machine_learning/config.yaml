@@ -18,6 +18,6 @@ n_hidden_units:
 omit_0255: false
 optimiser: adam
 test_frac: 0.25
-use_class_weights: true
+use_class_weights: false
 window_size: 10
 window_skip: 1
