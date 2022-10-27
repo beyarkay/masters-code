@@ -33,10 +33,9 @@ def main(args):
     callbacks = []
     if args["predict"]:
         callbacks.append(predict_cb)
-    elif args["incremental"]:
-
+    if args["incremental"]:
         callbacks.append(save_incremental_cb)
-    elif args["output"]:
+    if args["output"]:
         callbacks.append(driver_cb)
 
     if args["incremental"]:
