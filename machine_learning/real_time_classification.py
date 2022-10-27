@@ -36,7 +36,7 @@ def main(args):
     elif args["incremental"]:
 
         callbacks.append(save_incremental_cb)
-    elif args["ouput"]:
+    elif args["output"]:
         callbacks.append(driver_cb)
 
     if args["incremental"]:
