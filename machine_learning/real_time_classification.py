@@ -1,29 +1,21 @@
 print("Importing libraries")
-# import pyqtgraph as pg
-import common_utils as utils
-import tensorflow as tf
-from tensorflow import keras
 from collections import Counter
 from colors import color
 from matplotlib import cm
 from serial.tools.list_ports import comports
+from tensorflow import keras
 from time import sleep, time
 from typing import Callable, List, Any
-from yaml import Loader, Dumper
+import argparse
 import colorsys
+import common_utils as utils
 import datetime
 import keyboard
 import numpy as np
 import os
-import pickle
-import random
 import serial
 import sys
 import yaml
-import pandas as pd
-import argparse
-
-# from sklearn.neural_network import MLPClassifier
 
 # Get better print options
 np.set_printoptions(threshold=sys.maxsize, linewidth=250)
@@ -42,6 +34,7 @@ def main(args):
     if args["predict"]:
         callbacks.append(predict_cb)
     elif args["incremental"]:
+
         callbacks.append(save_incremental_cb)
     elif args["ouput"]:
         callbacks.append(driver_cb)
@@ -161,7 +154,7 @@ def gestures_to_keystrokes(path="../gesture_data/gesture_info.yaml"):
 
 def gesture_info(path="../gesture_data/gesture_info.yaml"):
     with open(path, "r") as f:
-        gesture_info = yaml.load(f.read(), Loader=Loader)["gestures"]
+        gesture_info = yaml.safe_load(f.read())["gestures"]
     return gesture_info
 
 
@@ -170,19 +163,13 @@ def loop_over_serial_stream(
     callbacks: List[Callable[[np.ndarray, dict[str, Any]], dict[str, Any]]],
     args: dict,
 ) -> None:
-    """Read in one set of measurements from `serial_handle` and pass to
-    `callable`.
-
-    Some pre-processing and error checking is done to ensure things
-    transpire nicely. The model used for predictions is the
-    alphabetically-first Classifier available in `saved_models/`. If no model
-    is there, then no predictions will be given but everything will still
-    function appropriately."""
-    model_path = "models/2022-10-27T18:01:09.922053/"
-    if not os.path.exists(model_path):
-        model_path = os.listdir("models/")[0]
+    model_path = args["model"]
+    print(model_path)
+    model = keras.models.load_model(model_path)
     # Get the config
     config = utils.load_config(model_path + "/config.yaml")
+    idx_to_gesture = config["i2g"]
+    gesture_to_idx = config["g2i"]
     # Define some constants
     n_timesteps = config["window_size"]
     n_sensors = 30
@@ -190,13 +177,7 @@ def loop_over_serial_stream(
     # that we can skip it if required
     first_loop = True
 
-    # Read in the index to gesture mappings used by the machine learning model
-    with open("saved_models/idx_to_gesture.pickle", "rb") as f:
-        idx_to_gesture = pickle.load(f)
-    with open("saved_models/gesture_to_idx.pickle", "rb") as f:
-        gesture_to_idx = pickle.load(f)
-    # Read in the scaler used by the machine learning model to scale the input
-    # data
+    # Read in the scaler used by the machine learning model to scale the input data
     scaler_paths = sorted(
         ["saved_models/" + p for p in os.listdir("saved_models") if "Scaler" in p],
         reverse=True,
@@ -208,7 +189,6 @@ def loop_over_serial_stream(
         ["saved_models/" + p for p in os.listdir("saved_models/") if "Classifier" in p],
         reverse=True,
     )
-    model = keras.models.load_model(model_path)
 
     # Create a dictionary of data to pass to the callback
     cb_data: dict[str, Any] = {
@@ -226,7 +206,6 @@ def loop_over_serial_stream(
         "idx_to_gesture": idx_to_gesture,
         "gesture_to_idx": gesture_to_idx,
         "scaler": scaler,
-        # "clf": clf,
         "model": model,
         "config": config,
         "prediction": "no pred",
@@ -346,9 +325,10 @@ def write_debug_line(
     if time_ms() - cb_data["last_gesture"] >= COUNTDOWN_MS:
         cb_data["last_gesture"] = time_ms()
         popped = cb_data["lineup"].pop(0)
-        random.seed(time_ms())
+        # np.random.seed(int(time_ms()))
         cb_data["lineup"].append(popped)
-        # print(CLR, get_gesture_counts())
+        if cb_data["args"]["incremental"]:
+            print(CLR, get_gesture_counts())
 
     gesture = cb_data["lineup"][0]
     description = (
@@ -778,7 +758,7 @@ def color_bg(string) -> str:
 def get_color(string) -> str:
     """Use the given string as a seed to get a deterministic background color.
     See https://www.mattgroeber.com/utilities/random-color-generator"""
-    random.seed(string)
+    np.random.seed(int("".join(c for c in string if c.isdigit())))
     # Hue in [0, 360]
     h_range = (0.0, 1.0)
     # Saturation in [30%, 52%]
@@ -786,14 +766,14 @@ def get_color(string) -> str:
     # Light in [27%, 39%]
     l_range = (0.30, 0.40)
     r, g, b = colorsys.hls_to_rgb(
-        random.random() * (h_range[1] - h_range[0]) + h_range[0],
-        random.random() * (l_range[1] - l_range[0]) + l_range[0],
-        random.random() * (s_range[1] - s_range[0]) + s_range[0],
+        np.random.random() * (h_range[1] - h_range[0]) + h_range[0],
+        np.random.random() * (l_range[1] - l_range[0]) + l_range[0],
+        np.random.random() * (s_range[1] - s_range[0]) + s_range[0],
     )
     return f"rgb({int(r * 255)}, {int(g * 255)}, {int(b * 255)})"
 
 
-def get_gesture_counts() -> Counter:
+def get_gesture_counts():
     root = "../gesture_data/train/"
     paths = os.listdir(root)
     counter = Counter()
@@ -810,6 +790,12 @@ if __name__ == "__main__":
         parser = argparse.ArgumentParser(
             prog="Real Time Classification",
             description="Record, classify, and predict *Ergo* sensor data in real time.",
+        )
+        parser.add_argument(
+            "-m",
+            "--model",
+            help="Path to the TensorFlow model to use for predictions",
+            action="store",
         )
         parser.add_argument(
             "-p",
