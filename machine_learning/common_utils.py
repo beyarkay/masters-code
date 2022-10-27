@@ -386,8 +386,7 @@ def update_config(config, new_additions) -> dict[str, any]:
     return config
 
 
-def predict_tf(obs, clf, config, model, idx_to_gesture) -> List[Tuple[int, float]]:
-    # is_g255 = clf.predict(np.array([obs.reshape(-1)]))[0]
+def predict_tf(obs, config, model, idx_to_gesture) -> List[Tuple[int, float]]:
     probabilities = model(np.array([obs])).numpy()[0]
     obs_pred = np.argmax(probabilities)
 

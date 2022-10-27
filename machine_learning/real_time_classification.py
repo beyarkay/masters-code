@@ -21,6 +21,7 @@ import serial
 import sys
 import yaml
 import pandas as pd
+import argparse
 
 # from sklearn.neural_network import MLPClassifier
 
@@ -34,88 +35,64 @@ GESTURES_RANGE = (45, 50)
 COUNTDOWN_MS = 1000
 
 
-def main():
+def main(args):
+    print(args)
     # Get the correct callback dependant on the cmdline argvalues
     callbacks = []
-    has_filename = False
-    for i, arg in enumerate(sys.argv[1:]):
-        if i + 1 == len(sys.argv[1:]) and has_filename:
-            break
-        if arg in ["predict", "p"]:
-            callbacks.append(predict_cb)
-        elif arg in ["view", "v"]:
-            callbacks.append(view_cb)
-        elif arg in ["incremental", "i"]:
-            callbacks.append(save_incremental_cb)
-        elif arg in ["save", "s"]:
-            callbacks.append(save_cb)
-        elif arg in ["train", "t"]:
-            callbacks.append(train_model_cb)
-            import threading
-        elif arg in ["drive", "d"]:
-            callbacks.append(driver_cb)
-            has_filename = True
-        else:
-            print(
-                """
-Usage: 
-    sudo python3 real_time_classification.py [incremental|i] [drive|d] [train|t] [save|s] [predict|p] [view|v] [filename] 
-    - [i]ncremental: Incrementally append data line-by-line to a csv file
-    - [d]rive: Take the predicted gesture and convert it to a character, writing to stdout (and to sys.argv[-1]).
-    - [t]rain: Train an ML model in a separate thread.
-    - [s]ave: Given a series of new measurements, populate an observation and save to disc as required
-    - [p]redict: Predict the current gesture, printing the probabilities to stdout.
-    - [v]iew: Open up a plot to watch the data in real time."""
-            )
-            sys.exit(1)
+    if args["predict"]:
+        callbacks.append(predict_cb)
+    elif args["incremental"]:
+        callbacks.append(save_incremental_cb)
+    elif args["ouput"]:
+        callbacks.append(driver_cb)
 
-    # Add a listener that will remove the last 120 lines (3 seconds) from the
-    # training data. Just in case some poor gesture data gets recorded by
-    # mistake
-    def burn_most_recent_observations():
-        global should_create_new_file
-        should_create_new_file = True
-        root = "../gesture_data/train/"
-        paths = [f for f in sorted(os.listdir(root)) if f.endswith(".csv")]
-        path = root + paths[-1]
-        num_seconds = 1.5
-        newlines_per_second = 40
-        num_newlines = newlines_per_second * num_seconds
-        cursor_pos = 0
-        print(f"{CLR}{num_newlines=}, {num_seconds=}")
-        # Delete the last `num_newlines` lines efficiently
-        # https://stackoverflow.com/a/10289740/14555505
-        with open(path, "r+", encoding="utf-8") as file:
-            # Move the pointer to the end of the file
-            file.seek(0, os.SEEK_END)
-            # Seek to the final character. We pass over the \0 byte at the end
-            # of the file in the first iteration of the while loop.
-            cursor_pos = file.tell()
-            # Read backwards from pos until we've found `num_newlines` newlines
-            while cursor_pos > 0 and num_newlines > 0:
-                cursor_pos -= 1
+    if args["incremental"]:
+        # Add a listener that will remove the last 120 lines (3 seconds) from the
+        # training data. Just in case some poor gesture data gets recorded by
+        # mistake
+        def burn_most_recent_observations():
+            global should_create_new_file
+            should_create_new_file = True
+            root = "../gesture_data/train/"
+            paths = [f for f in sorted(os.listdir(root)) if f.endswith(".csv")]
+            path = root + paths[-1]
+            num_seconds = 1.5
+            newlines_per_second = 40
+            num_newlines = newlines_per_second * num_seconds
+            cursor_pos = 0
+            print(f"{CLR}{num_newlines=}, {num_seconds=}")
+            # Delete the last `num_newlines` lines efficiently
+            # https://stackoverflow.com/a/10289740/14555505
+            with open(path, "r+", encoding="utf-8") as file:
+                # Move the pointer to the end of the file
+                file.seek(0, os.SEEK_END)
+                # Seek to the final character. We pass over the \0 byte at the end
+                # of the file in the first iteration of the while loop.
+                cursor_pos = file.tell()
+                # Read backwards from pos until we've found `num_newlines` newlines
+                while cursor_pos > 0 and num_newlines > 0:
+                    cursor_pos -= 1
+                    file.seek(cursor_pos, os.SEEK_SET)
+                    if file.read(1) == "\n":
+                        num_newlines -= 1
+
+                # Check that we didn't get to the beginning of the file, then
+                # delete all characters from `cursor_pos` to the end
+                cursor_pos = max(cursor_pos, 0)
                 file.seek(cursor_pos, os.SEEK_SET)
-                if file.read(1) == "\n":
-                    num_newlines -= 1
+                file.truncate()
+            # If we've removed every line of a file, just delete it
+            if cursor_pos == 0:
+                os.remove(path)
+            print(
+                CLR,
+                color(
+                    f"Burnt the last {int(newlines_per_second * num_seconds)} lines ({int(num_seconds)} seconds) of data from {path}",
+                    bg="firebrick",
+                ),
+            )
+            sleep(2)
 
-            # Check that we didn't get to the beginning of the file, then
-            # delete all characters from `cursor_pos` to the end
-            cursor_pos = max(cursor_pos, 0)
-            file.seek(cursor_pos, os.SEEK_SET)
-            file.truncate()
-        # If we've removed every line of a file, just delete it
-        if cursor_pos == 0:
-            os.remove(path)
-        print(
-            CLR,
-            color(
-                f"Burnt the last {int(newlines_per_second * num_seconds)} lines ({int(num_seconds)} seconds) of data from {path}",
-                bg="firebrick",
-            ),
-        )
-        sleep(2)
-
-    if any(arg.startswith("i") for arg in sys.argv[1:]):
         keyboard.add_hotkey("space", burn_most_recent_observations)
         gestures = list(gesture_info().keys())[GESTURES_RANGE[0] : GESTURES_RANGE[1]]
         print(f"{CLR}Possible gestures: {gestures}")
@@ -128,7 +105,7 @@ Usage:
     # Start up an infinite loop that calls the callback every time one set of
     # new data is available over the serial port.
     with serial.Serial(port=port, baudrate=baudrate, timeout=1) as serial_port:
-        loop_over_serial_stream(serial_port, callbacks)
+        loop_over_serial_stream(serial_port, callbacks, args)
 
 
 def get_serial_port() -> str:
@@ -191,6 +168,7 @@ def gesture_info(path="../gesture_data/gesture_info.yaml"):
 def loop_over_serial_stream(
     serial_handle: serial.serialposix.Serial,
     callbacks: List[Callable[[np.ndarray, dict[str, Any]], dict[str, Any]]],
+    args: dict,
 ) -> None:
     """Read in one set of measurements from `serial_handle` and pass to
     `callable`.
@@ -200,9 +178,9 @@ def loop_over_serial_stream(
     alphabetically-first Classifier available in `saved_models/`. If no model
     is there, then no predictions will be given but everything will still
     function appropriately."""
-    model_path = "models/2022-10-17T19:20:09.048391"
+    model_path = "models/2022-10-27T18:01:09.922053/"
     if not os.path.exists(model_path):
-        model_path = "."
+        model_path = os.listdir("models/")[0]
     # Get the config
     config = utils.load_config(model_path + "/config.yaml")
     # Define some constants
@@ -230,16 +208,7 @@ def loop_over_serial_stream(
         ["saved_models/" + p for p in os.listdir("saved_models/") if "Classifier" in p],
         reverse=True,
     )
-    # # Read in the first model alphabetically
-    # clf = utils.load_model(model_paths[0])
-    # Load the sklearn model
-    with open("./models/255_vs_rest.pickle", "rb") as f:
-        clf = pickle.load(f)
-    if any(arg.startswith("p") for arg in sys.argv[1:]):
-        # Load the TensorFlow model
-        model = keras.models.load_model(model_path)
-    else:
-        model = None
+    model = keras.models.load_model(model_path)
 
     # Create a dictionary of data to pass to the callback
     cb_data: dict[str, Any] = {
@@ -257,7 +226,7 @@ def loop_over_serial_stream(
         "idx_to_gesture": idx_to_gesture,
         "gesture_to_idx": gesture_to_idx,
         "scaler": scaler,
-        "clf": clf,
+        # "clf": clf,
         "model": model,
         "config": config,
         "prediction": "no pred",
@@ -265,6 +234,7 @@ def loop_over_serial_stream(
         "g2k": gestures_to_keystrokes(),
         "gesture_info": gesture_info(),
         "thread": None,
+        "args": args,
     }
 
     # Now that all the setup is complete, loop forever (or until the serial
@@ -378,7 +348,7 @@ def write_debug_line(
         popped = cb_data["lineup"].pop(0)
         random.seed(time_ms())
         cb_data["lineup"].append(popped)
-        print(CLR, get_gesture_counts())
+        # print(CLR, get_gesture_counts())
 
     gesture = cb_data["lineup"][0]
     description = (
@@ -388,25 +358,29 @@ def write_debug_line(
         .replace("left", "l")
         .replace("right", "r")
     )
-    curr_gesture_str = (
-        f"{gesture.replace('gesture0', 'g')}: {description: <20}".replace("thumb", "1")
-        .replace("index", "2")
-        .replace("middle", "3")
-        .replace("ring", "4")
-        .replace("little", "5")
-        .replace("Right", "->")
-        .replace("Left", "<-")
-    )
-    progress = len(curr_gesture_str) - round(
-        ((time_ms() - cb_data["last_gesture"]) / COUNTDOWN_MS) * len(curr_gesture_str)
-    )
-    regular = color(
-        curr_gesture_str[:progress], fg="white", bg=get_color(gesture), style="bold"
-    )
-    inverse = color(
-        curr_gesture_str[progress:], fg=get_color(gesture), bg="white", style="bold"
-    )
-    if not any(arg.startswith("i") for arg in sys.argv[1:]):
+    if cb_data["args"]["incremental"]:
+        curr_gesture_str = (
+            f"{gesture.replace('gesture0', 'g')}: {description: <20}".replace(
+                "thumb", "1"
+            )
+            .replace("index", "2")
+            .replace("middle", "3")
+            .replace("ring", "4")
+            .replace("little", "5")
+            .replace("Right", "->")
+            .replace("Left", "<-")
+        )
+        progress = len(curr_gesture_str) - round(
+            ((time_ms() - cb_data["last_gesture"]) / COUNTDOWN_MS)
+            * len(curr_gesture_str)
+        )
+        regular = color(
+            curr_gesture_str[:progress], fg="white", bg=get_color(gesture), style="bold"
+        )
+        inverse = color(
+            curr_gesture_str[progress:], fg=get_color(gesture), bg="white", style="bold"
+        )
+    else:
         inverse = ""
         regular = ""
     cb_data["gesture_idx"] = int(gesture.replace("gesture", ""))
@@ -468,6 +442,7 @@ def get_colored_string(
 
 
 def view_cb(new_measurements: np.ndarray, d: dict[str, Any]) -> dict[str, Any]:
+    print("deprecated")
     """Create a plot with the data"""
     print(f"{CLR}Plotting")
 
@@ -523,7 +498,7 @@ def save_cb(new_measurements: np.ndarray, d: dict[str, Any]) -> dict[str, Any]:
             #     d["obs"], d["clf"], d["scaler"], d["idx_to_gesture"]
             # )
             predictions = utils.predict_tf(
-                d["obs"], d["clf"], d["config"], d["model"], d["idx_to_gesture"]
+                d["obs"], d["config"], d["model"], d["idx_to_gesture"]
             )
             d["prediction"] = (
                 format_prediction(*predictions[0]) if predictions[0][1] > 0.98 else ""
@@ -594,6 +569,7 @@ def save_cb(new_measurements: np.ndarray, d: dict[str, Any]) -> dict[str, Any]:
 
 
 def train_model_cb(new_measurements: np.ndarray, d: dict[str, Any]) -> dict[str, Any]:
+    print("Deprecated")
     """Train an ML model in a separate thread. Only spawns a new thread if the
     previous one isn't still active."""
     # Only attempt to train the model if the previous model has finished
@@ -608,13 +584,14 @@ def train_model_cb(new_measurements: np.ndarray, d: dict[str, Any]) -> dict[str,
             reverse=True,
         )
         print(f"Starting thread to train new model, current model is: {model_paths[0]}")
-        d["clf"] = utils.load_model(model_paths[0])
+        # d["clf"] = utils.load_model(model_paths[0])
         d["thread"] = threading.Thread(target=train_model, args=(d,), kwargs={})
         d["thread"].start()
     return d
 
 
 def train_model(d):
+    print("Deprecated")
     start = time()
     X, y, paths = utils.read_to_numpy(
         include=list(d["gesture_to_idx"].keys()),
@@ -631,12 +608,12 @@ def train_model(d):
         paths_test,
     ) = utils.train_test_split_scale(X, y, paths)
     start = time()
-    d["clf"] = d["clf"].fit(X_train, y_train)
-    score = d["clf"].score(X_test, y_test)
-    path = utils.save_model(d["clf"])
-    print(
-        f"{CLR}Trained classifier with {len(y)} observations in {time() - start:.3f}s, {score=:.4f}, {path=}\n"
-    )
+    # d["clf"] = d["clf"].fit(X_train, y_train)
+    # score = d["clf"].score(X_test, y_test)
+    # path = utils.save_model(d["clf"])
+    # print(
+    #     f"{CLR}Trained classifier with {len(y)} observations in {time() - start:.3f}s, {score=:.4f}, {path=}\n"
+    # )
 
 
 def predict_cb(new_measurements: np.ndarray, d: dict[str, Any]) -> dict[str, Any]:
@@ -679,7 +656,7 @@ def try_print_probabilities(d):
         return d
 
     predictions = utils.predict_tf(
-        d["obs"], d["clf"], d["config"], d["model"], d["idx_to_gesture"]
+        d["obs"], d["config"], d["model"], d["idx_to_gesture"]
     )
     print(f"{CLR}", end="")
     # save the best prediction to the callback dictionary
@@ -708,8 +685,7 @@ def try_print_probabilities(d):
 
 
 def driver_cb(new_measurements: np.ndarray, d: dict[str, Any]) -> dict[str, Any]:
-    """Take the predicted gesture and convert it to a character, writing to
-    stdout (and to sys.argv[-1])."""
+    """Take the predicted gesture and convert it to a character, writing to file."""
     if "bucket" not in d:
         d["bucket"] = 0
         d["curr_gesture"] = None
@@ -743,7 +719,7 @@ def driver_cb(new_measurements: np.ndarray, d: dict[str, Any]) -> dict[str, Any]
         return d
 
     predictions = utils.predict_tf(
-        d["obs"], d["clf"], d["config"], d["model"], d["idx_to_gesture"]
+        d["obs"], d["config"], d["model"], d["idx_to_gesture"]
     )
     print(f"{CLR}", end="")
     d["prediction"] = (
@@ -759,7 +735,7 @@ def driver_cb(new_measurements: np.ndarray, d: dict[str, Any]) -> dict[str, Any]
 
     # Only count a prediction if it's MIN_PROBABILITY% probable and has
     # occured at least REQ_BUCKET_QUANTITY times in a row
-    MIN_PROBABILITY = 0.98
+    MIN_PROBABILITY = 0.50
     REQ_BUCKET_QUANTITY = 1
 
     if best_gesture != "gesture0255" and best_proba >= MIN_PROBABILITY:
@@ -770,10 +746,9 @@ def driver_cb(new_measurements: np.ndarray, d: dict[str, Any]) -> dict[str, Any]
         if d["bucket"] == REQ_BUCKET_QUANTITY:
             now_str = datetime.datetime.now().isoformat()
             # If there's a text file provided, write to it
-            file_idx = sys.argv.index("d") + 1
-            if file_idx < len(sys.argv):
-                with open(sys.argv[file_idx], "a") as f:
-                    f.write(d["g2k"].get(best_gesture, best_gesture))
+            if d["args"]["output"]:
+                with open(d["args"]["output"], "a") as f:
+                    f.write(d["g2k"].get(best_gesture, f"<{best_gesture}>"))
             else:
                 keycode = (
                     d["g2k"].get(best_gesture, best_gesture).encode("string_escape")
@@ -832,7 +807,31 @@ def get_gesture_counts() -> Counter:
 
 if __name__ == "__main__":
     try:
-        main()
+        parser = argparse.ArgumentParser(
+            prog="Real Time Classification",
+            description="Record, classify, and predict *Ergo* sensor data in real time.",
+        )
+        parser.add_argument(
+            "-p",
+            "--predict",
+            help="Predict gestures based on sensor data.",
+            action="store_true",
+        )
+        parser.add_argument(
+            "-i",
+            "--incremental",
+            help="Incrementally append data line-by-line to a csv file",
+            action="store_true",
+        )
+        parser.add_argument(
+            "-o",
+            "--output",
+            help="Predict gestures, convert them to keystrokes, and write the keystrokes to OUTPUT",
+            action="store",
+        )
+
+        args = parser.parse_args()
+        main(vars(args))
     except KeyboardInterrupt:
         print(f"{CLR}Finishing")
         sys.exit(0)
