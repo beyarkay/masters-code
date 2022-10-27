@@ -144,20 +144,6 @@ def get_serial_port() -> str:
     return port
 
 
-def gestures_to_keystrokes(path="../gesture_data/gesture_info.yaml"):
-    """Simple utility to read in the yaml file and
-    return it as a dictionary."""
-    with open(path, "r") as f:
-        g2k = yaml.safe_load(f.read()).get("gestures", {})
-    return {k: v.get("key", "unknown") for k, v in g2k.items()}
-
-
-def gesture_info(path="../gesture_data/gesture_info.yaml"):
-    with open(path, "r") as f:
-        gesture_info = yaml.safe_load(f.read())["gestures"]
-    return gesture_info
-
-
 def loop_over_serial_stream(
     serial_handle: serial.serialposix.Serial,
     callbacks: List[Callable[[np.ndarray, dict[str, Any]], dict[str, Any]]],
@@ -190,6 +176,10 @@ def loop_over_serial_stream(
         reverse=True,
     )
 
+    with open("../gesture_data/gesture_info.yaml", "r") as f:
+        g2k = yaml.safe_load(f.read()).get("gestures", {})
+    g2k = {k: v.get("key", "unknown") for k, v in g2k.items()}
+
     # Create a dictionary of data to pass to the callback
     cb_data: dict[str, Any] = {
         "n_timesteps": n_timesteps,
@@ -210,7 +200,7 @@ def loop_over_serial_stream(
         "config": config,
         "prediction": "no pred",
         "prediction_history": [],
-        "g2k": gestures_to_keystrokes(),
+        "g2k": g2k,
         "gesture_info": gesture_info(),
         "thread": None,
         "args": args,
@@ -290,6 +280,154 @@ def loop_over_serial_stream(
         serial_handle.flush()
     else:
         print("Serial port closed")
+
+
+def save_incremental_cb(
+    new_measurements: np.ndarray, d: dict[str, Any]
+) -> dict[str, Any]:
+    """Append data line-by-line to a csv file"""
+    # only write to file if we've got a non-None gesture index
+    if d["gesture_idx"] is None:
+        return d
+    root = f"../gesture_data/train/"
+    now_str = datetime.datetime.now().isoformat()
+    global should_create_new_file
+    if should_create_new_file:
+        path = root + now_str + ".csv"
+        print(f"{CLR}Sleeping due to burnt observations, new path is {path}")
+        sleep(2)
+        should_create_new_file = False
+    else:
+        paths = [f for f in sorted(os.listdir(root)) if f.endswith(".csv")]
+        path = root + paths[-1]
+    with open(path, "a") as f:
+        # Only label the measurements as being an actual gesture (as opposed
+        # to the null 0255 gesture) in the final 50ms of the countdown.
+        if COUNTDOWN_MS - (time_ms() - d["last_gesture"]) <= GESTURE_WINDOW_MS:
+            gesture = f'gesture{d["gesture_idx"]:04}'
+        else:
+            gesture = "gesture0255"
+        items = [now_str, gesture] + [f"{m:.0f}" for m in new_measurements.tolist()]
+        f.write(",".join(items) + "\n")
+    return d
+
+
+def predict_cb(new_measurements: np.ndarray, d: dict[str, Any]) -> dict[str, Any]:
+    """Predict the current gesture, printing the probabilities to stdout."""
+    # Calculate how much time has passed between this measurement and the
+    # previous measurement, rounded to the nearest 25ms
+    diff = round((d["time_ms"] - d["prev_time_ms"]) / 25) * 25
+    if diff == 0:
+        # If no time has passed, just replace the most recent measurement with
+        # the new measurement
+        d["obs"][0, :] = new_measurements
+    elif diff == 25:
+        # If 25ms has passed, shuffle all measurements along and then insert
+        # the new measurement
+        d["obs"][1:, :] = d["obs"][:-1, :]
+        d["obs"][0, :] = new_measurements
+    elif diff > 25:
+        # If more than 25ms has passed, shuffle all measurements along by the
+        # number of 25ms increments
+        shift_by = diff // 25
+        d["obs"][shift_by:, :] = d["obs"][:-shift_by, :]
+        # Then add the new measurements to the first slot
+        d["obs"][0, :] = new_measurements
+        # And impute the missing values as the mean of the most recent
+        # measurements and the new measurements
+        # print(diff, shift_by)
+        avg = np.mean((d["obs"][0, :], d["obs"][shift_by, :]), axis=0)
+        for idx in range(1, shift_by):
+            d["obs"][idx, :] = avg
+
+    d = try_print_probabilities(d)
+    return d
+
+
+def driver_cb(new_measurements: np.ndarray, d: dict[str, Any]) -> dict[str, Any]:
+    """Take the predicted gesture and convert it to a character, writing to file."""
+    if "bucket" not in d:
+        d["bucket"] = 0
+        d["curr_gesture"] = None
+    # Calculate how much time has passed between this measurement and the
+    # previous measurement, rounded to the nearest 25ms
+    diff = round((d["time_ms"] - d["prev_time_ms"]) / 25) * 25
+    if diff == 0:
+        # If no time has passed, just replace the most recent measurement with
+        # the new measurement
+        d["obs"][0, :] = new_measurements
+    elif diff == 25:
+        # If 25ms has passed, shuffle all measurements along and then insert
+        # the new measurement
+        d["obs"][1:, :] = d["obs"][:-1, :]
+        d["obs"][0, :] = new_measurements
+    elif diff > 25:
+        # If more than 25ms has passed, shuffle all measurements along by the
+        # number of 25ms increments
+        shift_by = diff // 25
+        d["obs"][shift_by:, :] = d["obs"][:-shift_by, :]
+        # Then add the new measurements to the first slot
+        d["obs"][0, :] = new_measurements
+        # And impute the missing values as the mean of the most recent
+        # measurements and the new measurements
+        avg = np.mean((d["obs"][0, :], d["obs"][shift_by, :]), axis=0)
+        for idx in range(1, shift_by):
+            d["obs"][idx, :] = avg
+
+    # If we have any NaNs, don't try predict anything
+    if np.isnan(d["obs"]).any():
+        return d
+
+    predictions = utils.predict_tf(
+        d["obs"], d["config"], d["model"], d["idx_to_gesture"]
+    )
+    print(f"{CLR}", end="")
+    d["prediction"] = (
+        format_prediction(*predictions[0]) if predictions[0][1] > 0.98 else ""
+    )
+
+    best_proba = 0.0
+    best_gesture = None
+    for gesture, proba in sorted(predictions, key=lambda gp: gp[0]):
+        if proba > best_proba:
+            best_proba = proba
+            best_gesture = gesture
+
+    # Only count a prediction if it's MIN_PROBABILITY% probable and has
+    # occured at least REQ_BUCKET_QUANTITY times in a row
+    MIN_PROBABILITY = 0.50
+    REQ_BUCKET_QUANTITY = 1
+
+    if best_gesture != "gesture0255" and best_proba >= MIN_PROBABILITY:
+        if best_gesture != d["curr_gesture"]:
+            d["bucket"] = 0
+            d["curr_gesture"] = best_gesture
+        d["bucket"] += 1
+        if d["bucket"] == REQ_BUCKET_QUANTITY:
+            now_str = datetime.datetime.now().isoformat()
+            # If there's a text file provided, write to it
+            if d["args"]["output"]:
+                with open(d["args"]["output"], "a") as f:
+                    f.write(d["g2k"].get(best_gesture, f"<{best_gesture}>"))
+            else:
+                keycode = (
+                    d["g2k"].get(best_gesture, best_gesture).encode("string_escape")
+                )
+                if keycode == "\n":
+                    keycode = r"\n"
+                elif keycode == "\t":
+                    keycode = r"\t"
+                print(f"{now_str}{keycode}<{best_gesture}>")
+
+    else:
+        d["curr_gesture"] = "gesture0255"
+    return d
+
+
+def gesture_info(path="../gesture_data/gesture_info.yaml"):
+    with open(path, "r") as f:
+        gesture_info = yaml.safe_load(f.read())["gestures"]
+    return gesture_info
 
 
 def write_debug_line(
@@ -421,213 +559,6 @@ def get_colored_string(
     return coloured
 
 
-def view_cb(new_measurements: np.ndarray, d: dict[str, Any]) -> dict[str, Any]:
-    print("deprecated")
-    """Create a plot with the data"""
-    print(f"{CLR}Plotting")
-
-    for i in range(2):
-        axs.append([])
-        for j in range(5):
-            data = (
-                10000
-                + 15000 * pg.gaussianFilter(np.random.random(size=10000), 10)
-                + 3000 * np.random.random(size=10000)
-            )
-            axs[i][j].plot(data)
-    return d
-
-
-def save_incremental_cb(
-    new_measurements: np.ndarray, d: dict[str, Any]
-) -> dict[str, Any]:
-    """Append data line-by-line to a csv file"""
-    # only write to file if we've got a non-None gesture index
-    if d["gesture_idx"] is None:
-        return d
-    root = f"../gesture_data/train/"
-    now_str = datetime.datetime.now().isoformat()
-    global should_create_new_file
-    if should_create_new_file:
-        path = root + now_str + ".csv"
-        print(f"{CLR}Sleeping due to burnt observations, new path is {path}")
-        sleep(2)
-        should_create_new_file = False
-    else:
-        paths = [f for f in sorted(os.listdir(root)) if f.endswith(".csv")]
-        path = root + paths[-1]
-    with open(path, "a") as f:
-        # Only label the measurements as being an actual gesture (as opposed
-        # to the null 0255 gesture) in the final 50ms of the countdown.
-        if COUNTDOWN_MS - (time_ms() - d["last_gesture"]) <= GESTURE_WINDOW_MS:
-            gesture = f'gesture{d["gesture_idx"]:04}'
-        else:
-            gesture = "gesture0255"
-        items = [now_str, gesture] + [f"{m:.0f}" for m in new_measurements.tolist()]
-        f.write(",".join(items) + "\n")
-    return d
-
-
-def save_cb(new_measurements: np.ndarray, d: dict[str, Any]) -> dict[str, Any]:
-    """Given a series of new measurements, populate an observation and save to
-    disc as require."""
-    if not np.isnan(d["obs"]).any().any():
-        gesture_idx = f'gesture{d["gesture_idx"]:04}'
-        try:
-            # predictions = utils.predict_nicely(
-            #     d["obs"], d["clf"], d["scaler"], d["idx_to_gesture"]
-            # )
-            predictions = utils.predict_tf(
-                d["obs"], d["config"], d["model"], d["idx_to_gesture"]
-            )
-            d["prediction"] = (
-                format_prediction(*predictions[0]) if predictions[0][1] > 0.98 else ""
-            )
-            d["prediction_history"].append(predictions)
-            # If we're predicting something that's not the actual gesture
-            if (
-                predictions[0][0] not in [gesture_idx, "gesture0255"]
-                and len(d["prediction_history"]) > 20
-            ):
-                # Then save this observation as a misclassified item
-                directory = f"../gesture_data/misclassified/{gesture_idx}"
-                now_str = datetime.datetime.now().isoformat()
-                obs_path = f"{directory}/{now_str}_observation.csv"
-                hist_path = f"{directory}/{now_str}_history.csv"
-                print(
-                    f"Saving bad prediction to {obs_path}: (actual {gesture_idx} != {predictions[0][0]} predicted)"
-                )
-                utils.write_obs_to_disc(d["obs"], obs_path)
-                # Also save the recent history
-                with open(hist_path, "w") as f:
-                    for prediction in d["prediction_history"][-20:]:
-                        f.write(
-                            ",".join(
-                                f"{g}:{p:.4f}"
-                                for (g, p) in sorted(prediction, key=lambda x: x[0])
-                            )
-                            + "\n"
-                        )
-        except Exception as e:
-            print(f"Exception {e}")
-            d["prediction"] = "Classifier exception"
-
-    # If the current time offset is < the previous time offset, then the
-    # gesture has ended and we should save the current observation to disc
-    if d["curr_offset"] < d["prev_offset"] and d["n_measurements"] >= d["n_timesteps"]:
-        # If there was no measurement for 975ms, just use the one for 000ms
-        if np.isnan(d["obs"][-1]).any():
-            d["obs"][-1, :] = new_measurements
-
-        directory = f'../gesture_data/train/gesture{d["gesture_idx"]:04}'
-        now_str = datetime.datetime.now().isoformat()
-        utils.write_obs_to_disc(d["obs"], f"{directory}/{now_str}.csv")
-        num_obs = len(os.listdir(directory))
-        print(
-            f"{CLR}{d['n_measurements']} measurements taken, wrote observation as `{directory}/{now_str}.csv` ({num_obs} total)"
-        )
-        for idx in range(d["curr_idx"]):
-            # If the curr_idx > 0 then we've skipped over the first
-            # measurement. Therefore impute the first measurements as the mean
-            # of the last measurement of the previous observation and the new
-            # measurement of this observation.
-            d["obs"][idx, :] = np.mean((d["obs"][-1, :], new_measurements), axis=0)
-        # Reset the observation to be mostly NaNs
-        d["n_measurements"] = 0
-
-    # If we've skipped over an index, impute with the mean between the
-    # last recorded observation and the most recent observation
-    d["obs"][d["curr_idx"]] = new_measurements
-    for idx in range(d["prev_idx"] + 1, d["curr_idx"]):
-        d["obs"][idx, :] = np.mean(
-            (d["obs"][d["prev_idx"], :], d["obs"][d["curr_idx"], :]), axis=0
-        )
-    d["prev_idx"] = d["curr_idx"]
-    # Place this observation at it's place in curr_idx
-    d["n_measurements"] += 1
-    return d
-
-
-def train_model_cb(new_measurements: np.ndarray, d: dict[str, Any]) -> dict[str, Any]:
-    print("Deprecated")
-    """Train an ML model in a separate thread. Only spawns a new thread if the
-    previous one isn't still active."""
-    # Only attempt to train the model if the previous model has finished
-    # training (or if there is no previous model)
-    if d["thread"] is None or not d["thread"].is_alive():
-        model_paths = sorted(
-            [
-                "saved_models/" + p
-                for p in os.listdir("saved_models/")
-                if "Classifier" in p
-            ],
-            reverse=True,
-        )
-        print(f"Starting thread to train new model, current model is: {model_paths[0]}")
-        # d["clf"] = utils.load_model(model_paths[0])
-        d["thread"] = threading.Thread(target=train_model, args=(d,), kwargs={})
-        d["thread"].start()
-    return d
-
-
-def train_model(d):
-    print("Deprecated")
-    start = time()
-    X, y, paths = utils.read_to_numpy(
-        include=list(d["gesture_to_idx"].keys()),
-        min_obs=0,
-        verbose=-1,
-    )
-    n_classes = np.unique(y).shape[0]
-    (
-        X_train,
-        X_test,
-        y_train,
-        y_test,
-        paths_train,
-        paths_test,
-    ) = utils.train_test_split_scale(X, y, paths)
-    start = time()
-    # d["clf"] = d["clf"].fit(X_train, y_train)
-    # score = d["clf"].score(X_test, y_test)
-    # path = utils.save_model(d["clf"])
-    # print(
-    #     f"{CLR}Trained classifier with {len(y)} observations in {time() - start:.3f}s, {score=:.4f}, {path=}\n"
-    # )
-
-
-def predict_cb(new_measurements: np.ndarray, d: dict[str, Any]) -> dict[str, Any]:
-    """Predict the current gesture, printing the probabilities to stdout."""
-    # Calculate how much time has passed between this measurement and the
-    # previous measurement, rounded to the nearest 25ms
-    diff = round((d["time_ms"] - d["prev_time_ms"]) / 25) * 25
-    if diff == 0:
-        # If no time has passed, just replace the most recent measurement with
-        # the new measurement
-        d["obs"][0, :] = new_measurements
-    elif diff == 25:
-        # If 25ms has passed, shuffle all measurements along and then insert
-        # the new measurement
-        d["obs"][1:, :] = d["obs"][:-1, :]
-        d["obs"][0, :] = new_measurements
-    elif diff > 25:
-        # If more than 25ms has passed, shuffle all measurements along by the
-        # number of 25ms increments
-        shift_by = diff // 25
-        d["obs"][shift_by:, :] = d["obs"][:-shift_by, :]
-        # Then add the new measurements to the first slot
-        d["obs"][0, :] = new_measurements
-        # And impute the missing values as the mean of the most recent
-        # measurements and the new measurements
-        # print(diff, shift_by)
-        avg = np.mean((d["obs"][0, :], d["obs"][shift_by, :]), axis=0)
-        for idx in range(1, shift_by):
-            d["obs"][idx, :] = avg
-
-    d = try_print_probabilities(d)
-    return d
-
-
 def try_print_probabilities(d):
     """Attempt to predict the gesture based on the observation in `d`."""
     # If we have any NaNs, don't try predict anything
@@ -661,86 +592,6 @@ def try_print_probabilities(d):
             end=" ",
         )
     print()
-    return d
-
-
-def driver_cb(new_measurements: np.ndarray, d: dict[str, Any]) -> dict[str, Any]:
-    """Take the predicted gesture and convert it to a character, writing to file."""
-    if "bucket" not in d:
-        d["bucket"] = 0
-        d["curr_gesture"] = None
-    # Calculate how much time has passed between this measurement and the
-    # previous measurement, rounded to the nearest 25ms
-    diff = round((d["time_ms"] - d["prev_time_ms"]) / 25) * 25
-    if diff == 0:
-        # If no time has passed, just replace the most recent measurement with
-        # the new measurement
-        d["obs"][0, :] = new_measurements
-    elif diff == 25:
-        # If 25ms has passed, shuffle all measurements along and then insert
-        # the new measurement
-        d["obs"][1:, :] = d["obs"][:-1, :]
-        d["obs"][0, :] = new_measurements
-    elif diff > 25:
-        # If more than 25ms has passed, shuffle all measurements along by the
-        # number of 25ms increments
-        shift_by = diff // 25
-        d["obs"][shift_by:, :] = d["obs"][:-shift_by, :]
-        # Then add the new measurements to the first slot
-        d["obs"][0, :] = new_measurements
-        # And impute the missing values as the mean of the most recent
-        # measurements and the new measurements
-        avg = np.mean((d["obs"][0, :], d["obs"][shift_by, :]), axis=0)
-        for idx in range(1, shift_by):
-            d["obs"][idx, :] = avg
-
-    # If we have any NaNs, don't try predict anything
-    if np.isnan(d["obs"]).any():
-        return d
-
-    predictions = utils.predict_tf(
-        d["obs"], d["config"], d["model"], d["idx_to_gesture"]
-    )
-    print(f"{CLR}", end="")
-    d["prediction"] = (
-        format_prediction(*predictions[0]) if predictions[0][1] > 0.98 else ""
-    )
-
-    best_proba = 0.0
-    best_gesture = None
-    for gesture, proba in sorted(predictions, key=lambda gp: gp[0]):
-        if proba > best_proba:
-            best_proba = proba
-            best_gesture = gesture
-
-    # Only count a prediction if it's MIN_PROBABILITY% probable and has
-    # occured at least REQ_BUCKET_QUANTITY times in a row
-    MIN_PROBABILITY = 0.50
-    REQ_BUCKET_QUANTITY = 1
-
-    if best_gesture != "gesture0255" and best_proba >= MIN_PROBABILITY:
-        if best_gesture != d["curr_gesture"]:
-            d["bucket"] = 0
-            d["curr_gesture"] = best_gesture
-        d["bucket"] += 1
-        if d["bucket"] == REQ_BUCKET_QUANTITY:
-            now_str = datetime.datetime.now().isoformat()
-            # If there's a text file provided, write to it
-            if d["args"]["output"]:
-                with open(d["args"]["output"], "a") as f:
-                    f.write(d["g2k"].get(best_gesture, f"<{best_gesture}>"))
-            else:
-                keycode = (
-                    d["g2k"].get(best_gesture, best_gesture).encode("string_escape")
-                )
-                if keycode == "\n":
-                    keycode = r"\n"
-                elif keycode == "\t":
-                    keycode = r"\t"
-                print(f"{now_str}{keycode}<{best_gesture}>")
-
-    else:
-        d["curr_gesture"] = "gesture0255"
     return d
 
 
