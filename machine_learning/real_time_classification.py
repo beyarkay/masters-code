@@ -1,10 +1,9 @@
 print("Importing libraries")
+from time import sleep, time
 from collections import Counter
 from colors import color
 from matplotlib import cm
 from serial.tools.list_ports import comports
-from tensorflow import keras
-from time import sleep, time
 from typing import Callable, List, Any
 import argparse
 import colorsys
@@ -150,6 +149,8 @@ def loop_over_serial_stream(
 ) -> None:
     model_path = args["model"]
     print(model_path)
+    from tensorflow import keras
+
     model = keras.models.load_model(model_path)
     # Get the config
     config = utils.load_config(model_path + "/config.yaml")
@@ -214,7 +215,6 @@ def loop_over_serial_stream(
             # duration between measurements
             cb_data["prev_time_ms"] = cb_data["time_ms"]
             cb_data["time_ms"] = int(time() * 1000)
-            # print(CLR, cb_data["prev_time_ms"], cb_data["time_ms"])
             before_split = serial_handle.readline().decode("utf-8")
             # Comments starting with `#` act as heartbeats
             if before_split.startswith("#"):
@@ -313,31 +313,8 @@ def save_incremental_cb(
 
 def predict_cb(new_measurements: np.ndarray, d: dict[str, Any]) -> dict[str, Any]:
     """Predict the current gesture, printing the probabilities to stdout."""
-    # Calculate how much time has passed between this measurement and the
-    # previous measurement, rounded to the nearest 25ms
-    diff = round((d["time_ms"] - d["prev_time_ms"]) / 25) * 25
-    if diff == 0:
-        # If no time has passed, just replace the most recent measurement with
-        # the new measurement
-        d["obs"][0, :] = new_measurements
-    elif diff == 25:
-        # If 25ms has passed, shuffle all measurements along and then insert
-        # the new measurement
-        d["obs"][1:, :] = d["obs"][:-1, :]
-        d["obs"][0, :] = new_measurements
-    elif diff > 25:
-        # If more than 25ms has passed, shuffle all measurements along by the
-        # number of 25ms increments
-        shift_by = diff // 25
-        d["obs"][shift_by:, :] = d["obs"][:-shift_by, :]
-        # Then add the new measurements to the first slot
-        d["obs"][0, :] = new_measurements
-        # And impute the missing values as the mean of the most recent
-        # measurements and the new measurements
-        # print(diff, shift_by)
-        avg = np.mean((d["obs"][0, :], d["obs"][shift_by, :]), axis=0)
-        for idx in range(1, shift_by):
-            d["obs"][idx, :] = avg
+
+    d = calc_obs(new_measurements, d)
 
     d = try_print_probabilities(d)
     return d
@@ -348,8 +325,53 @@ def driver_cb(new_measurements: np.ndarray, d: dict[str, Any]) -> dict[str, Any]
     if "bucket" not in d:
         d["bucket"] = 0
         d["curr_gesture"] = None
-    # Calculate how much time has passed between this measurement and the
-    # previous measurement, rounded to the nearest 25ms
+
+    d = calc_obs(new_measurements, d)
+
+    # If we have any NaNs, don't try predict anything
+    if np.isnan(d["obs"]).any():
+        return d
+
+    gesture_preds = utils.predict_tf(
+        d["obs"], d["config"], d["model"], d["idx_to_gesture"]
+    )
+
+    predictions = np.array(list(zip(*gesture_preds))[1])
+    gestures = np.array(list(zip(*gesture_preds))[0])
+    if "predictions" not in d:
+        d["predictions"] = predictions
+    if "ma_delta" not in d:
+        d["ma_delta"] = predictions - d["predictions"]
+
+    alpha = 0.7
+    thresh = 0.4
+    d["ma_delta"] = (1 - alpha) * d["ma_delta"] + alpha * (
+        predictions - d["predictions"]
+    )
+    print(CLR, d["ma_delta"][np.nonzero(d["ma_delta"] > 0.2)[0]])
+    rising = gestures[np.nonzero(d["ma_delta"] > thresh)[0]]
+    d["prediction"] = (
+        format_prediction(*gesture_preds[0]) if gesture_preds[0][1] > 0.98 else ""
+    )
+
+    if len(rising) == 1 and rising[0] != "gesture0255":
+        now_str = datetime.datetime.now().isoformat()
+        best_gesture = rising[0]
+        # If there's a text file provided, write to it
+        if d["args"]["output"]:
+            with open(d["args"]["output"], "a") as f:
+                s = str(d["g2k"].get(best_gesture, f"<{best_gesture}>"))
+                print(best_gesture, s)
+                f.write(s)
+
+    else:
+        d["curr_gesture"] = "gesture0255"
+    return d
+
+
+def calc_obs(new_measurements: np.ndarray, d: dict[str, Any]) -> dict[str, Any]:
+    """Calculate how much time has passed between this measurement and the
+    previous measurement, rounded to the nearest 25ms"""
     diff = round((d["time_ms"] - d["prev_time_ms"]) / 25) * 25
     if diff == 0:
         # If no time has passed, just replace the most recent measurement with
@@ -372,54 +394,6 @@ def driver_cb(new_measurements: np.ndarray, d: dict[str, Any]) -> dict[str, Any]
         avg = np.mean((d["obs"][0, :], d["obs"][shift_by, :]), axis=0)
         for idx in range(1, shift_by):
             d["obs"][idx, :] = avg
-
-    # If we have any NaNs, don't try predict anything
-    if np.isnan(d["obs"]).any():
-        return d
-
-    predictions = utils.predict_tf(
-        d["obs"], d["config"], d["model"], d["idx_to_gesture"]
-    )
-    print(f"{CLR}", end="")
-    d["prediction"] = (
-        format_prediction(*predictions[0]) if predictions[0][1] > 0.98 else ""
-    )
-
-    best_proba = 0.0
-    best_gesture = None
-    for gesture, proba in sorted(predictions, key=lambda gp: gp[0]):
-        if proba > best_proba:
-            best_proba = proba
-            best_gesture = gesture
-
-    # Only count a prediction if it's MIN_PROBABILITY% probable and has
-    # occured at least REQ_BUCKET_QUANTITY times in a row
-    MIN_PROBABILITY = 0.50
-    REQ_BUCKET_QUANTITY = 1
-
-    if best_gesture != "gesture0255" and best_proba >= MIN_PROBABILITY:
-        if best_gesture != d["curr_gesture"]:
-            d["bucket"] = 0
-            d["curr_gesture"] = best_gesture
-        d["bucket"] += 1
-        if d["bucket"] == REQ_BUCKET_QUANTITY:
-            now_str = datetime.datetime.now().isoformat()
-            # If there's a text file provided, write to it
-            if d["args"]["output"]:
-                with open(d["args"]["output"], "a") as f:
-                    f.write(d["g2k"].get(best_gesture, f"<{best_gesture}>"))
-            else:
-                keycode = (
-                    d["g2k"].get(best_gesture, best_gesture).encode("string_escape")
-                )
-                if keycode == "\n":
-                    keycode = r"\n"
-                elif keycode == "\t":
-                    keycode = r"\t"
-                print(f"{now_str}{keycode}<{best_gesture}>")
-
-    else:
-        d["curr_gesture"] = "gesture0255"
     return d
 
 
