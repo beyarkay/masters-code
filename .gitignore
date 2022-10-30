@@ -28,6 +28,9 @@ gesture_data/**/*.txt
 # Weights and Biases logs
 machine_learning/wandb/
 
+# A file used for typing in via ergo
+machine_learning/typing.txt
+
 # General purpose logs and model save files
 machine_learning/logs/
 machine_learning/models/
