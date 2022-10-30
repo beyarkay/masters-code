@@ -44,16 +44,16 @@ gestures:
   gesture0038: { description: 135 r 4, key:  o }
   gesture0039: { description: 135 r 5, key:  p }
                                                        
-  gesture0040: { description: 180 l 5, key:  1 }
-  gesture0041: { description: 180 l 4, key:  2 }
-  gesture0042: { description: 180 l 3, key:  3 }
-  gesture0043: { description: 180 l 2, key:  4 }
-  gesture0044: { description: 180 l 1, key:  5 }
-  gesture0045: { description: 180 r 1, key:  6 }
-  gesture0046: { description: 180 r 2, key:  7 }
-  gesture0047: { description: 180 r 3, key:  8 }
-  gesture0048: { description: 180 r 4, key:  9 }
-  gesture0049: { description: 180 r 5, key:  0 }
+  gesture0040: { description: 180 l 5, key: "1"}
+  gesture0041: { description: 180 l 4, key: "2"}
+  gesture0042: { description: 180 l 3, key: "3"}
+  gesture0043: { description: 180 l 2, key: "4"}
+  gesture0044: { description: 180 l 1, key: "5"}
+  gesture0045: { description: 180 r 1, key: "6"}
+  gesture0046: { description: 180 r 2, key: "7"}
+  gesture0047: { description: 180 r 3, key: "8"}
+  gesture0048: { description: 180 r 4, key: "9"}
+  gesture0049: { description: 180 r 5, key: "0"}
 
   # Auxiliary gestures
   gesture0255:
