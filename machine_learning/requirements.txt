@@ -55,6 +55,7 @@ keyboard==0.13.5
 kiwisolver==1.4.2
 lesscpy==0.15.0
 libclang==14.0.1
+llvmlite==0.39.1
 Markdown==3.3.7
 MarkupSafe==2.1.1
 matplotlib==3.5.1
@@ -65,6 +66,7 @@ nbconvert==6.5.0
 nbformat==5.4.0
 nest-asyncio==1.5.5
 notebook==6.4.11
+numba==0.56.3
 numpy==1.22.2
 oauthlib==3.2.0
 opt-einsum==3.3.0
@@ -228,11 +230,15 @@ pyobjc-framework-Virtualization==8.5
 pyobjc-framework-Vision==8.5
 pyobjc-framework-WebKit==8.5
 pyparsing==3.0.9
+PyQt6==6.4.0
+PyQt6-Qt6==6.4.0
+PyQt6-sip==13.4.0
 pyqtgraph==0.13.1
 pyrsistent==0.18.1
 pyserial==3.5
 PySocks==1.7.1
 python-dateutil==2.8.2
+pyts==0.12.0
 pytz==2022.1
 PyYAML==6.0
 pyzmq==23.0.0
