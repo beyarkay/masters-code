@@ -50,7 +50,7 @@ def train(wb_config=None):
             verbose=0,
         )
         y_pred = model.predict(X, verbose=0)
-        mean_dist = calc_mean_dist(y, y_pred, i2g).mean()
+        mean_dist = calc_red(y, y_pred, i2g).mean()
 
         print("Fit complete")
         wandb.log(

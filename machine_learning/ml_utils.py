@@ -1,4 +1,6 @@
 from keras import layers
+import keras.backend as K
+from wandb.keras import WandbCallback
 from sklearn.metrics import classification_report, f1_score
 from sklearn.model_selection import train_test_split
 from tensorflow import keras
@@ -115,13 +117,15 @@ def conf_mat(y_true, y_pred, i2g, perc=None, hide_zeros=True, ax=None, cbar=True
     elif perc is None:
         axis = None
 
-    zero_mask = np.where(confusion_mtx == 0)
-    not_zero_mask = np.where(confusion_mtx != 0)
-    confusion_mtx = np.round(confusion_mtx).astype(int)
+    conf_mat_is_zero = np.where(confusion_mtx == 0)
+    conf_mat_not_zero = np.where(confusion_mtx != 0)
+    # confusion_mtx = np.round(confusion_mtx)
 
     to_print = np.empty(confusion_mtx.shape, dtype="object")
-    to_print[zero_mask] = ""
-    to_print[not_zero_mask] = confusion_mtx[not_zero_mask].astype(str)
+    to_print[conf_mat_is_zero] = ""
+    to_print[conf_mat_not_zero] = (
+        confusion_mtx[conf_mat_not_zero].astype(int).astype(str)
+    )
 
     labels = [i2g(i).replace("gesture0", "g") for i in range(confusion_mtx.shape[0])]
 
@@ -134,7 +138,7 @@ def conf_mat(y_true, y_pred, i2g, perc=None, hide_zeros=True, ax=None, cbar=True
         square=True,
         cbar=cbar,
         vmin=confusion_mtx.min(),
-        #         vmax=confusion_mtx[:-1, :-1].max(),# if perc == None else confusion_mtx.max(),
+        vmax=confusion_mtx[:-1, :-1].max(),
         ax=ax,
     )
     if ax is None:
@@ -148,6 +152,39 @@ def conf_mat(y_true, y_pred, i2g, perc=None, hide_zeros=True, ax=None, cbar=True
 
 def plot_timeseries(X, y, t=None, per="dimension", axs=None, draw_text=True):
     # Make sure the given dataset is correctly formatted
+    FINGERS = [
+        "left-little-finger-x",
+        "left-little-finger-y",
+        "left-little-finger-z",
+        "left-ring-finger-x",
+        "left-ring-finger-y",
+        "left-ring-finger-z",
+        "left-middle-finger-x",
+        "left-middle-finger-y",
+        "left-middle-finger-z",
+        "left-index-finger-x",
+        "left-index-finger-y",
+        "left-index-finger-z",
+        "left-thumb-x",
+        "left-thumb-y",
+        "left-thumb-z",
+        "right-thumb-x",
+        "right-thumb-y",
+        "right-thumb-z",
+        "right-index-finger-x",
+        "right-index-finger-y",
+        "right-index-finger-z",
+        "right-middle-finger-x",
+        "right-middle-finger-y",
+        "right-middle-finger-z",
+        "right-ring-finger-x",
+        "right-ring-finger-y",
+        "right-ring-finger-z",
+        "right-little-finger-x",
+        "right-little-finger-y",
+        "right-little-finger-z",
+    ]
+
     assert (
         X.shape[0] == y.shape[0]
     ), f"There must be one y value for each X value, but got {X.shape[0]} y values and {y.shape[0]} X values"
@@ -166,14 +203,14 @@ def plot_timeseries(X, y, t=None, per="dimension", axs=None, draw_text=True):
             nrows, ncols = (3, 1)
         elif per == "finger":
             nrows, ncols = (5, 2)
-        _fig, axs = plt.subplots(nrows=nrows, ncols=ncols, figsize=(13, 8))
+        _fig, axs = plt.subplots(nrows=nrows, ncols=ncols, figsize=(10, 6))
         if len(axs.shape) > 1:
             axs = axs.T.flatten()
     else:
         assert axs.shape in [
             (3,),
             (10,),
-        ], f"Given axs shape is {ax.shape}, but must only be (3,) or (10,))"
+        ], f"Given axs shape is {axs.shape}, but must only be (3,) or (10,))"
         per = "dimension" if axs.shape == (3,) else "finger"
 
     ymin = float("inf")
@@ -199,9 +236,9 @@ def plot_timeseries(X, y, t=None, per="dimension", axs=None, draw_text=True):
 
         # Set the title of each plot
         if per == "dimension":
-            ax.set_title(f"{FINGERS[d][-1]}")
+            ax.set_title(f"{FINGERS[d][-1].replace('-', ' ').title()}")
         elif per == "finger":
-            ax.set_title(f"{FINGERS[d][:-2]}")
+            ax.set_title(f"{FINGERS[d][:-2].replace('-', ' ').title()}")
 
         ymax = max(ymax, X[:, d].max())
         ymin = min(ymin, X[:, d].min())
@@ -241,7 +278,7 @@ def plot_timeseries(X, y, t=None, per="dimension", axs=None, draw_text=True):
                     x1=[time - backtrack - 0.5, time - backtrack - 0.5],
                     x2=[time - 0.5, time - 0.5],
                     color="grey",
-                    alpha=0.1,
+                    alpha=0.3,
                 )
 
                 txt = y[time - backtrack].replace("gesture0", "g")
@@ -361,8 +398,8 @@ class PerClassCallback(keras.callbacks.Callback):
         self.model.reports = []
 
     def on_epoch_end(self, batch, logs={}):
-        # Only do expensive logging every ~20 epochs
-        if len(self.model.reports) > 10 and np.random.random() > 0.05:
+        # Only do expensive logging every ~10 epochs
+        if len(self.model.reports) > 10 and np.random.random() > 0.1:
             self.model.reports.append(self.model.reports[-1])
             return
         y_pred = np.argmax(
@@ -382,8 +419,10 @@ class PerClassCallback(keras.callbacks.Callback):
 
 
 def compile_and_fit(X_train, y_train, X_valid, y_valid, config, i2g, verbose=1):
-    normalizer = layers.Normalization(axis=-1)
+    # Normalise against each of the sensor values
+    normalizer = layers.Normalization(axis=-2)
     normalizer.adapt(X_train)
+    print(X_train.shape)
 
     dense_layers = []
 
@@ -394,7 +433,8 @@ def compile_and_fit(X_train, y_train, X_valid, y_valid, config, i2g, verbose=1):
                 activation="relu",
             )
         )
-        dense_layers.append(layers.Dropout(config["dropout_frac"]))
+        if config.get("dropout_frac", 1.0) < 1.0:
+            dense_layers.append(layers.Dropout(config["dropout_frac"]))
 
     def init_biases(shape, dtype=None):
         assert shape == [
@@ -402,6 +442,12 @@ def compile_and_fit(X_train, y_train, X_valid, y_valid, config, i2g, verbose=1):
         ], f"Shape {shape} isn't ({len(config['class_weight'])},)"
         inv_freqs = np.array([1 / v for v in config["class_weight"].values()])
         return np.log(inv_freqs)
+
+    dense_kwargs = (
+        {"bias_initializer": init_biases}
+        if config.get("bias_final_layer", False)
+        else {}
+    )
 
     model = tf.keras.Sequential(
         [
@@ -412,23 +458,47 @@ def compile_and_fit(X_train, y_train, X_valid, y_valid, config, i2g, verbose=1):
             layers.Dense(
                 len(np.unique(y_train)),
                 activation=config.get("activation"),
-                bias_initializer=init_biases,
+                **dense_kwargs,
             ),
         ]
     )
 
     # Define an object that calculates per-class metrics
     per_class_callback = PerClassCallback((X_valid, y_valid), i2g)
+    # Reduce the learning rate if validation loss doesn't improve
+    patience = 5
+    reduce_lr = keras.callbacks.ReduceLROnPlateau(
+        monitor="val_loss", factor=0.1, patience=patience
+    )
+    # Stop training if validation loss doesn't ever improve
+    early_stopping = keras.callbacks.EarlyStopping(
+        monitor="val_loss",
+        patience=patience * 3,
+        mode="min",
+        restore_best_weights=True,
+        verbose=0,
+    )
 
     # Instantiate and compile the model
+    if config["optimiser"] == "adam":
+        optimiser = keras.optimizers.Adam(learning_rate=config["lr"])
+    elif config["optimiser"] == "sgd":
+        optimiser = keras.optimizers.SGD(learning_rate=config["lr"])
+    elif config["optimiser"] == "rmsprop":
+        optimiser = keras.optimizers.RMSprop(learning_rate=config["lr"])
+    else:
+        print(f"Optimiser {config['optimiser']} unknown")
+
     model.compile(
-        optimizer=config["optimiser"],
+        optimizer=optimiser,
         loss=config["loss_fn"],
-        weighted_metrics=[
-            keras.metrics.SparseCategoricalCrossentropy(name="scce"),
-        ],
     )
-    # Fit the model, using the early stopping callback
+    kwargs = (
+        {"class_weight": config["class_weight"]} if config["use_class_weights"] else {}
+    )
+    # TODO calculate rising edge dist each epoch
+
+    # Fit the model
     history = model.fit(
         X_train,
         y_train,
@@ -436,32 +506,43 @@ def compile_and_fit(X_train, y_train, X_valid, y_valid, config, i2g, verbose=1):
         batch_size=config["batch_size"],
         epochs=config["epochs"],
         validation_data=(X_valid, y_valid),
-        #         class_weight=config['class_weight'],
         callbacks=[
             per_class_callback,
-            keras.callbacks.EarlyStopping(
-                monitor="val_loss",
-                patience=25,
-                mode="min",
-                restore_best_weights=True,
-                verbose=0,
-            ),
+            early_stopping,
+            # reduce_lr,
+            # WandbCallback(),
         ],
+        **kwargs,
     )
     return history, model
 
 
-def plot_losses(history, show_figs, d, results, trimmed_config):
+def plot_losses(history, show_figs, d, results, trimmed_config, y_true=None):
     _fig, ax = plt.subplots(1, 1, figsize=(5, 5))
-    ax.plot(history.history["scce"])
-    ax.plot(history.history["val_scce"])
-    plt.title(f"Sparse Categorical Cross Entropy\n{trimmed_config}")
+    ax.plot(history.history["val_loss"])
+    ax.plot(history.history["loss"])
+    plt.title(f"Sparse Categorical Cross Entropy over time")
 
     ylim = ax.get_ylim()
     ax.set_ylim((0, ylim[1]))
-    ax.set_ylabel("SCCE")
-    ax.set_xlabel("epoch")
-    ax.legend(["train", "val"], loc="best")
+    ax.set_ylabel("Sparse Categorical Crossentropy")
+    ax.set_xlabel("Epoch")
+
+    for key in ("val_loss", "loss"):
+        ax.text(
+            len(history.history[key]),
+            history.history[key][-1],
+            str(np.round(history.history[key][-1], 4)),
+            horizontalalignment="right",
+            verticalalignment="bottom",
+        )
+        ax.scatter(
+            [len(history.history[key])],
+            [history.history[key][-1]],
+            s=10,
+        )
+
+    ax.legend(["val", "train"], loc="best")
     plt.tight_layout()
     plt.savefig(f"{d}/metrics.pdf")
     if show_figs:
@@ -486,14 +567,14 @@ def plot_confusion_matrices(
     fig, axs = plt.subplots(1, 2, figsize=(16, 9))
     _ = conf_mat(y_valid, y_pred_valid, i2g, ax=axs[0], perc=perc, cbar=cbar)
     valid_f1 = np.round(results["valid_f1"], 4)
-    valid_scce = np.round(results["valid_scce"], 4)
+    valid_scce = np.round(results["val_loss"], 4)
     axs[0].set_title(
         f"Validation set (support={len(y_valid)}, $F_1$={valid_f1})\nscce={valid_scce}"
     )
 
     _ = conf_mat(y_train, y_pred_train, i2g, ax=axs[1], perc=perc, cbar=cbar)
     train_f1 = np.round(results["train_f1"], 4)
-    train_scce = np.round(results["train_scce"], 4)
+    train_scce = np.round(results["loss"], 4)
     axs[1].set_title(
         f"Training set (support={len(y_train)}, $F_1$={train_f1})\nscce={train_scce}"
     )
@@ -610,7 +691,10 @@ def eval_and_save(
         results.update(item)
 
     if make_plots:
-        print("Making predictions")
+        print("Making plots")
+        plot_losses(history, show_figs, d, results, trimmed_config)
+        plot_metrics(model, d, show_figs)
+        print("Making predictions and confusion matrix")
         y_pred_valid = np.argmax(model.predict(X_valid, verbose=0), axis=1)
         y_pred_train = np.argmax(model.predict(X_train, verbose=0), axis=1)
         results.update(
@@ -619,8 +703,6 @@ def eval_and_save(
                 "train_f1": float(f1_score(y_train, y_pred_train, average="weighted")),
             }
         )
-        print("Making plots")
-        plot_losses(history, show_figs, d, results, trimmed_config)
         plot_confusion_matrices(
             y_valid,
             y_pred_valid,
@@ -634,7 +716,6 @@ def eval_and_save(
             cbar,
             perc=perc,
         )
-        plot_metrics(model, d, show_figs)
 
     if os.path.exists("./models/results.jsonlines"):
         old = pd.read_json("./models/results.jsonlines", lines=True)
@@ -739,3 +820,54 @@ def build_dataset(df, config):
     )
 
     return config, g2i, i2g, i2ohe, ohe2i, X, y, X_train, X_valid, y_train, y_valid
+
+
+def calc_red(y_true, y_pred, i2g):
+    """Given the ordered true and actual predictions, calculate the mean
+    distance from predicted rising edge to true rising edge"""
+    mean_dists = np.zeros((y_pred.shape[1] - 1,))
+    num_preds = np.zeros((y_pred.shape[1] - 1,))
+    num_trues = np.zeros((y_pred.shape[1] - 1,))
+    for i in range(mean_dists.shape[0]):
+        gesture = i2g(i)
+        pred_is_gesture = np.argmax(y_pred, axis=-1) == i
+        correct_pred = np.argmax(y_pred, axis=-1) == y_true
+        correct_gesture = i == y_true
+
+        rising_pred = np.diff(pred_is_gesture.astype(int))
+        count_pred = (rising_pred == 1).sum()
+
+        rising_true = np.diff(correct_gesture.astype(int))
+        count_true = (rising_true == 1).sum()
+
+        nz_true = np.nonzero(rising_true)[0]
+        nz_pred = np.nonzero(rising_pred)[0]
+        num_preds[i] = len(nz_pred)
+        num_trues[i] = len(nz_true)
+
+        t = 0
+        p = 0
+        d = 0
+        while t < nz_true.shape[0] and p < nz_pred.shape[0]:
+            curr_true = nz_true[t]
+            next_true = nz_true[t + 1] if t != nz_true.shape[0] - 1 else float("inf")
+            curr_pred = nz_pred[p]
+            next_pred = nz_pred[p + 1] if p != nz_pred.shape[0] - 1 else float("inf")
+            dists = np.zeros((2, 2))
+            dists[0][0] = np.abs(curr_true - curr_pred)
+            dists[0][1] = np.abs(curr_true - next_pred)
+            dists[1][0] = np.abs(next_true - curr_pred)
+            dists[1][1] = np.abs(next_true - next_pred)
+            d += dists[0][0] if dists[0][0] < 80 else 0
+            mean_dists[i] += dists[0][0] if dists[0][0] < 80 else 0
+
+            if dists[1][1] <= dists[0][1] and dists[1][1] <= dists[1][0]:
+                t += 1
+                p += 1
+            elif dists[1][0] <= dists[0][1]:
+                t += 1
+            elif dists[0][1] <= dists[1][0]:
+                p += 1
+        mean_dists[i] = mean_dists[i] / len(nz_true)
+
+    return mean_dists, num_preds, num_trues
