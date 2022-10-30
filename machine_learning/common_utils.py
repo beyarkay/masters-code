@@ -2,7 +2,6 @@ import matplotlib.pyplot as plt
 import matplotlib as mpl
 import numpy as np
 import pandas as pd
-import sys
 import os
 import datetime
 from time import time
@@ -19,17 +18,6 @@ mpl.rcParams["figure.figsize"] = [12, 12]
 mpl.rcParams["figure.dpi"] = 200
 
 CLR = "\x1b[2K\r"
-
-# from ipywidgets import interact, interact_manual
-# import matplotlib.image as mplimg
-# import tensorflow as tf
-# from tensorflow import keras
-# import seaborn as sns
-# import ipywidgets as widgets
-# from yaml import Loader, Dumper
-# from sklearn.preprocessing import RobustScaler
-# Setup seaborn
-# sns.set()
 
 # Define some variables for creating feature names like 'left-thumb-x' or 'right-index-z'
 finger_names = [
