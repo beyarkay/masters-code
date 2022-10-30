@@ -32,12 +32,12 @@ def main(args):
     callbacks = []
     if args["predict"]:
         callbacks.append(predict_cb)
-    if args["incremental"]:
-        callbacks.append(save_incremental_cb)
+    if args["save"]:
+        callbacks.append(save_cb)
     if args["output"]:
         callbacks.append(driver_cb)
 
-    if args["incremental"]:
+    if args["save"]:
         # Add a listener that will remove the last 120 lines (3 seconds) from the
         # training data. Just in case some poor gesture data gets recorded by
         # mistake
@@ -281,9 +281,7 @@ def loop_over_serial_stream(
         print("Serial port closed")
 
 
-def save_incremental_cb(
-    new_measurements: np.ndarray, d: dict[str, Any]
-) -> dict[str, Any]:
+def save_cb(new_measurements: np.ndarray, d: dict[str, Any]) -> dict[str, Any]:
     """Append data line-by-line to a csv file"""
     # only write to file if we've got a non-None gesture index
     if d["gesture_idx"] is None:
@@ -438,7 +436,7 @@ def write_debug_line(
         popped = cb_data["lineup"].pop(0)
         # np.random.seed(int(time_ms()))
         cb_data["lineup"].append(popped)
-        if cb_data["args"]["incremental"]:
+        if cb_data["args"]["save"]:
             print(CLR, get_gesture_counts())
 
     gesture = cb_data["lineup"][0]
@@ -449,7 +447,7 @@ def write_debug_line(
         .replace("left", "l")
         .replace("right", "r")
     )
-    if cb_data["args"]["incremental"]:
+    if cb_data["args"]["save"]:
         curr_gesture_str = (
             f"{gesture.replace('gesture0', 'g')}: {description: <20}".replace(
                 "thumb", "1"
@@ -612,7 +610,7 @@ def get_gesture_counts():
 if __name__ == "__main__":
     try:
         parser = argparse.ArgumentParser(
-            prog="Real Time Classification",
+            prog="*Ergo* Classification and Recording",
             description="Record, classify, and predict *Ergo* sensor data in real time.",
         )
         parser.add_argument(
@@ -628,9 +626,9 @@ if __name__ == "__main__":
             action="store_true",
         )
         parser.add_argument(
-            "-i",
-            "--incremental",
-            help="Incrementally append data line-by-line to a csv file",
+            "-s",
+            "--save",
+            help="Save the incoming data line-by-line to a csv file",
             action="store_true",
         )
         parser.add_argument(
