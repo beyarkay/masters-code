@@ -580,7 +580,7 @@ def get_color(string) -> str:
 
 
 def get_gesture_counts(root="../gesture_data/train/"):
-    paths = os.listdir(root)
+    paths = [p for p in os.listdir(root) if p.endswith(".csv")]
     counter = Counter()
     for path in paths:
         with open(root + path, "r") as f:

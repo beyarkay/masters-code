@@ -372,7 +372,7 @@ def plot_mean_gesture(gesture, window_size=15, per="finger"):
 
 def parse_csvs(root="../gesture_data/train/"):
     dfs = []
-    for path in os.listdir(root):
+    for path in [p for p in os.listdir(root) if p.endswith(".csv")]:
         dfs.append(
             pd.read_csv(
                 root + path,
@@ -497,7 +497,13 @@ def compile_and_fit(X_train, y_train, X_valid, y_valid, config, i2g, verbose=1):
     kwargs = (
         {"class_weight": config["class_weight"]} if config["use_class_weights"] else {}
     )
-    # TODO calculate rising edge dist each epoch
+    callbacks = [
+        per_class_callback,
+        early_stopping,
+        # reduce_lr,
+    ]
+    if config.get("use_wandb", False):
+        callbacks.append(WandbCallback())
 
     # Fit the model
     history = model.fit(
@@ -507,12 +513,7 @@ def compile_and_fit(X_train, y_train, X_valid, y_valid, config, i2g, verbose=1):
         batch_size=config["batch_size"],
         epochs=config["epochs"],
         validation_data=(X_valid, y_valid),
-        callbacks=[
-            per_class_callback,
-            early_stopping,
-            # reduce_lr,
-            WandbCallback(),
-        ],
+        callbacks=callbacks,
         **kwargs,
     )
     return history, model
