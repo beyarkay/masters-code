@@ -823,12 +823,6 @@ def build_dataset(df, config):
     g2i, i2g = gestures_and_indices(y)
 
     labels = sorted(np.unique(y))
-    g2i_dict = {g: i for i, g in enumerate(labels)}
-    i2g_dict = {i: g for i, g in enumerate(labels)}
-    with open("saved_models/idx_to_gesture.pickle", "wb") as f:
-        pickle.dump(i2g_dict, f, protocol=pickle.HIGHEST_PROTOCOL)
-    with open("saved_models/gesture_to_idx.pickle", "wb") as f:
-        pickle.dump(g2i_dict, f, protocol=pickle.HIGHEST_PROTOCOL)
 
     y = g2i(y)
     # Get functions to convert between indices and one hot encodings

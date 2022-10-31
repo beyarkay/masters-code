@@ -165,12 +165,6 @@ def loop_over_serial_stream(
     # that we can skip it if required
     first_loop = True
 
-    # Get a list of all model paths that are Classifiers
-    model_paths = sorted(
-        ["saved_models/" + p for p in os.listdir("saved_models/") if "Classifier" in p],
-        reverse=True,
-    )
-
     with open("../gesture_data/gesture_info.yaml", "r") as f:
         g2k = yaml.safe_load(f.read()).get("gestures", {})
     g2k = {k: v.get("key", "unknown") for k, v in g2k.items()}
