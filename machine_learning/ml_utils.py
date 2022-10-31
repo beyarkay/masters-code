@@ -244,7 +244,7 @@ def plot_timeseries(X, y, t=None, per="dimension", axs=None, draw_text=True):
         ymin = min(ymin, X[:, d].min())
 
     # Plot the ticks and legend for each axis
-    NUM_LABELS = 40 if per == "dimension" else 40
+    NUM_LABELS = 30 if per == "dimension" else 30
     TICKS_PER_LABEL = max(1, X.shape[0] // NUM_LABELS)
     for i, ax in enumerate(axs):
         if abridged:
@@ -430,7 +430,7 @@ def compile_and_fit(X_train, y_train, X_valid, y_valid, config, i2g, verbose=1):
         dense_layers.append(
             layers.Dense(
                 units=num_units,
-                activation="relu",
+                activation=config["activation_fn"],
             )
         )
         if config.get("dropout_frac", 1.0) < 1.0:
@@ -510,7 +510,7 @@ def compile_and_fit(X_train, y_train, X_valid, y_valid, config, i2g, verbose=1):
             per_class_callback,
             early_stopping,
             # reduce_lr,
-            # WandbCallback(),
+            WandbCallback(),
         ],
         **kwargs,
     )
@@ -521,28 +521,56 @@ def plot_losses(history, show_figs, d, results, trimmed_config, y_true=None):
     _fig, ax = plt.subplots(1, 1, figsize=(5, 5))
     ax.plot(history.history["val_loss"])
     ax.plot(history.history["loss"])
-    plt.title(f"Sparse Categorical Cross Entropy over time")
+
+    most_frequent, _count = sorted(
+        list(zip(*np.unique(y_true, return_counts=True))), key=lambda x: -x[1]
+    )[0]
+
+    y_pred = tf.one_hot(np.full(y_true.shape, most_frequent), len(np.unique(y_true)))
+    baseline_scce = (
+        keras.losses.sparse_categorical_crossentropy(
+            y_true,
+            y_pred,
+        )
+        .numpy()
+        .mean()
+    )
+
+    ax.plot(
+        [baseline_scce] * len(history.history["loss"]),
+        c="tab:green",
+        label="Dumb",
+    )
+    ax.scatter([len(history.history["loss"]) - 1], [baseline_scce], s=10, c="tab:green")
+    ax.text(
+        len(history.history["loss"]) - 1,
+        baseline_scce,
+        str(np.round(baseline_scce, 4)),
+        horizontalalignment="right",
+        verticalalignment="bottom",
+    )
+    plt.title(f"Categorical Cross-Entropy over time")
 
     ylim = ax.get_ylim()
     ax.set_ylim((0, ylim[1]))
-    ax.set_ylabel("Sparse Categorical Crossentropy")
+    ax.set_ylabel("Categorical Cross-Entropy")
     ax.set_xlabel("Epoch")
 
     for key in ("val_loss", "loss"):
         ax.text(
-            len(history.history[key]),
+            len(history.history[key]) - 1,
             history.history[key][-1],
             str(np.round(history.history[key][-1], 4)),
             horizontalalignment="right",
             verticalalignment="bottom",
         )
         ax.scatter(
-            [len(history.history[key])],
+            [len(history.history[key]) - 1],
             [history.history[key][-1]],
             s=10,
         )
 
-    ax.legend(["val", "train"], loc="best")
+    ax.legend(["Validation", "Training", "Baseline"], loc="best")
     plt.tight_layout()
     plt.savefig(f"{d}/metrics.pdf")
     if show_figs:
@@ -564,25 +592,30 @@ def plot_confusion_matrices(
     cbar=False,
     perc="both",
 ):
-    fig, axs = plt.subplots(1, 2, figsize=(16, 9))
-    _ = conf_mat(y_valid, y_pred_valid, i2g, ax=axs[0], perc=perc, cbar=cbar)
+    fig, ax = plt.subplots(1, 1, figsize=(9, 9))
+    _ = conf_mat(y_valid, y_pred_valid, i2g, ax=ax, perc=perc, cbar=cbar)
     valid_f1 = np.round(results["valid_f1"], 4)
     valid_scce = np.round(results["val_loss"], 4)
-    axs[0].set_title(
-        f"Validation set (support={len(y_valid)}, $F_1$={valid_f1})\nscce={valid_scce}"
+    ax.set_title(
+        f"Validation Set Confusion Matrix\nSupport={len(y_valid)}, $F_1$={valid_f1}, Categorical Cross-Entropy={valid_scce}"
     )
+    plt.tight_layout()
+    plt.savefig(f"{d}/val_confusion_matrices.pdf")
+    if show_figs:
+        plt.show()
+    else:
+        plt.close()
 
-    _ = conf_mat(y_train, y_pred_train, i2g, ax=axs[1], perc=perc, cbar=cbar)
+    fig, ax = plt.subplots(1, 1, figsize=(9, 9))
+    _ = conf_mat(y_train, y_pred_train, i2g, ax=ax, perc=perc, cbar=cbar)
     train_f1 = np.round(results["train_f1"], 4)
     train_scce = np.round(results["loss"], 4)
-    axs[1].set_title(
-        f"Training set (support={len(y_train)}, $F_1$={train_f1})\nscce={train_scce}"
+    ax.set_title(
+        f"Training Set Confusion Matrix\nsupport={len(y_train)}, $F_1$={train_f1}, Categorical Cross-Entropy={train_scce}"
     )
 
-    plt.suptitle(f"Validation and Training Confusion Matrices\n{trimmed_config}")
-
     plt.tight_layout()
-    plt.savefig(f"{d}/confusion_matrices.pdf")
+    plt.savefig(f"{d}/train_confusion_matrices.pdf")
     if show_figs:
         plt.show()
     else:
@@ -636,7 +669,7 @@ def plot_metrics(model, d, show_figs):
             lw=2,
         )
         ax.set_ylim((0, 1))
-        ax.set_xlabel("Epochs")
+        ax.set_xlabel("Epoch")
         ax.set_ylabel(f"{metric.title()}")
         ax.set_title(f"{metric} for all gesture classes")
 
@@ -692,7 +725,7 @@ def eval_and_save(
 
     if make_plots:
         print("Making plots")
-        plot_losses(history, show_figs, d, results, trimmed_config)
+        plot_losses(history, show_figs, d, results, trimmed_config, y_true=y_valid)
         plot_metrics(model, d, show_figs)
         print("Making predictions and confusion matrix")
         y_pred_valid = np.argmax(model.predict(X_valid, verbose=0), axis=1)

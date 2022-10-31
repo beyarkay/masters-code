@@ -34,7 +34,7 @@ def main(args):
         callbacks.append(predict_cb)
     if args["save"]:
         callbacks.append(save_cb)
-    if args["output"]:
+    if args["as_keyboard"]:
         callbacks.append(driver_cb)
 
     if args["save"]:
@@ -356,8 +356,8 @@ def driver_cb(new_measurements: np.ndarray, d: dict[str, Any]) -> dict[str, Any]
         now_str = datetime.datetime.now().isoformat()
         best_gesture = rising[0]
         # If there's a text file provided, write to it
-        if d["args"]["output"]:
-            with open(d["args"]["output"], "a") as f:
+        if d["args"]["as_keyboard"]:
+            with open(d["args"]["as_keyboard"], "a") as f:
                 s = str(d["g2k"].get(best_gesture, f"<{best_gesture}>"))
                 print(best_gesture, s)
                 f.write(s)
@@ -595,8 +595,7 @@ def get_color(string) -> str:
     return f"rgb({int(r * 255)}, {int(g * 255)}, {int(b * 255)})"
 
 
-def get_gesture_counts():
-    root = "../gesture_data/train/"
+def get_gesture_counts(root="../gesture_data/train/"):
     paths = os.listdir(root)
     counter = Counter()
     for path in paths:
@@ -632,9 +631,9 @@ if __name__ == "__main__":
             action="store_true",
         )
         parser.add_argument(
-            "-o",
-            "--output",
-            help="Predict gestures, convert them to keystrokes, and write the keystrokes to OUTPUT",
+            "-k",
+            "--as-keyboard",
+            help="Predict gestures, convert them to keystrokes, and write the keystrokes to the file AS_KEYBOARD",
             action="store",
         )
 

@@ -41,3 +41,5 @@ machine_learning/models/
 *.jpg
 
 *.pickle
+
+.coverage

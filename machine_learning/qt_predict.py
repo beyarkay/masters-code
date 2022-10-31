@@ -31,7 +31,7 @@ lastUpdate = perf_counter()
 avgFps = 0.0
 
 baudrate = 19_200
-port = "/dev/cu.usbmodem1401"
+port = "/dev/cu.usbmodem11101"
 
 serial_port = serial.Serial(port=port, baudrate=baudrate, timeout=1)
 
