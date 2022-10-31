@@ -95,6 +95,9 @@ class TestErgo(unittest.TestCase):
             lambda: E.main({"predict": False, "save": False, "as-keyboard": False}),
         )
 
+    def test_(self):
+        self.assert_(True)
+
 
 if __name__ == "__main__":
     unittest.main()

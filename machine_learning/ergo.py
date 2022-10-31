@@ -7,7 +7,7 @@ from serial.tools.list_ports import comports
 from typing import Callable, List, Any
 import argparse
 import colorsys
-import common_utils as utils
+from ml_utils import *
 import datetime
 import keyboard
 import numpy as np
@@ -153,7 +153,9 @@ def loop_over_serial_stream(
 
     model = keras.models.load_model(model_path)
     # Get the config
-    config = utils.load_config(model_path + "/config.yaml")
+    with open(model_path + "/config.yaml", "r") as file:
+        config = yaml.safe_load(file)
+
     idx_to_gesture = config["i2g"]
     gesture_to_idx = config["g2i"]
     # Define some constants
@@ -162,13 +164,6 @@ def loop_over_serial_stream(
     # The first loop can sometimes contain incomplete data, so define a flag so
     # that we can skip it if required
     first_loop = True
-
-    # Read in the scaler used by the machine learning model to scale the input data
-    scaler_paths = sorted(
-        ["saved_models/" + p for p in os.listdir("saved_models") if "Scaler" in p],
-        reverse=True,
-    )
-    scaler = utils.load_model(scaler_paths[0])
 
     # Get a list of all model paths that are Classifiers
     model_paths = sorted(
@@ -188,21 +183,17 @@ def loop_over_serial_stream(
         "prev_offset": 0,
         "curr_idx": 0,
         "prev_idx": 0,
-        "n_measurements": 0,
         "gesture_idx": None,
         "obs": np.full((n_timesteps, n_sensors), np.nan),
         "time_ms": int(time() * 1000),
         "prev_time_ms": int(time() * 1000),
         "idx_to_gesture": idx_to_gesture,
         "gesture_to_idx": gesture_to_idx,
-        "scaler": scaler,
         "model": model,
         "config": config,
         "prediction": "no pred",
-        "prediction_history": [],
         "g2k": g2k,
         "gesture_info": gesture_info(),
-        "thread": None,
         "args": args,
     }
 
@@ -234,7 +225,6 @@ def loop_over_serial_stream(
             cb_data["prev_gesture_idx"] = cb_data["gesture_idx"]
             if not raw_values[0]:
                 continue
-            # cb_data["gesture_idx"] = int(raw_values[0])
             # Shuffle along the previous and current offsets
             cb_data["prev_offset"] = cb_data["curr_offset"]
             cb_data["curr_offset"] = int(raw_values[1])
@@ -330,9 +320,7 @@ def driver_cb(new_measurements: np.ndarray, d: dict[str, Any]) -> dict[str, Any]
     if np.isnan(d["obs"]).any():
         return d
 
-    gesture_preds = utils.predict_tf(
-        d["obs"], d["config"], d["model"], d["idx_to_gesture"]
-    )
+    gesture_preds = predict_tf(d["obs"], d["config"], d["model"], d["idx_to_gesture"])
 
     predictions = np.array(list(zip(*gesture_preds))[1])
     gestures = np.array(list(zip(*gesture_preds))[0])
@@ -434,7 +422,6 @@ def write_debug_line(
     if time_ms() - cb_data["last_gesture"] >= COUNTDOWN_MS:
         cb_data["last_gesture"] = time_ms()
         popped = cb_data["lineup"].pop(0)
-        # np.random.seed(int(time_ms()))
         cb_data["lineup"].append(popped)
         if cb_data["args"]["save"]:
             print(CLR, get_gesture_counts())
@@ -473,7 +460,6 @@ def write_debug_line(
         inverse = ""
         regular = ""
     cb_data["gesture_idx"] = int(gesture.replace("gesture", ""))
-    # print(CLR, gesture, cb_data["gesture_idx"])
     prediction = cb_data["prediction"]
     countdown = cb_data["lineup"][0]
     print(f"{regular}{inverse} {colors}{prediction}", end=end)
@@ -537,9 +523,7 @@ def try_print_probabilities(d):
         # print(f"{CLR}Not predicting, (obs contains {(np.isnan(d['obs'])).sum()} NaNs)")
         return d
 
-    predictions = utils.predict_tf(
-        d["obs"], d["config"], d["model"], d["idx_to_gesture"]
-    )
+    predictions = predict_tf(d["obs"], d["config"], d["model"], d["idx_to_gesture"])
     print(f"{CLR}", end="")
     # save the best prediction to the callback dictionary
     d["prediction"] = (

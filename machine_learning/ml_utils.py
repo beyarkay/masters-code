@@ -1,9 +1,11 @@
 from keras import layers
-import keras.backend as K
-from wandb.keras import WandbCallback
 from sklearn.metrics import classification_report, f1_score
 from sklearn.model_selection import train_test_split
 from tensorflow import keras
+from typing import Callable, List, Any, Tuple
+from wandb.keras import WandbCallback
+import datetime
+import keras.backend as K
 import matplotlib as mpl
 import matplotlib.pyplot as plt
 import numpy as np
@@ -13,7 +15,6 @@ import pickle
 import seaborn as sns
 import tensorflow as tf
 import yaml
-import datetime
 
 keras.utils.set_random_seed(42)
 
@@ -904,3 +905,20 @@ def calc_red(y_true, y_pred, i2g):
         mean_dists[i] = mean_dists[i] / len(nz_true)
 
     return mean_dists, num_preds, num_trues
+
+
+def predict_tf(obs, config, model, i2g) -> List[Tuple[int, float]]:
+    probabilities = model(np.array([obs])).numpy()[0]
+    obs_pred = np.argmax(probabilities)
+
+    # Sort the predictions
+    predictions = sorted(enumerate(probabilities), key=lambda ip: -ip[1])
+    # Convert the indexes to gestures and return the predictions
+    return [(i2g[idx], proba) for idx, proba in predictions]
+
+
+def load_model(filepath):
+    """Load and return the model located at `filepath`."""
+    with open(filepath, "rb") as f:
+        model = pickle.load(f)
+    return model
