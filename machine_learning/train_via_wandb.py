@@ -22,6 +22,7 @@ def train(wb_config=None):
             brk_config = yaml.safe_load(file)
 
         intersection = list(set(wb_config.keys()) & set(brk_config.keys()))
+        print(intersection)
 
         brk_config.update({k: wb_config[k] for k in intersection})
 
@@ -50,11 +51,16 @@ def train(wb_config=None):
             verbose=0,
         )
         y_pred = model.predict(X, verbose=0)
-        mean_dist = calc_red(y, y_pred, i2g).mean()
-
+        mean_dists, num_preds, num_trues = calc_red(y, y_pred, i2g)
+        red_loss = mean_dists + 40 * np.abs(num_preds - num_trues)
         print("Fit complete")
         wandb.log(
-            {"rising_edge_dist": mean_dist, "val_loss": history.history["val_loss"][-1]}
+            {
+                "rising_edge_dist": red_loss.mean(),
+                "rising_edge_dist_std": red_loss.std(),
+                "rising_edge_dist_no_penalty": mean_dists.mean(),
+                "val_loss": history.history["val_loss"][-1],
+            }
         )
 
 
