@@ -80,23 +80,23 @@ class TestErgo(unittest.TestCase):
         self.assertRaisesRegex(
             SystemExit,
             "1",
-            lambda: E.main({"predict": False, "save": False, "as_keyboard": True}),
+            lambda: E.main({"predict": False, "save": False, "as_keyboard": ""}),
         )
         self.assertRaisesRegex(
             SystemExit,
             "1",
-            lambda: E.main({"predict": False, "save": True, "as_keyboard": False}),
+            lambda: E.main({"predict": False, "save": True, "as_keyboard": "blah"}),
         )
         self.assertRaisesRegex(
             SystemExit,
             "1",
-            lambda: E.main({"predict": True, "save": False, "as_keyboard": False}),
+            lambda: E.main({"predict": True, "save": False, "as_keyboard": ""}),
         )
 
         self.assertRaisesRegex(
             SystemExit,
             "1",
-            lambda: E.main({"predict": False, "save": False, "as_keyboard": False}),
+            lambda: E.main({"predict": False, "save": False, "as_keyboard": ""}),
         )
 
 
@@ -204,8 +204,8 @@ class TestUtils(unittest.TestCase):
             "loss": [3.150095224380493],
             "val_loss": [1.367781162261963],
         }
-        # self.assertEqual(history.history["loss"], should_be_history["loss"])
-        # self.assertEqual(history.history["val_loss"], should_be_history["val_loss"])
+        self.assertEqual(history.history["loss"], should_be_history["loss"])
+        self.assertEqual(history.history["val_loss"], should_be_history["val_loss"])
         self.assertTrue(True)
 
     def test_calc_red(self):
