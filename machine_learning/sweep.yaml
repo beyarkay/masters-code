@@ -3,6 +3,17 @@ metric:
   goal: minimize
   name: rising_edge_dist
 parameters:
+  activation_fn:
+    distribution: categorical
+    values:
+      - relu
+      - elu
+  optimiser:
+    distribution: categorical
+    values:
+      - adam
+      - sgd
+      - rmsprop
   batch_size:
     distribution: categorical
     values:
@@ -12,11 +23,6 @@ parameters:
       - 128
       - 256
       - 512
-  bias_final_layer:
-    distribution: categorical
-    values:
-      - true
-      - false
   dropout_frac:
     distribution: uniform
     max: 0.8
@@ -43,4 +49,5 @@ parameters:
     distribution: int_uniform
     max: 40
     min: 5
+
 
