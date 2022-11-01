@@ -55,7 +55,4 @@ gestures:
   gesture0048: { description: 180 r 4, key: "9"}
   gesture0049: { description: 180 r 5, key: "0"}
 
-  # Auxiliary gestures
-  gesture0255:
-    description: The "no movement" gesture
-    desc: no mvmt
+  gesture0255: { description: "no movement", key: ""}
