@@ -347,7 +347,7 @@ def plot_means(Xs, per="finger"):
     return axs
 
 
-def plot_mean_gesture(gesture, window_size=15, per="finger"):
+def plot_mean_gesture(gesture, df, window_size=15, per="finger"):
     y_orig = df["gesture"].to_numpy()
     X_orig = df.drop(["datetime", "gesture"], axis=1).to_numpy()
     t_orig = df["datetime"].to_numpy()
@@ -766,7 +766,7 @@ def eval_and_save(
         yaml.dump(results, file)
 
 
-def build_dataset(df, config):
+def build_dataset(df, config, gestures=None):
     print(f"Making batches with window size of {config['window_size']}")
     X, y = make_batches(
         df.drop(["datetime", "gesture"], axis=1).to_numpy(),
@@ -820,17 +820,19 @@ def build_dataset(df, config):
         config["label_before"] + config["label_after"]
     ) / config["window_size"]
     # Get functions to convert between gestures and indices
-    g2i, i2g = gestures_and_indices(y)
+    if gestures is None:
+        gestures = []
+    g2i, i2g = gestures_and_indices(list(y) + gestures)
 
-    labels = sorted(np.unique(y))
+    labels = sorted(np.unique(list(y) + gestures))
+
+    # Get functions to convert between indices and one hot encodings
+    i2ohe, ohe2i = one_hot_and_back(g2i(labels))
 
     y = g2i(y)
-    # Get functions to convert between indices and one hot encodings
-    i2ohe, ohe2i = one_hot_and_back(y)
 
-    total = len(y)
-    n_unique = len(np.unique(y))
-    config["gestures"] = list(np.unique(y))
+    config["gestures"] = g2i(labels)
+    n_unique = len(config["gestures"])
 
     X_train, X_valid, y_train, y_valid = train_test_split(
         X, y, test_size=config["test_frac"], random_state=42
