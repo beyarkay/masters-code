@@ -1,23 +1,27 @@
 activation: softmax
+activation_fn: relu
 architecture: ffnn
-batch_size: 2048
+batch_size: 128
+bias_final_layer: true
 center_label: true
-dropout_frac: 0.5
+dropout_frac: 0.56
 epochs: 500
 g255_vs_rest: false
 gestures: null
 label_after: 10
 label_before: 10
-label_expansion: 5
+label_expansion: 8
 label_offset: 0
 label_size_over_window_size: 0.5
 loss_fn: sparse_categorical_crossentropy
+lr: 0.0001832
 n_hidden_units:
-  1: 128
-  2: 128
+  1: 175
+  2: 97
 omit_0255: false
 optimiser: adam
 test_frac: 0.25
 use_class_weights: false
-window_size: 10
+use_wandb: false
+window_size: 14
 window_skip: 1
