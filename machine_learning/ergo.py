@@ -22,7 +22,7 @@ np.set_printoptions(threshold=sys.maxsize, linewidth=250)
 CLR = "\x1b[2K\r"
 should_create_new_file = True
 GESTURE_WINDOW_MS = 30
-GESTURES_RANGE = (45, 50)
+GESTURES_RANGE = (10, 50)
 COUNTDOWN_MS = 1000
 
 
@@ -34,8 +34,8 @@ def main(args):
         callbacks.append(predict_cb)
     if args["save"]:
         callbacks.append(save_cb)
-    if args["as_keyboard"]:
-        callbacks.append(driver_cb)
+    if args["as_keyboard"] is None or len(args["as_keyboard"]) > 0:
+        callbacks.append(keyboard_cb)
 
     if args["save"]:
         # Add a listener that will remove the last 120 lines (3 seconds) from the
@@ -213,7 +213,6 @@ def loop_over_serial_stream(
                 )
                 sys.exit(1)
             if len(raw_values) != n_sensors + 2:
-                # print(f"{CLR}Raw values are length {len(raw_values)}, not {n_sensors+2}: {raw_values}")
                 continue
             # Update the dictionary with some useful values
             cb_data["prev_gesture_idx"] = cb_data["gesture_idx"]
@@ -253,6 +252,7 @@ def loop_over_serial_stream(
             print(f"value error: {e}, {raw_values=}")
             continue
 
+        cb_data = calc_obs(new_measurements, cb_data)
         # Call the callback with the new measurements and the callback data
         for callback in callbacks:
             cb_data = callback(new_measurements, cb_data)
@@ -278,6 +278,8 @@ def save_cb(new_measurements: np.ndarray, d: dict[str, Any]) -> dict[str, Any]:
         print(f"{CLR}Sleeping due to burnt observations, new path is {path}")
         sleep(2)
         should_create_new_file = False
+        d["time_ms"] = time_ms()
+        d["prev_time_ms"] = time_ms()
     else:
         paths = [f for f in sorted(os.listdir(root)) if f.endswith(".csv")]
         path = root + paths[-1]
@@ -296,19 +298,13 @@ def save_cb(new_measurements: np.ndarray, d: dict[str, Any]) -> dict[str, Any]:
 def predict_cb(new_measurements: np.ndarray, d: dict[str, Any]) -> dict[str, Any]:
     """Predict the current gesture, printing the probabilities to stdout."""
 
-    d = calc_obs(new_measurements, d)
-
-    d = try_print_probabilities(d)
+    d = print_predictions(d)
     return d
 
 
-def driver_cb(new_measurements: np.ndarray, d: dict[str, Any]) -> dict[str, Any]:
+def keyboard_cb(new_measurements: np.ndarray, d: dict[str, Any]) -> dict[str, Any]:
     """Take the predicted gesture and convert it to a character, writing to file."""
-    if "bucket" not in d:
-        d["bucket"] = 0
-        d["curr_gesture"] = None
-
-    d = calc_obs(new_measurements, d)
+    # d = calc_obs(new_measurements, d)
 
     # If we have any NaNs, don't try predict anything
     if np.isnan(d["obs"]).any():
@@ -318,34 +314,67 @@ def driver_cb(new_measurements: np.ndarray, d: dict[str, Any]) -> dict[str, Any]
 
     predictions = np.array(list(zip(*gesture_preds))[1])
     gestures = np.array(list(zip(*gesture_preds))[0])
-    if "predictions" not in d:
-        d["predictions"] = predictions
-    if "ma_delta" not in d:
-        d["ma_delta"] = predictions - d["predictions"]
+    best_idx = np.argmax(predictions)
+    best_pred = predictions[best_idx]
+    best_gest = gestures[best_idx]
 
-    alpha = 0.7
-    thresh = 0.4
-    d["ma_delta"] = (1 - alpha) * d["ma_delta"] + alpha * (
-        predictions - d["predictions"]
-    )
-    print(CLR, d["ma_delta"][np.nonzero(d["ma_delta"] > 0.2)[0]])
-    rising = gestures[np.nonzero(d["ma_delta"] > thresh)[0]]
-    d["prediction"] = (
-        format_prediction(*gesture_preds[0]) if gesture_preds[0][1] > 0.98 else ""
-    )
+    d["prediction"] = format_prediction(best_gest, best_pred)
 
-    if len(rising) == 1 and rising[0] != "gesture0255":
-        now_str = datetime.datetime.now().isoformat()
-        best_gesture = rising[0]
-        # If there's a text file provided, write to it
-        if d["args"]["as_keyboard"]:
+    if "last_predicted" not in d.keys():
+        d["last_predicted"] = {g: time_ms() - 1000 for g in gestures}
+    if "modifiers" not in d.keys():
+        d["modifiers"] = []
+
+    most_recent_keypress = max(
+        d["last_predicted"][k]
+        for k, v in d["last_predicted"].items()
+        if k != "gesture0255"
+    )
+    if time_ms() - most_recent_keypress > 500:
+        d["last_predicted"][best_gest] = time_ms()
+        keystroke = str(d["g2k"].get(best_gest, f"<{best_gest}>"))
+        # Either write to the provided file, or send the keystrokes to the OS
+        # directly
+        if d["args"]["as_keyboard"] is not None:
             with open(d["args"]["as_keyboard"], "a") as f:
-                s = str(d["g2k"].get(best_gesture, f"<{best_gesture}>"))
-                print(best_gesture, s)
-                f.write(s)
-
-    else:
-        d["curr_gesture"] = "gesture0255"
+                f.write(keystroke)
+        elif keystroke not in ["control", "shift"]:
+            if keystroke == "space":
+                keystroke = " "
+            elif "shift" in d["modifiers"]:
+                if keystroke.isalpha():
+                    keystroke = keystroke.upper()
+                else:
+                    keystroke = {
+                        "1": "!",
+                        "2": "@",
+                        "3": "#",
+                        "4": "$",
+                        "5": "%",
+                        "6": "^",
+                        "7": "&",
+                        "8": "*",
+                        "9": "(",
+                        "0": ")",
+                        "-": "_",
+                        "=": "+",
+                        "[": "{",
+                        "]": "}",
+                        ";": ":",
+                        "'": '"',
+                        ",": "<",
+                        ".": ">",
+                        "/": "?",
+                        "|": "\\",
+                    }.get(keystroke, "")
+            elif "control" in d["modifiers"]:
+                if keystroke == "m":
+                    keystroke = "\n"
+            keyboard.write(keystroke)
+            if keystroke:
+                d["modifiers"] = []
+        else:
+            d["modifiers"].append(keystroke)
     return d
 
 
@@ -353,9 +382,9 @@ def calc_obs(new_measurements: np.ndarray, d: dict[str, Any]) -> dict[str, Any]:
     """Calculate how much time has passed between this measurement and the
     previous measurement, rounded to the nearest 25ms"""
     diff = round((d["time_ms"] - d["prev_time_ms"]) / 25) * 25
-    if diff == 0:
-        # If no time has passed, just replace the most recent measurement with
-        # the new measurement
+    if diff < 25:
+        # If less than 25ms has passed, just replace the most recent
+        # measurement with the new measurement
         d["obs"][0, :] = new_measurements
     elif diff == 25:
         # If 25ms has passed, shuffle all measurements along and then insert
@@ -418,7 +447,12 @@ def write_debug_line(
         popped = cb_data["lineup"].pop(0)
         cb_data["lineup"].append(popped)
         if cb_data["args"]["save"]:
-            print(CLR, get_gesture_counts())
+            relevant = {
+                k: v
+                for k, v in get_gesture_counts().items()
+                if k.replace("g", "gesture0") in cb_data["lineup"]
+            }
+            print(CLR, "Count of gestures: ", relevant)
 
     gesture = cb_data["lineup"][0]
     description = (
@@ -510,26 +544,16 @@ def get_colored_string(
     return coloured
 
 
-def try_print_probabilities(d):
+def print_predictions(d):
     """Attempt to predict the gesture based on the observation in `d`."""
     # If we have any NaNs, don't try predict anything
     if np.isnan(d["obs"]).any():
-        # print(f"{CLR}Not predicting, (obs contains {(np.isnan(d['obs'])).sum()} NaNs)")
         return d
 
     predictions = predict_tf(d["obs"], d["config"], d["model"], d["idx_to_gesture"])
     print(f"{CLR}", end="")
-    # save the best prediction to the callback dictionary
-    d["prediction"] = (
-        format_prediction(*predictions[0]) if predictions[0][1] > 0.98 else ""
-    )
     # Only count a prediction if it's over 98% probable
-    best_proba = 0.98
-    best_gesture = None
-    for gesture, proba in sorted(predictions, key=lambda gp: gp[0]):
-        if proba >= best_proba:
-            best_proba = proba
-            best_gesture = gesture
+    for i, (gesture, proba) in enumerate(sorted(predictions, key=lambda gp: gp[0])):
         print(
             format_prediction(
                 gesture,
@@ -538,9 +562,12 @@ def try_print_probabilities(d):
                 cmap="inferno",
                 g2k=d["g2k"],
             ),
-            end=" ",
+            end="   " if i % 10 == 9 else " ",
         )
-    print()
+    if d["prediction"]:
+        print("Prediction: ", d["prediction"])
+    else:
+        print()
     return d
 
 
@@ -587,7 +614,7 @@ def get_gesture_counts(root="../gesture_data/train/"):
 if __name__ == "__main__":
     try:
         parser = argparse.ArgumentParser(
-            prog="*Ergo* Classification and Recording",
+            prog="python3 ergo.py",
             description="Record, classify, and predict *Ergo* sensor data in real time.",
         )
         parser.add_argument(
@@ -613,6 +640,8 @@ if __name__ == "__main__":
             "--as-keyboard",
             help="Predict gestures, convert them to keystrokes, and write the keystrokes to the file AS_KEYBOARD",
             action="store",
+            nargs="?",
+            const=None,
         )
 
         args = parser.parse_args()
