@@ -3,6 +3,7 @@ const int NUM_SENSORS = 15;
 const int NUM_SELECT_PINS = 4;
 const int PINS_SENSOR_SELECT[] = {8, 9, 10, 11};
 const int PIN_SENSOR_INPUT = A0;
+const bool DEBUG = false;
 // There are hardware differences in all the sensors. Add an offset to
 // approximately remove these differences
 int offsets[] = {
@@ -48,6 +49,12 @@ void loop() {
         // Actually read in the sensor value
         int reading = analogRead(PIN_SENSOR_INPUT) + offsets[i];
         vals_lh[i] = floor((1.0 - alpha) * reading + alpha * vals_lh[i]);
+        // If we're debugging, just write out the index of the sensor
+        if (DEBUG) {
+            Wire.print(String(vals_lh[i]));
+            Wire.write(',');
+            continue;
+        }
         // Now convert the integer into a string so that written number always
         // occupies the same amount of bytes
         int thou = vals_lh[i] / 1000;

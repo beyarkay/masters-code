@@ -1,12 +1,12 @@
 /*
    BLE_Peripheral.ino
 
-   This program uses the ArduinoBLE library to set-up an Arduino Nano 33 BLE 
-   as a peripheral device and specifies a service and a characteristic. Depending 
-   of the value of the specified characteristic, an on-board LED gets on. 
+   This program uses the ArduinoBLE library to set-up an Arduino Nano 33 BLE
+   as a peripheral device and specifies a service and a characteristic. Depending
+   of the value of the specified characteristic, an on-board LED gets on.
 
    The circuit:
-   - Arduino Nano 33 BLE. 
+   - Arduino Nano 33 BLE.
 
    This example code is in the public domain.
  */
@@ -26,13 +26,13 @@ const char* deviceServiceCharacteristicUuid = "19b10001-e8f2-537e-4f6c-d104768a1
 
 int gesture = -1;
 
-BLEService gest_service(deviceServiceUuid); 
+BLEService gest_service(deviceServiceUuid);
 BLEByteCharacteristic gest_charac(deviceServiceCharacteristicUuid, BLERead | BLEWrite);
 
 
 void setup() {
     Serial.begin(9600);
-    while (!Serial);  
+    while (!Serial);
 
     pinMode(LED_BUILTIN, OUTPUT);
     digitalWrite(LED_BUILTIN, LOW);

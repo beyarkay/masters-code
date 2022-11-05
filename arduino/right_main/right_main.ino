@@ -3,6 +3,7 @@ const int NUM_SENSORS = 15;
 const int NUM_SELECT_PINS = 4;
 const int PINS_SENSOR_SELECT[] = {8, 9, 10, 11};
 const int PIN_SENSOR_INPUT = A0;
+const bool DEBUG = false;
 // There are hardware differences in all the sensors. Add an offset to
 // approximately remove these differences
 int vals_rh[] = {
@@ -71,6 +72,26 @@ void setup() {
 }
 
 void loop() {
+    if (DEBUG) {
+        Serial.write('l');
+        for (int i = 0; i < left_hand_len; i++) {
+            if (left_hand[i] == ',') {
+                Serial.write(';');
+            } else {
+                Serial.write(left_hand[i]);
+            }
+        }
+        Serial.write('r');
+        for (int i = 0; i < right_hand_len; i++) {
+            if (right_hand[i] == ',') {
+                Serial.write(';');
+            } else {
+                Serial.write(right_hand[i]);
+            }
+        }
+        Serial.print("\n");
+    }
+
     if (millis() - last_write >= MIN_MS_PER_WRITE && left_hand_len > 0 && right_hand_len > 0) {
             last_write = millis();
             Serial.print(gesture_index);
@@ -88,9 +109,6 @@ void loop() {
             }
             right_hand_len = 0;
             Serial.print("\n");
-    } else {
-        // Serial.print("# Heartbeat, millis: ");
-        // Serial.println(millis());
     }
     // Calculate and print out the gesture index. Read in the DIP switches
     // to figure out what gesture index we're at Init `gesture_index` to

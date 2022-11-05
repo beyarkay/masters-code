@@ -1,6 +1,6 @@
 /**
  * The (simplified) layout for the pins looks like:
- * 
+ *
  * pin A2<------+   +------>pin D7
  *              |   |
  * pin A3<---01 02 03 04--->pin D6
@@ -8,14 +8,14 @@
  * pin A4<---01 02 03 04--->pin D5
  *              |   |
  * pin A5<------+   +------>pin D4
- * 
+ *
  * So the mapping of pins to switch numbers for the Top and Bottom
  * switches is:
  * - Top1 -> A3, Top2 -> A2, Top3 -> D7, Top4 -> D6
  * - Bot1 -> A4, Bot2 -> A5, Bot3 -> D4, Bot4 -> D5
  */
 const int PINS_DIP_SWITCHES[] = {
-     A3, A2, 7, 6, 
+     A3, A2, 7, 6,
      A4, A5, 4, 5
 };
 const int num_dip_switches = 8;
