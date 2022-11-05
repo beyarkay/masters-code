@@ -117,7 +117,7 @@ def get_serial_port() -> str:
                 ) as serial_port:
                     if serial_port.isOpen():
                         line = serial_port.readline().decode("utf-8")
-                        if line:
+                        if line and not line.startswith("#"):
                             filtered_ports.append(port)
             except Exception as e:
                 continue
@@ -190,6 +190,9 @@ def loop_over_serial_stream(
         "gesture_info": gesture_info(),
         "args": args,
     }
+    # Read in one line just to make sure the next read starts on a newline
+    if serial_handle.isOpen():
+        _ = serial_handle.readline()
 
     # Now that all the setup is complete, loop forever (or until the serial
     # port is unplugged), read in the data, pre-process the data, and call
@@ -203,6 +206,10 @@ def loop_over_serial_stream(
             before_split = serial_handle.readline().decode("utf-8")
             # Comments starting with `#` act as heartbeats
             if before_split.startswith("#"):
+                with open("tmp.txt", "a") as f:
+                    f.write(
+                        f"{datetime.datetime.now().isoformat()} Found comment: {before_split}"
+                    )
                 continue
             # Parse the values
             raw_values: List[str] = before_split.strip().split(",")[:-1]
@@ -304,8 +311,6 @@ def predict_cb(new_measurements: np.ndarray, d: dict[str, Any]) -> dict[str, Any
 
 def keyboard_cb(new_measurements: np.ndarray, d: dict[str, Any]) -> dict[str, Any]:
     """Take the predicted gesture and convert it to a character, writing to file."""
-    # d = calc_obs(new_measurements, d)
-
     # If we have any NaNs, don't try predict anything
     if np.isnan(d["obs"]).any():
         return d
