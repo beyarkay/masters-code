@@ -198,6 +198,7 @@ def loop_over_serial_stream(
     # port is unplugged), read in the data, pre-process the data, and call
     # the callback.
     while serial_handle.isOpen():
+        log(f"Serial handle {serial_handle} is open")
         try:
             # record the current and previous times so we can calculate the
             # duration between measurements
@@ -206,10 +207,7 @@ def loop_over_serial_stream(
             before_split = serial_handle.readline().decode("utf-8")
             # Comments starting with `#` act as heartbeats
             if before_split.startswith("#"):
-                with open("tmp.txt", "a") as f:
-                    f.write(
-                        f"{datetime.datetime.now().isoformat()} Found comment: {before_split}"
-                    )
+                log(f"Found comment: {before_split}")
                 continue
             # Parse the values
             raw_values: List[str] = before_split.strip().split(",")[:-1]
@@ -337,6 +335,7 @@ def keyboard_cb(new_measurements: np.ndarray, d: dict[str, Any]) -> dict[str, An
     )
     if time_ms() - most_recent_keypress > 500:
         d["last_predicted"][best_gest] = time_ms()
+        log(f"{best_gest=}, {best_pred=}, {keystroke=}")
         keystroke = str(d["g2k"].get(best_gest, f"<{best_gest}>"))
         # Either write to the provided file, or send the keystrokes to the OS
         # directly
@@ -614,6 +613,11 @@ def get_gesture_counts(root="../gesture_data/train/"):
             gestures = ["g" + l[35:38] for l in f.readlines()]
             counter.update(gestures)
     return counter
+
+
+def log(s):
+    with open("tmp.txt", "a") as f:
+        f.write(f"{datetime.datetime.now().isoformat()} {s}")
 
 
 if __name__ == "__main__":
