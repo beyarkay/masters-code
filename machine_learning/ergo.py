@@ -34,7 +34,9 @@ def main(args):
         callbacks.append(predict_cb)
     if args["save"]:
         callbacks.append(save_cb)
-    if args["as_keyboard"] is None or len(args["as_keyboard"]) > 0:
+    if args["as_keyboard"] == "os" or (
+        args["as_keyboard"] is not None and len(args["as_keyboard"]) > 0
+    ):
         callbacks.append(keyboard_cb)
 
     if args["save"]:
@@ -88,15 +90,17 @@ def main(args):
         gestures = list(gesture_info().keys())[GESTURES_RANGE[0] : GESTURES_RANGE[1]]
         print(f"{CLR}Possible gestures: {gestures}")
 
-    # Get the correct serial port, exiting if none exists
-    port = get_serial_port()
-    # Define the baudrate (number of bits per second sent over the serial port)
-    baudrate = 19_200
-    print(f"Reading from {port} with baudrate {baudrate}")
-    # Start up an infinite loop that calls the callback every time one set of
-    # new data is available over the serial port.
-    with serial.Serial(port=port, baudrate=baudrate, timeout=1) as serial_port:
-        loop_over_serial_stream(serial_port, callbacks, args)
+    while True:
+        # Get the correct serial port, exiting if none exists
+        port = get_serial_port()
+        # Define the baudrate (number of bits per second sent over the serial port)
+        baudrate = 19_200
+        print(f"Reading from {port} with baudrate {baudrate}")
+        # Start up an infinite loop that calls the callback every time one set of
+        # new data is available over the serial port.
+        with serial.Serial(port=port, baudrate=baudrate, timeout=1) as serial_port:
+            loop_over_serial_stream(serial_port, callbacks, args)
+        sleep(1)
 
 
 def get_serial_port() -> str:
@@ -107,8 +111,9 @@ def get_serial_port() -> str:
     the user a choice if more than one port is available."""
     # Read in all the available ports starting with `/dev/cu.usbmodem`
     ports = [p.device for p in comports() if p.device.startswith("/dev/cu.usbmodem")]
-    if len(ports) > 1:
-        # If there's more than one, offer the user a choice
+    print(f"Looking through ports {ports}")
+    if len(ports) >= 1:
+        # check that the available ports are actually communicating
         filtered_ports = []
         for i, port in enumerate(ports):
             try:
@@ -116,8 +121,13 @@ def get_serial_port() -> str:
                     port=port, baudrate=19_200, timeout=1
                 ) as serial_port:
                     if serial_port.isOpen():
-                        line = serial_port.readline().decode("utf-8")
-                        if line and not line.startswith("#"):
+                        # flush the port so the line we read will definitely
+                        # start from the beginning of the line
+                        line = serial_port.readline().decode("utf-8").strip()
+                        if line and "#" not in line:
+                            print(
+                                f"Port {port} is returning non empty non-comment lines"
+                            )
                             filtered_ports.append(port)
             except Exception as e:
                 continue
@@ -135,9 +145,6 @@ def get_serial_port() -> str:
         # If there are no ports available, exit with status code 1
         print("No ports beginning with `/dev/cu.usbmodem` found")
         sys.exit(1)
-    else:
-        # If there's only one port, then assign it to the variable `port`
-        port = ports[0]
     # Finally, return the port
     return port
 
@@ -214,9 +221,10 @@ def loop_over_serial_stream(
             # Ensure there are exactly 32 values
             if len(raw_values) == 0:
                 print(
-                    f"{CLR}No values found from serial connection, try unplugging the device ({raw_values=}), {before_split=}"
+                    f"{CLR}No values found from serial connection, try restarting the device\n{raw_values=}, {before_split=}"
                 )
-                sys.exit(1)
+                sleep(1)
+                continue
             if len(raw_values) != n_sensors + 2:
                 continue
             # Update the dictionary with some useful values
@@ -243,7 +251,8 @@ def loop_over_serial_stream(
             cb_data["aligned_offset"] = cb_data["curr_idx"] * 25
         except serial.serialutil.SerialException as e:
             print(f"Ergo has been disconnected: {e}")
-            sys.exit(1)
+            # Return so the connection can be restarted
+            return
 
         # Convert the values to integers and clamp between `lower_bound` and
         # `upper_bound`
@@ -339,7 +348,7 @@ def keyboard_cb(new_measurements: np.ndarray, d: dict[str, Any]) -> dict[str, An
         keystroke = str(d["g2k"].get(best_gest, f"<{best_gest}>"))
         # Either write to the provided file, or send the keystrokes to the OS
         # directly
-        if d["args"]["as_keyboard"] is None and keystroke:
+        if d["args"]["as_keyboard"] == "os" and keystroke:
             if keystroke == "space":
                 keystroke = " "
             if len(d["modifiers"]) == 0:
@@ -631,7 +640,7 @@ def get_gesture_counts(root="../gesture_data/train/"):
 
 def log(s):
     with open("tmp.txt", "a") as f:
-        f.write(f"{datetime.datetime.now().isoformat()} {s}")
+        f.write(f"{datetime.datetime.now().isoformat()} {s}\n")
 
 
 if __name__ == "__main__":
@@ -664,7 +673,7 @@ if __name__ == "__main__":
             help="Predict gestures, convert them to keystrokes, and write the keystrokes to the file AS_KEYBOARD",
             action="store",
             nargs="?",
-            const=None,
+            const="os",
         )
 
         args = parser.parse_args()
