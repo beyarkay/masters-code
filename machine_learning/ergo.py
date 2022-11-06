@@ -339,46 +339,60 @@ def keyboard_cb(new_measurements: np.ndarray, d: dict[str, Any]) -> dict[str, An
         keystroke = str(d["g2k"].get(best_gest, f"<{best_gest}>"))
         # Either write to the provided file, or send the keystrokes to the OS
         # directly
-        if d["args"]["as_keyboard"] is not None:
-            with open(d["args"]["as_keyboard"], "a") as f:
-                f.write(keystroke)
-        elif keystroke not in ["control", "shift"]:
+        if d["args"]["as_keyboard"] is None and keystroke:
             if keystroke == "space":
                 keystroke = " "
-            elif "shift" in d["modifiers"]:
-                if keystroke.isalpha():
-                    keystroke = keystroke.upper()
+            if len(d["modifiers"]) == 0:
+                if keystroke in ("control", "shift"):
+                    d["modifiers"].append(keystroke)
                 else:
-                    keystroke = {
-                        "1": "!",
-                        "2": "@",
-                        "3": "#",
-                        "4": "$",
-                        "5": "%",
-                        "6": "^",
-                        "7": "&",
-                        "8": "*",
-                        "9": "(",
-                        "0": ")",
-                        "-": "_",
-                        "=": "+",
-                        "[": "{",
-                        "]": "}",
-                        ";": ":",
-                        "'": '"',
-                        ",": "<",
-                        ".": ">",
-                        "/": "?",
-                        "|": "\\",
-                    }.get(keystroke, "")
-            elif "control" in d["modifiers"]:
-                if keystroke == "m":
-                    keystroke = "\n"
-            keyboard.write(keystroke)
-            if keystroke:
-                d["modifiers"] = []
-        else:
-            d["modifiers"].append(keystroke)
+                    keyboard.write(keystroke)
+            else:
+                if "shift" in d["modifiers"]:
+                    if keystroke.isalpha():
+                        keyboard.write(keystroke.upper())
+                    else:
+                        keyboard.write(
+                            {
+                                "1": "!",
+                                "2": "@",
+                                "3": "#",
+                                "4": "$",
+                                "5": "%",
+                                "6": "^",
+                                "7": "&",
+                                "8": "*",
+                                "9": "(",
+                                "0": ")",
+                                "-": "_",
+                                "=": "+",
+                                "[": "{",
+                                "]": "}",
+                                ";": ":",
+                                "'": '"',
+                                ",": "<",
+                                ".": ">",
+                                "/": "?",
+                                "\\": "|",
+                                "`": "~",
+                            }.get(keystroke, "")
+                        )
+                elif "control" in d["modifiers"]:
+                    if keystroke in ("m", "j"):
+                        keyboard.write("\n")
+                    elif keystroke == "h":
+                        keyboard.write("\b")
+                    elif keystroke == "[":
+                        keyboard.send("escape")
+                    # else:
+                    # TODO something is causing keyboardpy to halt everything
+                    #     keyboard.send(f"control+{keystroke}")
+                # Only clear the modifiers if a non-g255 was pressed
+                if keystroke:
+                    d["modifiers"] = []
+        elif d["args"]["as_keyboard"] is not None:
+            with open(d["args"]["as_keyboard"], "a") as f:
+                f.write(keystroke)
     return d
 
 
