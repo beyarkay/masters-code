@@ -334,74 +334,37 @@ def keyboard_cb(new_measurements: np.ndarray, d: dict[str, Any]) -> dict[str, An
 
     if "last_predicted" not in d.keys():
         d["last_predicted"] = {g: time_ms() - 1000 for g in gestures}
-    if "modifiers" not in d.keys():
-        d["modifiers"] = []
+    if "last_keystroke" not in d.keys():
+        d["last_keystroke"] = ""
 
+    # Find the most recent non-g255 gesture prediction
     most_recent_keypress = max(
         d["last_predicted"][k]
         for k, v in d["last_predicted"].items()
         if k != "gesture0255"
     )
+    log(f"{best_gest=}, {best_pred=}, {most_recent_keypress=}, {time_ms()=}")
+    log({k: (time_ms() - v) for k, v in d["last_predicted"].items()})
+    # Only press a key if the most recent non-g255 prediction was more than
+    # 500ms in the past and the current key isn't gesture0255
     if time_ms() - most_recent_keypress > 500:
+        # Log the time at which this keystroke was made
         d["last_predicted"][best_gest] = time_ms()
-        log(f"{best_gest=}, {best_pred=}, {keystroke=}")
-        keystroke = str(d["g2k"].get(best_gest, f"<{best_gest}>"))
-        # Either write to the provided file, or send the keystrokes to the OS
-        # directly
-        if d["args"]["as_keyboard"] == "os" and keystroke:
-            if keystroke == "space":
-                keystroke = " "
-            if len(d["modifiers"]) == 0:
-                if keystroke in ("control", "shift"):
-                    d["modifiers"].append(keystroke)
-                else:
-                    keyboard.write(keystroke)
-            else:
-                if "shift" in d["modifiers"]:
-                    if keystroke.isalpha():
-                        keyboard.write(keystroke.upper())
-                    else:
-                        keyboard.write(
-                            {
-                                "1": "!",
-                                "2": "@",
-                                "3": "#",
-                                "4": "$",
-                                "5": "%",
-                                "6": "^",
-                                "7": "&",
-                                "8": "*",
-                                "9": "(",
-                                "0": ")",
-                                "-": "_",
-                                "=": "+",
-                                "[": "{",
-                                "]": "}",
-                                ";": ":",
-                                "'": '"',
-                                ",": "<",
-                                ".": ">",
-                                "/": "?",
-                                "\\": "|",
-                                "`": "~",
-                            }.get(keystroke, "")
-                        )
-                elif "control" in d["modifiers"]:
-                    if keystroke in ("m", "j"):
-                        keyboard.write("\n")
-                    elif keystroke == "h":
-                        keyboard.write("\b")
-                    elif keystroke == "[":
-                        keyboard.send("escape")
-                    # else:
-                    # TODO something is causing keyboardpy to halt everything
-                    #     keyboard.send(f"control+{keystroke}")
-                # Only clear the modifiers if a non-g255 was pressed
-                if keystroke:
-                    d["modifiers"] = []
-        elif d["args"]["as_keyboard"] is not None:
-            with open(d["args"]["as_keyboard"], "a") as f:
-                f.write(keystroke)
+        if best_gest != "gesture0255":
+            # Convert the gesture to a keystroke, defaulting to <gesture_label> if
+            # no keystroke is specified
+            keystroke = str(d["g2k"].get(best_gest, f"<{best_gest}>"))
+            log(f"{keystroke=}")
+
+            # Either write to the provided file, or send the keystrokes to the OS
+            # directly
+            if d["args"]["as_keyboard"] == "os" and keystroke:
+                d, fn, args = process_keystrokes(d, keystroke)
+                if fn is not None and len(args) > 0:
+                    fn(*args)
+            elif d["args"]["as_keyboard"] is not None:
+                with open(d["args"]["as_keyboard"], "a") as f:
+                    f.write(keystroke)
     return d
 
 

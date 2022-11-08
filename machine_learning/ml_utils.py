@@ -978,3 +978,64 @@ def load_model(filepath):
     with open(filepath, "rb") as f:
         model = pickle.load(f)
     return model
+
+
+def process_keystrokes(d, keystroke):
+    fn = None
+    args = []
+    if keystroke == "space":
+        keystroke = " "
+    if d["last_keystroke"] == "shift" and keystroke not in ("control", "shift"):
+        if keystroke.isalpha():
+            fn = keyboard.write
+            args = [keystroke.upper()]
+        else:
+            fn = keyboard.write
+            args = [
+                {
+                    "1": "!",
+                    "2": "@",
+                    "3": "#",
+                    "4": "$",
+                    "5": "%",
+                    "6": "^",
+                    "7": "&",
+                    "8": "*",
+                    "9": "(",
+                    "0": ")",
+                    "-": "_",
+                    "=": "+",
+                    "[": "{",
+                    "]": "}",
+                    ";": ":",
+                    "'": '"',
+                    ",": "<",
+                    ".": ">",
+                    "/": "?",
+                    "\\": "|",
+                    "`": "~",
+                }.get(keystroke, keystroke)
+            ]
+    elif d["last_keystroke"] == "control":
+        if keystroke in ("m", "j"):
+            fn = keyboard.write
+            args = ["\n"]
+        elif keystroke == "h":
+            fn = keyboard.write
+            args = ["\b"]
+        elif keystroke == "[":
+            fn = keyboard.send
+            args = ["escape"]
+    elif keystroke == "control":
+        fn = None
+        args = []
+    elif keystroke == "shift":
+        fn = None
+        args = []
+    else:
+        fn = keyboard.write
+        args = [keystroke]
+        # keyboard.write(keystroke)
+    d["last_keystroke"] = keystroke
+
+    return d, fn, args

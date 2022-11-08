@@ -1,4 +1,5 @@
 import unittest
+import keyboard
 import numpy as np
 import yaml
 import pandas as pd
@@ -226,6 +227,85 @@ class TestUtils(unittest.TestCase):
         print(repr(num_preds))
         print(repr(num_trues))
         self.assertTrue(True)
+
+    def test_process_keystrokes(self):
+        # Test if no keystroke is given and meta-chars are pressed
+        d = {"last_keystroke": ""}
+        keystroke = "shift"
+        d, fn, args = utils.process_keystrokes(d, keystroke)
+        self.assertEqual(fn, None)
+        self.assertEqual(args, [])
+        self.assertEqual(d, {"last_keystroke": keystroke})
+
+        d = {"last_keystroke": ""}
+        keystroke = "control"
+        d, fn, args = utils.process_keystrokes(d, keystroke)
+        self.assertEqual(fn, None)
+        self.assertEqual(args, [])
+        self.assertEqual(d, {"last_keystroke": keystroke})
+
+        d = {"last_keystroke": "a"}
+        keystroke = "space"
+        d, fn, args = utils.process_keystrokes(d, keystroke)
+        self.assertEqual(fn, keyboard.write)
+        self.assertEqual(args, [" "])
+        self.assertEqual(d, {"last_keystroke": " "})
+
+        d = {"last_keystroke": "shift"}
+        keystroke = "a"
+        d, fn, args = utils.process_keystrokes(d, keystroke)
+        self.assertEqual(fn, keyboard.write)
+        self.assertEqual(args, ["A"])
+        self.assertEqual(d, {"last_keystroke": "a"})
+
+        d = {"last_keystroke": "shift"}
+        keystroke = "1"
+        d, fn, args = utils.process_keystrokes(d, keystroke)
+        self.assertEqual(fn, keyboard.write)
+        self.assertEqual(args, ["!"])
+        self.assertEqual(d, {"last_keystroke": "1"})
+
+        d = {"last_keystroke": "control"}
+        keystroke = "m"
+        d, fn, args = utils.process_keystrokes(d, keystroke)
+        self.assertEqual(fn, keyboard.write)
+        self.assertEqual(args, ["\n"])
+        self.assertEqual(d, {"last_keystroke": "m"})
+
+        d = {"last_keystroke": "control"}
+        keystroke = "j"
+        d, fn, args = utils.process_keystrokes(d, keystroke)
+        self.assertEqual(fn, keyboard.write)
+        self.assertEqual(args, ["\n"])
+        self.assertEqual(d, {"last_keystroke": "j"})
+
+        d = {"last_keystroke": "control"}
+        keystroke = "h"
+        d, fn, args = utils.process_keystrokes(d, keystroke)
+        self.assertEqual(fn, keyboard.write)
+        self.assertEqual(args, ["\b"])
+        self.assertEqual(d, {"last_keystroke": "h"})
+
+        d = {"last_keystroke": "control"}
+        keystroke = "["
+        d, fn, args = utils.process_keystrokes(d, keystroke)
+        self.assertEqual(fn, keyboard.send)
+        self.assertEqual(args, ["escape"])
+        self.assertEqual(d, {"last_keystroke": "["})
+
+        d = {"last_keystroke": "a"}
+        keystroke = "a"
+        d, fn, args = utils.process_keystrokes(d, keystroke)
+        self.assertEqual(fn, keyboard.write)
+        self.assertEqual(args, ["a"])
+        self.assertEqual(d, {"last_keystroke": "a"})
+
+        d = {"last_keystroke": " "}
+        keystroke = " "
+        d, fn, args = utils.process_keystrokes(d, keystroke)
+        self.assertEqual(fn, keyboard.write)
+        self.assertEqual(args, [" "])
+        self.assertEqual(d, {"last_keystroke": " "})
 
 
 if __name__ == "__main__":
