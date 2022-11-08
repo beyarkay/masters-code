@@ -1,4 +1,7 @@
 from keras import layers
+from pyts.metrics import dtw
+from tqdm import tqdm
+import keyboard
 from sklearn.metrics import classification_report, f1_score
 from sklearn.model_selection import train_test_split
 from tensorflow import keras
@@ -902,6 +905,58 @@ def calc_red(y_true, y_pred, i2g):
         mean_dists[i] = mean_dists[i] / len(nz_true)
 
     return mean_dists, num_preds, num_trues
+
+
+def get_approx_dtw(a, b, resolution=5_000, desc=None):
+    """Get a (fast-ish) approximation of the Dynamic Time Warping distance
+    between vectors `a` and `b`. Increasing the resolution will increase the
+    accuracy but also take approximately O(n^2) longer."""
+    assert a.shape == b.shape
+    s = 0
+    f = resolution
+    dtws = []
+    if desc is not None:
+        pbar = tqdm(total=a.shape[0])
+        pbar.set_description(desc)
+    while s < a.shape[0]:
+        dtws.append(
+            dtw(
+                a[s:f],
+                b[s:f],
+                dist="square",
+                method="fast",
+                options={"radius": 1},
+                return_path=False,
+            )
+        )
+        s = f
+        f += resolution
+        if desc is not None:
+            pbar.update(resolution)
+    if desc is not None:
+        pbar.set_description(f"{desc}: {sum(dtws):.4f}")
+    return sum(dtws)
+
+
+def dtw_evaluation(true, pred, i2g):
+    """Given the (sparse) true labels and predicted probabilities, compute the
+    approximate DTW distance for each class."""
+    true_ohe = tf.one_hot(true, len(np.unique(true)))
+    assert true_ohe.shape == pred.shape
+
+    dtws = np.empty((true_ohe.shape[1],))
+    for gesture in range(true_ohe.shape[1]):
+        dtws[gesture] = (
+            get_approx_dtw(
+                true_ohe[:, gesture],
+                pred[:, gesture],
+                resolution=1_500,
+                desc=i2g(gesture),
+            )
+            / (true == gesture).sum()
+        )
+        print(i2g(gesture), dtws[gesture])
+    return dtws
 
 
 def predict_tf(obs, config, model, i2g) -> List[Tuple[int, float]]:

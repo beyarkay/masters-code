@@ -50,17 +50,20 @@ def train(wb_config=None):
             i2g,
             verbose=0,
         )
-        y_pred = model.predict(X, verbose=0)
-        mean_dists, num_preds, num_trues = calc_red(y, y_pred, i2g)
-        red_loss = mean_dists + 40 * np.abs(num_preds - num_trues)
-        print("Fit complete")
+        print("Evaluating model...")
+        # Now load the (contiguous) test dataset and calculate metrics on
+        # that
+        df_test = parse_csvs("../gesture_data/test/")
+        (_, _, _, _, _, X_test, y_test, _, _, _, _) = build_dataset(df_test, brk_config)
+        y_test_pred = model.predict(X_test, verbose=0)
+        mean_dtw = dtw_evaluation(y_test, y_test_pred, i2g)
+        print("Evaluation complete, logging to W&B")
         wandb.log(
             {
-                "rising_edge_dist": red_loss.mean(),
-                "rising_edge_dist_std": red_loss.std(),
-                "rising_edge_dist_no_penalty": mean_dists.mean(),
+                "dtw.mean": mean_dtw.mean(),
                 "val_loss": history.history["val_loss"][-1],
             }
+            | {f"dtw.{i2g(i)}": d for i, d in enumerate(avg_dtw)}
         )
 
 
