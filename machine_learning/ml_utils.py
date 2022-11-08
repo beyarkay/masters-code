@@ -154,7 +154,9 @@ def conf_mat(y_true, y_pred, i2g, perc=None, hide_zeros=True, ax=None, cbar=True
     return confusion_mtx
 
 
-def plot_timeseries(X, y, t=None, per="dimension", axs=None, draw_text=True):
+def plot_timeseries(
+    X, y, t=None, per="dimension", axs=None, draw_text=True, alphatrick=True
+):
     # Make sure the given dataset is correctly formatted
     FINGERS = [
         "left-little-finger-x",
@@ -231,7 +233,9 @@ def plot_timeseries(X, y, t=None, per="dimension", axs=None, draw_text=True):
         data_to_plot = X[:, d]
         ax.plot(
             data_to_plot,
-            alpha=np.clip(data_to_plot.std() / max_std, 0.05, 1.0),
+            alpha=np.clip(data_to_plot.std() / max_std, 0.05, 1.0)
+            if alphatrick
+            else 1.0,
             label=FINGERS[d],
             c=None
             if per == "dimension"
