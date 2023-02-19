@@ -48,7 +48,7 @@ def train(wb_config=None):
             y_valid,
             brk_config,
             i2g,
-            verbose=0,
+            verbose=1,
         )
         print("Evaluating model...")
         # Now load the (contiguous) test dataset and calculate metrics on
@@ -63,7 +63,7 @@ def train(wb_config=None):
                 "dtw.mean": mean_dtw.mean(),
                 "val_loss": history.history["val_loss"][-1],
             }
-            | {f"dtw.{i2g(i)}": d for i, d in enumerate(avg_dtw)}
+            | {f"dtw.{i2g(i)}": d for i, d in enumerate(mean_dtw)}
         )
 
 

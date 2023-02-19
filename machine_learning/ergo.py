@@ -22,7 +22,7 @@ np.set_printoptions(threshold=sys.maxsize, linewidth=250)
 CLR = "\x1b[2K\r"
 should_create_new_file = True
 GESTURE_WINDOW_MS = 30
-GESTURES_RANGE = (10, 50)
+GESTURES = [f"gesture{i:0>4}" for i in range(50)]
 COUNTDOWN_MS = 1000
 
 
@@ -87,7 +87,7 @@ def main(args):
             sleep(2)
 
         keyboard.add_hotkey("space", burn_most_recent_observations)
-        gestures = list(gesture_info().keys())[GESTURES_RANGE[0] : GESTURES_RANGE[1]]
+        gestures = GESTURES
         print(f"{CLR}Possible gestures: {gestures}")
 
     while True:
@@ -99,8 +99,13 @@ def main(args):
         # Start up an infinite loop that calls the callback every time one set of
         # new data is available over the serial port.
         with serial.Serial(port=port, baudrate=baudrate, timeout=1) as serial_port:
+            # `loop_over_serial_stream` will only return if the connection to
+            # the Arduino is broken, so that we can loop back and try reconnect
+            # to the new serial port
             loop_over_serial_stream(serial_port, callbacks, args)
-        sleep(1)
+        # The broken connection will take a little while to restart, so sleep
+        # for a bit to give it time to do so
+        sleep(2)
 
 
 def get_serial_port() -> str:
@@ -205,7 +210,6 @@ def loop_over_serial_stream(
     # port is unplugged), read in the data, pre-process the data, and call
     # the callback.
     while serial_handle.isOpen():
-        log(f"Serial handle {serial_handle} is open")
         try:
             # record the current and previous times so we can calculate the
             # duration between measurements
@@ -224,6 +228,9 @@ def loop_over_serial_stream(
                     f"{CLR}No values found from serial connection, try restarting the device\n{raw_values=}, {before_split=}"
                 )
                 sleep(1)
+                cb_data["time_ms"] = time_ms()
+                cb_data["prev_time_ms"] = time_ms()
+                cb_data["obs"] = np.full((n_timesteps, n_sensors), np.nan)
                 continue
             if len(raw_values) != n_sensors + 2:
                 continue
@@ -322,6 +329,7 @@ def keyboard_cb(new_measurements: np.ndarray, d: dict[str, Any]) -> dict[str, An
     if np.isnan(d["obs"]).any():
         return d
 
+    log(d["idx_to_gesture"])
     gesture_preds = predict_tf(d["obs"], d["config"], d["model"], d["idx_to_gesture"])
 
     predictions = np.array(list(zip(*gesture_preds))[1])
@@ -338,16 +346,16 @@ def keyboard_cb(new_measurements: np.ndarray, d: dict[str, Any]) -> dict[str, An
         d["last_keystroke"] = ""
 
     # Find the most recent non-g255 gesture prediction
-    most_recent_keypress = max(
-        d["last_predicted"][k]
-        for k, v in d["last_predicted"].items()
-        if k != "gesture0255"
+    most_recent_key, most_recent_keypress = max(
+        [(k, v) for k, v in d["last_predicted"].items() if k != "gesture0255"],
+        key=lambda x: x[1],
     )
-    log(f"{best_gest=}, {best_pred=}, {most_recent_keypress=}, {time_ms()=}")
-    log({k: (time_ms() - v) for k, v in d["last_predicted"].items()})
+    log(
+        f"{best_idx=}, {best_gest=}, {best_pred=}, {most_recent_key=}, {most_recent_keypress=}, {time_ms()=}"
+    )
     # Only press a key if the most recent non-g255 prediction was more than
     # 500ms in the past and the current key isn't gesture0255
-    if time_ms() - most_recent_keypress > 500:
+    if time_ms() - most_recent_keypress > 500 and best_pred > 0.5:
         # Log the time at which this keystroke was made
         d["last_predicted"][best_gest] = time_ms()
         if best_gest != "gesture0255":
@@ -406,9 +414,7 @@ def write_debug_line(
     new_measurements, cb_data: dict[str, Any], end="\r"
 ) -> dict[str, Any]:
     """Write the new measurements with some helpful information to the terminal."""
-    gestures = list(cb_data["gesture_info"].keys())[
-        GESTURES_RANGE[0] : GESTURES_RANGE[1]
-    ]
+    gestures = GESTURES
     curr_idx = cb_data["curr_idx"]
     cb_data["last_gesture"] = cb_data.get("last_gesture", time_ms())
     cb_data["lineup"] = cb_data.get("lineup", gestures)
@@ -454,7 +460,7 @@ def write_debug_line(
     )
     if cb_data["args"]["save"]:
         curr_gesture_str = (
-            f"{gesture.replace('gesture0', 'g')}: {description: <20}".replace(
+            f"{gesture.replace('gesture0', 'g')}: {description: <10}".replace(
                 "thumb", "1"
             )
             .replace("index", "2")
@@ -540,19 +546,26 @@ def print_predictions(d):
     if np.isnan(d["obs"]).any():
         return d
 
-    predictions = predict_tf(d["obs"], d["config"], d["model"], d["idx_to_gesture"])
+    gesture_preds = predict_tf(d["obs"], d["config"], d["model"], d["idx_to_gesture"])
+    predictions = np.array(list(zip(*gesture_preds))[1])
+    gestures = np.array(list(zip(*gesture_preds))[0])
+    best_idx = np.argmax(predictions)
+    best_pred = predictions[best_idx]
+    best_gest = gestures[best_idx]
+
+    d["prediction"] = format_prediction(best_gest, best_pred)
     print(f"{CLR}", end="")
     # Only count a prediction if it's over 98% probable
-    for i, (gesture, proba) in enumerate(sorted(predictions, key=lambda gp: gp[0])):
+    for i, (gesture, proba) in enumerate(sorted(gesture_preds, key=lambda gp: gp[0])):
         print(
             format_prediction(
                 gesture,
                 proba,
-                shortness=len(predictions) // 25,
+                shortness=len(gesture_preds) // 25,
                 cmap="inferno",
                 g2k=d["g2k"],
             ),
-            end="   " if i % 10 == 9 else " ",
+            end="   " if i % 10 == 9 else (" " if i % 5 == 4 else ""),
         )
     if d["prediction"]:
         print("Prediction: ", d["prediction"])

@@ -33,6 +33,7 @@ void setup() {
     pinMode(PIN_SENSOR_INPUT, INPUT);
     // Start up the I2C bus to communicate with the right hand
     Wire.begin();
+    if (DEBUG) { Serial.begin(19200); }
 }
 
 void loop() {
@@ -49,11 +50,13 @@ void loop() {
         // Actually read in the sensor value
         int reading = analogRead(PIN_SENSOR_INPUT) + offsets[i];
         vals_lh[i] = floor((1.0 - alpha) * reading + alpha * vals_lh[i]);
-        // If we're debugging, just write out the index of the sensor
         if (DEBUG) {
-            Wire.print(String(vals_lh[i]));
-            Wire.write(',');
-            continue;
+            Serial.print("# LH Sensor "); 
+            Serial.print(i); 
+            Serial.print(" = "); 
+            Serial.print(reading); 
+            Serial.print(", value: "); 
+            Serial.println(vals_lh[i]); 
         }
         // Now convert the integer into a string so that written number always
         // occupies the same amount of bytes
@@ -63,16 +66,16 @@ void loop() {
             vals_lh[i] -= thou * 1000;
         }
         int hund = vals_lh[i] / 100;
-        if (hund > 0 || thou) {
+        if (hund >= 0 || thou) {
             Wire.write('0' + hund);
             vals_lh[i] -= hund * 100;
         }
         int tens = vals_lh[i] / 10;
-        if (tens > 0 || hund || thou) {
+        if (tens >= 0 || hund || thou) {
             Wire.write('0' + tens);
             vals_lh[i] -= tens * 10;
         }
-        if (vals_lh[i] > 0 || tens || hund || thou) {
+        if (vals_lh[i] >= 0 || tens || hund || thou) {
             Wire.write('0' + vals_lh[i]);
         }
         vals_lh[i] += thou * 1000 + hund * 100 + tens * 10;
@@ -95,7 +98,9 @@ void loop() {
         delay(100);
         digitalWrite(LED_BUILTIN, LOW);
         delay(200);
+        if (i +1 == status) {
+            delay(1000);
+        }
     }
-    if (status > 0) { delay(1000); }
 }
 

@@ -21,6 +21,9 @@ import yaml
 
 keras.utils.set_random_seed(42)
 
+# train '; vs / vs p
+# y vs h
+# n vs h
 
 FINGERS = [
     "left-5-x",
@@ -964,6 +967,9 @@ def dtw_evaluation(true, pred, i2g):
 
 
 def predict_tf(obs, config, model, i2g) -> List[Tuple[int, float]]:
+    """Given an observation, a model, and some auxiliary parameters, use the
+    model to predict probabilities for every gesture. Return a list of
+    (gesture_label, probability) tuples."""
     probabilities = model(np.array([obs])).numpy()[0]
     obs_pred = np.argmax(probabilities)
 

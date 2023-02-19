@@ -73,6 +73,7 @@ void setup() {
 
 void loop() {
     if (DEBUG) {
+        Serial.write('#');
         Serial.write('l');
         for (int i = 0; i < left_hand_len; i++) {
             if (left_hand[i] == ',') {
@@ -109,6 +110,13 @@ void loop() {
             }
             right_hand_len = 0;
             Serial.print("\n");
+    } else if (DEBUG) {
+        Serial.print("# Not writing, diff: ");
+        Serial.print(millis() - last_write);
+        Serial.print(", left_hand_len=");
+        Serial.print(left_hand_len);
+        Serial.print(", right_hand_len=");
+        Serial.println(right_hand_len);
     }
     // Calculate and print out the gesture index. Read in the DIP switches
     // to figure out what gesture index we're at Init `gesture_index` to
@@ -160,16 +168,16 @@ void loop() {
             vals_rh[xyz] -= thou * 1000;
         }
         int hund = vals_rh[xyz] / 100;
-        if (hund > 0 || thou) {
+        if (hund >= 0 || thou) {
             right_hand[right_hand_len++] = '0' + hund;
             vals_rh[xyz] -= hund * 100;
         }
         int tens = vals_rh[xyz] / 10;
-        if (tens > 0 || hund || thou) {
+        if (tens >= 0 || hund || thou) {
             right_hand[right_hand_len++] = '0' + tens;
             vals_rh[xyz] -= tens * 10;
         }
-        if (vals_rh[xyz] > 0 || tens || hund || thou) {
+        if (vals_rh[xyz] >= 0 || tens || hund || thou) {
             right_hand[right_hand_len++] = '0' + vals_rh[xyz];
         }
         vals_rh[xyz] += thou * 1000 + hund * 100 + tens * 10;

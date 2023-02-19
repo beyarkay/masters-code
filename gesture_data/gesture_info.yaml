@@ -1,12 +1,12 @@
 gestures:
 
-  gesture0000: { description: 000 l 5, key: "-"}
-  gesture0001: { description: 000 l 4, key: "["}
+  gesture0000: { description: 000 l 5, key: "control"}
+  gesture0001: { description: 000 l 4, key: "="}
   gesture0002: { description: 000 l 3, key: "'"}
-  gesture0003: { description: 000 l 2, key: "space"}
-  gesture0004: { description: 000 l 1, key: "control"}
-  gesture0005: { description: 000 r 1, key: "="}
-  gesture0006: { description: 000 r 2, key: "]"}
+  gesture0003: { description: 000 l 2, key: "-"}
+  gesture0004: { description: 000 l 1, key: "["}
+  gesture0005: { description: 000 r 1, key: "]"}
+  gesture0006: { description: 000 r 2, key: "space"}
   gesture0007: { description: 000 r 3, key: "\\"}
   gesture0008: { description: 000 r 4, key: "`"}
   gesture0009: { description: 000 r 5, key: "shift"}
