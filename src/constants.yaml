@@ -1,0 +1,44 @@
+# This file defines various constants that are used in ergo
+fingers:
+  0: "l5x"
+  1: "l5y"
+  2: "l5z"
+  3: "l4x"
+  4: "l4y"
+  5: "l4z"
+  6: "l3x"
+  7: "l3y"
+  8: "l3z"
+  9: "l2x"
+  10: "l2y"
+  11: "l2z"
+  12: "l1x"
+  13: "l1y"
+  14: "l1z"
+  15: "r1x"
+  16: "r1y"
+  17: "r1z"
+  18: "r2x"
+  19: "r2y"
+  20: "r2z"
+  21: "r3x"
+  22: "r3y"
+  23: "r3z"
+  24: "r4x"
+  25: "r4y"
+  26: "r4z"
+  27: "r5x"
+  28: "r5y"
+  29: "r5z"
+n_sensors: 30
+# TODO These sensor bounds are required because it's possible for a sensor to
+# spike >10_000 or plummet < -1000 due to hardware instability. However, the
+# bounds $[300, 900]$ are too tight and cause lots of clipping that probably
+# isn't an issue, but still results in lost information. Ideally these would be
+# expanded (I have a hunch $[0, 1024]$ would be adequate), but this would cause
+# backwards compatability issues. So these bounds will remain.
+sensor_bounds:
+  upper: 900
+  lower: 300
+# The baud rate is how fast the arduino is communicating over the serial port
+baud_rate: 19_200
