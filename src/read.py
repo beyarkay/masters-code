@@ -210,7 +210,7 @@ class ParseLineHandler(common.AbstractHandler):
     def __init__(self):
         common.AbstractHandler.__init__(self)
         self.samples: pd.DataFrame = pd.DataFrame(
-            columns=["datetime"] + list(self.const["fingers"].values())
+            columns=["datetime"] + list(self.const["sensors"].values())
         )
 
     def execute(
@@ -266,13 +266,13 @@ class ParseLineHandler(common.AbstractHandler):
         # Calculate the latest sample, and append it onto the list of all
         # previous samples
         sample = [min(upper, max(lower, val)) for val in sample]
-        fingers = list(self.const["fingers"].values())
+        sensors = list(self.const["sensors"].values())
         self.samples = pd.concat(
             (
                 self.samples,
                 pd.DataFrame(
                     {"datetime": [datetime.datetime.now()]}
-                    | {f: [s] for f, s in zip(fingers, sample)}
+                    | {f: [s] for f, s in zip(sensors, sample)}
                 ),
             ),
             ignore_index=True,

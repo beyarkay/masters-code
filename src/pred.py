@@ -30,5 +30,6 @@ class PredictGestureHandler(common.AbstractHandler):
             l.warn(f"Not enough samples recorded ({n_samples} < {n_timesteps})")
             return
         sample = parse_line_handler.samples.tail(self.model.config["n_timesteps"])
-        sample = sample.drop(columns=["gesture", "datetime"], errors="ignore").values
+        const: common.ConstantsDict = common.read_constants()
+        sample = sample[const["sensors"].values()].values
         self.prediction = self.model.predict(sample)

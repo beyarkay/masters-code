@@ -1,5 +1,5 @@
 # This file defines various constants that are used in ergo
-fingers:
+sensors:
   0: "l5x"
   1: "l5y"
   2: "l5z"

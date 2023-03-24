@@ -1,9 +1,10 @@
 from enum import Enum
 import typing
+import numpy as np
 
 
 class ConstantsDict(typing.TypedDict):
-    fingers: dict[int, str]
+    sensors: dict[int, str]
     n_sensors: int
     sensor_bounds: dict[str, int]
     baud_rate: int
