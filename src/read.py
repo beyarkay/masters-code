@@ -141,11 +141,16 @@ class ReadLineHandler(common.AbstractHandler):
                 # The returned values are dictated by the contents of a file on
                 # disk
                 self._data: pd.DataFrame = pd.read_csv(mock)
-                self.mock_fn: typing.Callable = (
-                    lambda t: None
-                    if t > len(self._data)
-                    else ",".join([str(i) for i in self._data.iloc[t].values[2:]])
-                )
+
+                def mock_fn(timestep: int):
+                    if timestep > len(self._data):
+                        return None
+                    else:
+                        values = self._data.iloc[timestep].values
+                        l.info(f"Returning mock data for timestep {timestep}: {values}")
+                        return ",".join([str(i) for i in values[2:]])
+
+                self.mock_fn: typing.Callable = mock_fn
                 l.info(f"Mocking data using '{mock}' ({len(self._data)} lines)")
         elif port_name is not None and mock is None:
             self.should_mock: bool = False

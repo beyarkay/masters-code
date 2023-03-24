@@ -20,6 +20,8 @@ class PredictGestureHandler(common.AbstractHandler):
         self,
         past_handlers: list[common.AbstractHandler],
     ):
+
+        l.info("Executing PredictGestureHandler")
         parse_line_handler: read.ParseLineHandler = next(
             h for h in past_handlers if type(h) is read.ParseLineHandler
         )
