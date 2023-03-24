@@ -7,15 +7,12 @@ import logging as l
 import datetime
 import pandas as pd
 import numpy as np
+import common
 
 
 def main():
     init_logs()
-    model = models.OneNearestNeighbourClassifier("src/config.yaml")
-    df: pd.DataFrame = read.read_data()
-    y: np.ndarray = df["gesture"].values
-    X: np.ndarray = df.drop(columns=["gesture", "datetime"]).values
-    model.fit(X, y)
+    model: models.TemplateClassifier = get_model()
     handlers = [
         read.ReadLineHandler(mock="gesture_data/train/2022-10-19T19:22:46.781569.csv"),
         read.ParseLineHandler(),
@@ -23,6 +20,16 @@ def main():
         vis.StdOutHandler(),
     ]
     read.execute_handlers(handlers)
+
+
+def get_model() -> models.TemplateClassifier:
+    model: models.HMMClassifier = models.HMMClassifier(config={"n_timesteps": 30})
+    df: pd.DataFrame = read.read_data()
+    y: np.ndarray = df["gesture"].values
+    const: common.ConstantsDict = common.read_constants()
+    X: np.ndarray = df[const["sensors"].values()].values
+    model.fit(X, y)
+    return model
 
 
 def init_logs():
