@@ -20,32 +20,96 @@ def read_model(directory: str) -> models.TemplateClassifier:
 
 
 def read_data(directory: str = "./gesture_data/train/") -> pd.DataFrame:
-    """Concatenates the CSVs in `directory` into one pandas DataFrame.
+    """Reads in CSV files from a directory and returns a concatenated Pandas DataFrame.
 
-    WARN: Used to be called parse_csvs
+    Args:
+        directory (str, optional): Path to the directory containing the CSV
+        files. Defaults to "./gesture_data/train/".
 
-    :param directory: The directory to search for CSV files. Defaults to
-        "../gesture_data/train".
-    :type directory: str
-
-    :returns: A concatenated Pandas DataFrame containing the data read from all
-        the CSV files in the directory.
-    :rtype: any
-
-    :raises FileNotFoundError: If the specified directory does not exist.
+    Returns:
+        pd.DataFrame: A concatenated Pandas DataFrame with columns: "datetime",
+        "gesture", "file", "finger", "orientation" and additional columns
+        representing finger data.
     """
+    # Load finger data constants
     fingers: dict[int, str] = common.read_constants().get("fingers")
-
+    # Initialize empty list to store DataFrames
     dfs = []
-    for path in [p for p in os.listdir(directory) if p.endswith(".csv")]:
-        dfs.append(
-            pd.read_csv(
-                directory + path,
-                names=["datetime", "gesture"] + list(fingers.values()),
-                parse_dates=["datetime"],
-            )
+    # Get list of paths to CSV files in directory and sort them
+    paths = sorted([p for p in os.listdir(directory) if p.endswith(".csv")])
+    # Iterate through paths and load each CSV file into a DataFrame
+    for i, path in enumerate(paths):
+        df = pd.read_csv(
+            directory + path,
+            names=["datetime", "gesture"] + list(fingers.values()),
+            parse_dates=["datetime"],
         )
-    return pd.concat(dfs)
+        # Add a column with the filename for reference
+        df["file"] = path
+        dfs.append(df)
+    # Concatenate DataFrames into one
+    together = pd.concat(dfs)
+    # Extract finger and orientation data from the gesture column and add to DataFrame
+    together["finger"] = together["gesture"].apply(
+        lambda g: None if g == "gesture0255" else int(g[-3:]) % 10
+    )
+    together["orientation"] = together["gesture"].apply(
+        lambda g: None if g == "gesture0255" else int(g[-3:]) // 10
+    )
+    # Select relevant columns and reorder them
+    together = together[
+        ["datetime", "gesture", "file", "finger", "orientation"]
+        + list(fingers.values())
+    ]
+    # Sort DataFrame by datetime and reset index
+    return together.sort_values("datetime").reset_index(drop=True)
+
+
+def window_data(data: pd.DataFrame, window_size: int) -> tuple[np.ndarray]:
+    """
+    Process data into a windowed format for machine learning.
+
+    Args:
+    - data: A pandas DataFrame containing the data to be processed.
+    - window_size: An integer representing the size of the rolling window to use.
+
+    Returns:
+    A tuple containing two numpy ndarrays:
+    - X: A 3-dimensional ndarray with shape (size, window_size, 30).
+    - y: A 1-dimensional ndarray with shape (size,).
+    """
+
+    # Group data by file and apply rolling window of size window_size
+    rolling = data.groupby("file").rolling(window=window_size, min_periods=window_size)
+
+    # Calculate unique number of files
+    uniq = len(data.value_counts("file"))
+
+    # Calculate number of windows
+    size = len(data) - uniq * (window_size - 1)
+
+    # Initialize empty ndarrays for X and y
+    X = np.empty((size, window_size, 30))
+    y = np.empty((size,))
+
+    # Read finger constants from a file
+    const: common.ConstantsDict = common.read_constants()
+    fingers = const["fingers"].values()
+
+    # Loop over the windows and populate X and y
+    count = 0
+    for i, window in enumerate(rolling):
+        if len(window) < window_size:
+            continue
+        X[i] = window[fingers].values
+        y[i] = window.gesture.values[-1]
+        count += 1
+
+    # Ensure that the expected number of windows was processed
+    assert count == size, f"{count} != {size}"
+
+    # Return X and y as a tuple
+    return (X, y)
 
 
 # TODO this should be a rewrite of `ml_utils.get_serial_port`.
