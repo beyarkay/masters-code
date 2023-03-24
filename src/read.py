@@ -64,9 +64,10 @@ def read_data(directory: str = "./gesture_data/train/") -> pd.DataFrame:
     return together.sort_values("datetime").reset_index(drop=True)
 
 
-def make_windows(data: pd.DataFrame, window_size: int) -> (np.ndarray, np.ndarray):
-    """
-    Process data into a windowed format for machine learning.
+def make_windows(
+    data: pd.DataFrame, window_size: int, pbar=None
+) -> (np.ndarray, np.ndarray):
+    """Process data into a windowed format for machine learning.
 
     Args:
     - data: A pandas DataFrame containing the data to be processed.
@@ -99,6 +100,8 @@ def make_windows(data: pd.DataFrame, window_size: int) -> (np.ndarray, np.ndarra
     Xs = []
     ys = []
     for i, window in enumerate(rolling):
+        if pbar is not None:
+            pbar.update(1)
         if len(window) < window_size:
             continue
         Xs.append(window[sensors].values)

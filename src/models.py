@@ -28,15 +28,28 @@ import sklearn.utils.validation as sk_validation
 import tqdm
 import typing
 import yaml
+import tensorflow as tf
+from tensorflow import keras
+from keras import layers
+import logging as l
 
 
 class CusumConfig(typing.TypedDict):
     thresh: int
 
 
+class NNConfig(typing.TypedDict):
+    epochs: int
+
+
+class FFNNConfig(NNConfig):
+    nodes_per_layer: list[int]
+
+
 class ConfigDict(typing.TypedDict):
     n_timesteps: int
     cusum: Optional[CusumConfig]
+    ffnn: Optional[FFNNConfig]
 
 
 class TemplateClassifier(BaseEstimator, ClassifierMixin):
@@ -57,6 +70,27 @@ class TemplateClassifier(BaseEstimator, ClassifierMixin):
         """
         self.config_path = config_path
         self.config = config
+
+    def _check_fit(self, X, y):
+        """Validate model parameters before fitting.
+
+        This will read in the config (if applicable), check X,y are valid,
+        store the classes, and perform some general pre-fit chores."""
+        both_none = self.config_path is None and self.config is None
+        neither_none = self.config_path is not None and self.config is not None
+        if both_none or neither_none:
+            raise ValueError("Exactly one of `config` and `config_path` must be None")
+        if self.config_path is not None:
+            with open(self.config_path, "r") as f:
+                self.config: ConfigDict = yaml.safe_load(f)
+
+        # Check that X and y have correct shape
+        X, y = common.check_X_y(X, y)
+        # Store the classes seen during fit
+        self.classes_ = unique_labels(y)
+
+        self.X_ = X
+        self.y_ = y
 
     def fit(self, X, y):
         raise NotImplementedError
@@ -87,20 +121,7 @@ class OneNearestNeighbourClassifier(TemplateClassifier):
         self : object
             Returns self.
         """
-        both_none = self.config_path is None and self.config is None
-        neither_none = self.config_path is not None and self.config is not None
-        if both_none or neither_none:
-            raise ValueError("Exactly one of `config` and `config_path` must be None")
-
-        if self.config["n_timesteps"] != 1:
-            raise ValueError("OneNearestNeighbourClassifier requires n_timesteps == 1")
-        # Check that X and y have correct shape
-        X, y = common.check_X_y(X, y)
-        # Store the classes seen during fit
-        self.classes_ = unique_labels(y)
-
-        self.X_ = X
-        self.y_ = y
+        self._check_fit(X, y)
         # Return the classifier
         self.is_fitted_ = True
         return self
@@ -130,21 +151,10 @@ class OneNearestNeighbourClassifier(TemplateClassifier):
 
 class HMMClassifier(TemplateClassifier):
     def fit(self, X, y, verbose=False, limit=None):
-
-        both_none = self.config_path is None and self.config is None
-        neither_none = self.config_path is not None and self.config is not None
-        if both_none or neither_none:
-            raise ValueError("Exactly one of `config` and `config_path` must be None")
-
-        if self.config_path is not None:
-            with open(self.config_path, "r") as f:
-                self.config: ConfigDict = yaml.safe_load(f)
-
-        X, y = common.check_X_y(X, y)
+        self._check_fit(X, y)
         assert (
             X.shape[1] == self.config["n_timesteps"]
         ), f"{X.shape[1]} != {self.config['n_timesteps']}"
-        self.classes_ = unique_labels(y)
 
         # FIXME this assumes all X are continuous, which they're not
         X = np.concatenate(X)
@@ -267,32 +277,148 @@ class CuSUMClassifier(TemplateClassifier):
         return s_lower, s_upper
 
     def fit(self, X, y):
-        both_none = self.config_path is None and self.config is None
-        neither_none = self.config_path is not None and self.config is not None
-        if both_none or neither_none:
-            raise ValueError("Exactly one of `config` and `config_path` must be None")
-        with open(self.config_path, "r") as f:
-            self.config: ConfigDict = yaml.safe_load(f)
+        self._check_fit(X, y)
+        # Return the classifier
+        self.is_fitted_ = True
 
     def predict(self, X):
+        # For each xi in X
+        # For each time series ts in xi
+        # perform CuSUM with upper and lower values learnt from fitting
+        # Alert if CuSUM passes threshold
         raise NotImplementedError
 
 
-class NNClassifier(TemplateClassifier):
+class TFClassifier(TemplateClassifier):
+    def predict(self, X):
+        """Give label predictions for each observation in X"""
+        return np.argmax(self.predict_proba(X), axis=1)
+
+    def predict_proba(self, X):
+        """Give label probabilities for each observation in X"""
+        logits = self.model(X)
+        l.info(logits)
+        return tf.nn.softmax(logits).numpy()
+
+
+class FFNNClassifier(TFClassifier):
+    """
+
+    Examples
+    --------
+    >>> X_trn, X_val, y_trn, y_val = train_test_split(X, y)
+    >>> m = models.FFNNClassifier(config={
+    ...     "n_timesteps": 30,
+    ...     "ffnn": {
+    ...         "epochs": 3,
+    ...         "nodes_per_layer": [100],
+    ...     }
+    ... })
+    >>> m.fit(X_trn, y_trn, validation_data=(X_val, y_val))
+    >>> m.predict(X_trn[:1])[0]
+    32
+    """
+
     def __init__(self, config_path=None, config=None):
-        self.config_path = config_path
-        self.config = config
-        raise NotImplementedError
+        self.config_path: Optional[str] = config_path
+        self.config: Optional[ConfigDict] = config
+        self.normalizer = None
 
-    def fit(self, X, y):
-        both_none = self.config_path is None and self.config is None
-        neither_none = self.config_path is not None and self.config is not None
-        if both_none or neither_none:
-            raise ValueError("Exactly one of `config` and `config_path` must be None")
-        with open(self.config_path, "r") as f:
-            self.config: ConfigDict = yaml.safe_load(f)
+    def fit(self, X, y, **kwargs):
+        l.info("Checking fit of X, y")
+        self._check_fit(X, y)
+        # Fit the normalizer if not already fitted.
+        if self.normalizer is None:
+            l.info("Fitting normalizer")
+            self.normalizer = keras.layers.Normalization(axis=-2)
+            self.normalizer.adapt(X)
 
-        raise NotImplementedError
+        # Construct the fully connected layers from the model config
+        dense_layers = [
+            keras.layers.Dense(
+                units=npl,
+                activation="relu",
+            )
+            for npl in self.config["ffnn"]["nodes_per_layer"]
+        ]
 
-    def predict(self, X):
+        # Construct the model as a sequence of layers
+        self.model = tf.keras.Sequential(
+            [
+                keras.layers.Input(shape=X.shape[1:]),
+                self.normalizer,
+                keras.layers.Flatten(),
+                *dense_layers,
+                # NOTE: Last layer isn't softmax because it's impossible to get
+                # a stable loss calculation using softmax output
+                keras.layers.Dense(len(np.unique(y))),
+            ]
+        )
+
+        l.info("Compiling model")
+        # Compile the model using the ADAM optimiser and SCCE loss
+        self.model.compile(
+            optimizer=keras.optimizers.Adam(learning_rate=2.5e-5),
+            loss=keras.losses.SparseCategoricalCrossentropy(from_logits=True),
+        )
+
+        l.info("Fitting model")
+        # Fit the model to the data, with a number of epochs dictated by config
+        self.history = self.model.fit(
+            X, y, batch_size=128, epochs=self.config["ffnn"]["epochs"], **kwargs
+        )
+
+        # Sklearn expects is_fitted_ to be True after fitting
+        self.is_fitted_ = True
+
+
+class RNNClassifier(TFClassifier):
+    def __init__(self, config_path=None, config=None):
+        self.config_path: Optional[str] = config_path
+        self.config: Optional[ConfigDict] = config
+        self.normalizer = None
+
+    def fit(self, X, y, **kwargs):
         raise NotImplementedError
+        self._check_fit(X, y)
+        # Fit the normalizer if not already fitted.
+        if self.normalizer is None:
+            print("Fitting normalizer")
+            self.normalizer = keras.layers.Normalization(axis=-2)
+            self.normalizer.adapt(X)
+
+        # Construct the fully connected layers from the model config
+        dense_layers = [
+            keras.layers.Dense(
+                units=npl,
+                activation="relu",
+            )
+            for npl in self.config["ffnn"]["nodes_per_layer"]
+        ]
+
+        # Construct the model as a sequence of layers
+        self.model = tf.keras.Sequential(
+            [
+                keras.layers.Input(shape=X.shape[1:]),
+                self.normalizer,
+                keras.layers.Flatten(),
+                *dense_layers,
+                # NOTE: Last layer isn't softmax because it's impossible to get
+                # a stable loss calculation using softmax output
+                keras.layers.Dense(len(np.unique(y))),
+            ]
+        )
+
+        # Compile the model using the ADAM optimiser and SCCE loss
+        self.model.compile(
+            optimizer=keras.optimizers.Adam(learning_rate=2.5e-5),
+            loss=keras.losses.SparseCategoricalCrossentropy(from_logits=True),
+        )
+
+        # Fit the model to the data, with a number of epochs dictated by config
+        self.history = self.model.fit(
+            X, y, batch_size=128, epochs=self.config["ffnn"]["epochs"], **kwargs
+        )
+
+        # Sklearn expects is_fitted_ to be True after fitting
+        self.is_fitted_ = True

@@ -6,7 +6,7 @@ import os
 import logging as l
 import datetime
 import pandas as pd
-import numpy as np
+import tqdm
 import common
 
 
@@ -19,17 +19,32 @@ def main():
         pred.PredictGestureHandler(model),
         vis.StdOutHandler(),
     ]
+    print("Executing handlers")
     read.execute_handlers(handlers)
 
 
 def get_model() -> models.TemplateClassifier:
     l.info("Making model")
-    config: models.ConfigDict = {"n_timesteps": 30}
-    model: models.HMMClassifier = models.HMMClassifier(config=config)
+    model = models.FFNNClassifier(
+        config={
+            "n_timesteps": 30,
+            "ffnn": {
+                "epochs": 2,
+                "nodes_per_layer": [100],
+            },
+        }
+    )
     l.info("Reading data")
-    df: pd.DataFrame = read.read_data()
+    df: pd.DataFrame = read.read_data().iloc[:50_000]
     l.info("Making windows")
-    X, y = read.make_windows(df, config["n_timesteps"])
+    X, y_str = read.make_windows(
+        df,
+        model.config["n_timesteps"],
+        pbar=tqdm.tqdm(total=len(df), desc="Making windows"),
+    )
+    g2i, i2g = common.make_gestures_and_indices(y_str)
+    y = g2i(y_str)
+
     l.info("Fitting model")
     model.fit(X, y)
     return model

@@ -7,6 +7,7 @@ import models
 import read
 import common
 import logging as l
+import numpy as np
 
 
 class PredictGestureHandler(common.AbstractHandler):
@@ -34,4 +35,4 @@ class PredictGestureHandler(common.AbstractHandler):
         sample = parse_line_handler.samples.tail(self.model.config["n_timesteps"])
         const: common.ConstantsDict = common.read_constants()
         sample = sample[const["sensors"].values()].values
-        self.prediction = self.model.predict(sample)
+        self.prediction = self.model.predict(sample.astype(np.float32))

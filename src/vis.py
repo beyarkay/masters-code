@@ -19,4 +19,5 @@ class StdOutHandler(common.AbstractHandler):
         pred_handler: pred.PredictGestureHandler = next(
             h for h in past_handlers if type(h) is pred.PredictGestureHandler
         )
-        l.info("prediction: " + pred_handler.prediction)
+        l.info(f"Prediction: {pred_handler.prediction}")
+        print(f"Prediction: {pred_handler.prediction}")
