@@ -1,8 +1,6 @@
 """Takes care of reading in data from the serial port stream and converts it to
 numpy arrays. Also reads data in from disk.
 """
-# TODO these handlers should probably be in the correct files. ie SaveHandler -> save.py
-
 import logging as l
 import serial
 import pandas as pd
@@ -10,6 +8,15 @@ import typing
 import os
 import datetime
 import common
+import pickle
+import models
+import numpy as np
+
+
+def read_model(directory: str) -> models.TemplateClassifier:
+    with open(f"{directory}/model.pkl", "rb") as f:
+        model = pickle.load(f)
+    return model
 
 
 def read_data(directory: str = "./gesture_data/train/") -> pd.DataFrame:
