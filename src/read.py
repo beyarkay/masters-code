@@ -32,7 +32,7 @@ def read_data(directory: str = "./gesture_data/train/") -> pd.DataFrame:
         representing finger data.
     """
     # Load finger data constants
-    fingers: dict[int, str] = common.read_constants().get("fingers")
+    sensors: list[str] = list(common.read_constants()["sensors"].values())
     # Initialize empty list to store DataFrames
     dfs = []
     # Get list of paths to CSV files in directory and sort them
@@ -41,7 +41,7 @@ def read_data(directory: str = "./gesture_data/train/") -> pd.DataFrame:
     for i, path in enumerate(paths):
         df = pd.read_csv(
             directory + path,
-            names=["datetime", "gesture"] + list(fingers.values()),
+            names=["datetime", "gesture"] + sensors,
             parse_dates=["datetime"],
         )
         # Add a column with the filename for reference
@@ -58,8 +58,7 @@ def read_data(directory: str = "./gesture_data/train/") -> pd.DataFrame:
     )
     # Select relevant columns and reorder them
     together = together[
-        ["datetime", "gesture", "file", "finger", "orientation"]
-        + list(fingers.values())
+        ["datetime", "gesture", "file", "finger", "orientation"] + sensors
     ]
     # Sort DataFrame by datetime and reset index
     return together.sort_values("datetime").reset_index(drop=True)
@@ -94,14 +93,14 @@ def window_data(data: pd.DataFrame, window_size: int) -> tuple[np.ndarray]:
 
     # Read finger constants from a file
     const: common.ConstantsDict = common.read_constants()
-    fingers = const["fingers"].values()
+    sensors = const["sensors"].values()
 
     # Loop over the windows and populate X and y
     count = 0
     for i, window in enumerate(rolling):
         if len(window) < window_size:
             continue
-        X[i] = window[fingers].values
+        X[i] = window[sensors].values
         y[i] = window.gesture.values[-1]
         count += 1
 
