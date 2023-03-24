@@ -40,6 +40,14 @@ machine_learning/models/
 *.pdf
 *.jpg
 
+# Serialised python objects
 *.pickle
 
+# Test coverage build files
 .coverage
+
+# Log files
+logs
+
+# Saved models
+saved_models
