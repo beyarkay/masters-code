@@ -2,4 +2,4 @@
 # Config that isn't specific to a model/architecture should be in the root
 # level. All other config should be nested in accordance to it's model and
 # architecture.
-n_timesteps: 30
+n_timesteps: 25
