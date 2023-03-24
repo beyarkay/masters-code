@@ -29,6 +29,15 @@ def read_constants(path: str = "src/constants.yaml") -> ConstantsDict:
     return constants
 
 
+def check_X_y(X: np.ndarray, y: np.ndarray):
+    assert X is not None
+    assert y is not None
+    assert type(X) is np.ndarray
+    assert type(y) is np.ndarray
+    assert X.shape[0] == y.shape[0]
+    return X, y
+
+
 class ControlFlow(Enum):
     """
     An enumeration of control flow options for handler sequences.
