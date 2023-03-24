@@ -23,11 +23,14 @@ def main():
 
 
 def get_model() -> models.TemplateClassifier:
-    model: models.HMMClassifier = models.HMMClassifier(config={"n_timesteps": 30})
+    l.info("Making model")
+    config: models.ConfigDict = {"n_timesteps": 30}
+    model: models.HMMClassifier = models.HMMClassifier(config=config)
+    l.info("Reading data")
     df: pd.DataFrame = read.read_data()
-    y: np.ndarray = df["gesture"].values
-    const: common.ConstantsDict = common.read_constants()
-    X: np.ndarray = df[const["sensors"].values()].values
+    l.info("Making windows")
+    X, y = read.make_windows(df, config["n_timesteps"])
+    l.info("Fitting model")
     model.fit(X, y)
     return model
 

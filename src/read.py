@@ -64,7 +64,7 @@ def read_data(directory: str = "./gesture_data/train/") -> pd.DataFrame:
     return together.sort_values("datetime").reset_index(drop=True)
 
 
-def window_data(data: pd.DataFrame, window_size: int) -> tuple[np.ndarray]:
+def make_windows(data: pd.DataFrame, window_size: int) -> (np.ndarray, np.ndarray):
     """
     Process data into a windowed format for machine learning.
 
@@ -85,30 +85,27 @@ def window_data(data: pd.DataFrame, window_size: int) -> tuple[np.ndarray]:
     uniq = len(data.value_counts("file"))
 
     # Calculate number of windows
-    size = len(data) - uniq * (window_size - 1)
+    size = len(data) - uniq * (window_size - 1) + 1
 
     # Initialize empty ndarrays for X and y
     X = np.empty((size, window_size, 30))
-    y = np.empty((size,))
+    y = np.empty((size,), dtype=data.gesture.dtype)
 
     # Read finger constants from a file
     const: common.ConstantsDict = common.read_constants()
     sensors = const["sensors"].values()
 
     # Loop over the windows and populate X and y
-    count = 0
+    Xs = []
+    ys = []
     for i, window in enumerate(rolling):
         if len(window) < window_size:
             continue
-        X[i] = window[sensors].values
-        y[i] = window.gesture.values[-1]
-        count += 1
-
-    # Ensure that the expected number of windows was processed
-    assert count == size, f"{count} != {size}"
+        Xs.append(window[sensors].values)
+        ys.append(window.gesture.values[-1])
 
     # Return X and y as a tuple
-    return (X, y)
+    return (np.stack(Xs), np.array(ys))
 
 
 # TODO this should be a rewrite of `ml_utils.get_serial_port`.
