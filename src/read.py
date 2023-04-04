@@ -128,8 +128,9 @@ class ReadLineHandler(common.AbstractHandler):
             # There are 3 ways to mock:
             if type(mock) is bool and mock:
                 # Just always return a constant array of 500s
-                self.mock_fn: typing.Callable = (
-                    lambda _t: ["500"] * self.const["n_sensors"]
+                self.mock_fn: typing.Callable = lambda _t: (
+                    ["500"] * self.const["n_sensors"],
+                    None,
                 )
                 l.info("Mocking data using 500s")
             elif callable(mock):
@@ -146,8 +147,9 @@ class ReadLineHandler(common.AbstractHandler):
                         return None
                     else:
                         values = self._data.iloc[timestep].values
+                        truth: str = values[1]
                         l.info(f"Returning mock data for timestep {timestep}: {values}")
-                        return ",".join([str(i) for i in values[2:]])
+                        return (",".join([str(i) for i in values[2:]]), truth)
 
                 self.mock_fn: typing.Callable = mock_fn
                 l.info(f"Mocking data using '{mock}' ({len(self._data)} lines)")
@@ -182,13 +184,15 @@ class ReadLineHandler(common.AbstractHandler):
     ):
         l.info("Executing ReadLineHandler")
         if self.should_mock:
-            result = self.mock_fn(self.timesteps)
+            result, truth = self.mock_fn(self.timesteps)
             if result is None:
                 self.control_flow = common.ControlFlow.BREAK
                 return
             self.line = "0,0," + result + ","
+            self.truth = truth
         else:
             self.line = self.port.readline().decode("utf-8")
+            self.truth = None
         self.timesteps += 1
 
 

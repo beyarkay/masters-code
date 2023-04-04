@@ -7,6 +7,7 @@ as for visualising results via the CLI.
 import logging as l
 import common
 import pred
+import read
 
 
 class StdOutHandler(common.AbstractHandler):
@@ -16,8 +17,12 @@ class StdOutHandler(common.AbstractHandler):
         self,
         past_handlers: list[common.AbstractHandler],
     ):
+        read_line_handler: read.ReadLineHandler = next(
+            h for h in past_handlers if type(h) is read.ReadLineHandler
+        )
+        truth: str = read_line_handler.truth
         pred_handler: pred.PredictGestureHandler = next(
             h for h in past_handlers if type(h) is pred.PredictGestureHandler
         )
-        l.info(f"Prediction: {pred_handler.prediction}")
-        print(f"Prediction: {pred_handler.prediction}")
+        l.info(f"Prediction: {str(pred_handler.prediction): <20} Truth: {truth: <20}")
+        print(f"Prediction: {str(pred_handler.prediction): <20} Truth: {truth: <20}")
