@@ -76,9 +76,9 @@ class TemplateClassifier(BaseEstimator, ClassifierMixin):
 
         This will read in the config (if applicable), check X,y are valid,
         store the classes, and perform some general pre-fit chores."""
-        both_none = self.config_path is None and self.config is None
-        neither_none = self.config_path is not None and self.config is not None
-        if both_none or neither_none:
+        # Assert that exactly one of (config_path, config) is not None using
+        # boolean xor `^`
+        if bool(self.config_path is None) ^ bool(self.config is None):
             raise ValueError("Exactly one of `config` and `config_path` must be None")
         if self.config_path is not None:
             with open(self.config_path, "r") as f:
@@ -101,6 +101,21 @@ class TemplateClassifier(BaseEstimator, ClassifierMixin):
     def write(self, model_path):
         with open(f"{model_path}.pkl", "wb") as f:
             pickle.dump(self, f)
+
+    def confusion_matrix(self, y_true, y_pred=None, X_to_pred=None):
+        """Calculate the confusion matrix of some predictions.
+
+        Either pass in the alread-predicted values via y_pred, or pass in some
+        X data which will be predicted and then used to calculate the confusion
+        matrix."""
+        # Assert that exactly one of (y_pred, X_to_pred) is not None using
+        # boolean xor `^`.
+        if bool(y_pred is None) ^ bool(X_to_pred is None):
+            raise ValueError("Exactly one of (y_pred, X_to_pred) must be not None")
+        if X_to_pred is not None:
+            y_pred = self.predict(X_to_pred)
+
+        return tf.math.confusion_matrix(y_true, y_pred)
 
 
 class OneNearestNeighbourClassifier(TemplateClassifier):
@@ -290,6 +305,8 @@ class CuSUMClassifier(TemplateClassifier):
 
 
 class TFClassifier(TemplateClassifier):
+    """Just an abstract class for TensorFlow-style models"""
+
     def predict(self, X):
         """Give label predictions for each observation in X"""
         return np.argmax(self.predict_proba(X), axis=1)
