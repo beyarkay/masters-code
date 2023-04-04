@@ -42,7 +42,7 @@ class NNConfig(typing.TypedDict):
     epochs: int
 
 
-class FFNNConfig(NNConfig):
+class FFNNConfig(typing.TypedDict):
     nodes_per_layer: list[int]
 
 
@@ -50,6 +50,7 @@ class ConfigDict(typing.TypedDict):
     n_timesteps: int
     cusum: Optional[CusumConfig]
     ffnn: Optional[FFNNConfig]
+    nn: Optional[NNConfig]
 
 
 class TemplateClassifier(BaseEstimator, ClassifierMixin):
@@ -382,7 +383,7 @@ class FFNNClassifier(TFClassifier):
         l.info("Fitting model")
         # Fit the model to the data, with a number of epochs dictated by config
         self.history = self.model.fit(
-            X, y, batch_size=128, epochs=self.config["ffnn"]["epochs"], **kwargs
+            X, y, batch_size=128, epochs=self.config["nn"]["epochs"], **kwargs
         )
 
         # Sklearn expects is_fitted_ to be True after fitting
@@ -434,7 +435,47 @@ class RNNClassifier(TFClassifier):
 
         # Fit the model to the data, with a number of epochs dictated by config
         self.history = self.model.fit(
-            X, y, batch_size=128, epochs=self.config["ffnn"]["epochs"], **kwargs
+            X, y, batch_size=128, epochs=self.config["nn"]["epochs"], **kwargs
+        )
+
+        # Sklearn expects is_fitted_ to be True after fitting
+        self.is_fitted_ = True
+
+
+class LSTMClassifier(TFClassifier):
+    def __init__(self, config_path=None, config=None):
+        self.config_path: Optional[str] = config_path
+        self.config: Optional[ConfigDict] = config
+        self.normalizer = None
+
+    def fit(self, X, y, **kwargs):
+        # TF.LSTM *requires* floats for matmul operations
+        X = X.astype(np.float32)
+        y = y.astype(np.float32)
+        self._check_fit(X, y)
+        # Fit the normalizer if not already fitted.
+        if self.normalizer is None:
+            print("Fitting normalizer")
+            self.normalizer = keras.layers.Normalization(axis=-2)
+            self.normalizer.adapt(X)
+
+        self.model = keras.models.Sequential(
+            [
+                # Shape [batch, time, features] => [batch, time, lstm_units]
+                keras.layers.LSTM(35, return_sequences=False),
+                # Shape => [batch, time, features]
+                keras.layers.Dense(len(self.classes_)),
+            ]
+        )
+        # Compile the model using the ADAM optimiser and SCCE loss
+        self.model.compile(
+            loss=keras.losses.SparseCategoricalCrossentropy(from_logits=True),
+            optimizer=keras.optimizers.Adam(learning_rate=2.5e-5),
+        )
+
+        # Fit the model to the data, with a number of epochs dictated by config
+        self.history = self.model.fit(
+            X, y, batch_size=128, epochs=self.config["nn"]["epochs"], **kwargs
         )
 
         # Sklearn expects is_fitted_ to be True after fitting
