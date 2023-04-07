@@ -1,7 +1,11 @@
 """A collection of commonly used functions/classes for Ergo."""
 from enum import Enum
-import typing
+import logging as l
 import numpy as np
+import os
+import sys
+import typing
+import datetime
 
 
 class ConstantsDict(typing.TypedDict):
@@ -110,3 +114,41 @@ class AbstractHandler:
         implemented in derived classes.
         """
         raise NotImplementedError
+
+
+def init_logs():
+    """Initiate logging to a file with the current timestamp as the filename.
+
+    This function configures the logging module to write log messages to a file
+    with a name that includes the current timestamp. The log file is created in
+    a "logs" directory in the current working directory. The logging level is
+    set to INFO, which means that messages with a severity level of INFO or
+    higher will be logged.
+
+    Returns:
+        None
+    """
+    if not os.path.exists("logs"):
+        os.mkdir("logs")
+
+    log = l.getLogger("logger")
+    log.setLevel(l.DEBUG)
+
+    formatter = l.Formatter(
+        fmt="%(asctime)s.%(msecs)03d %(levelname)s: %(message)s",
+        datefmt="%Y-%m-%dT%H:%M:%S",
+    )
+
+    file_handler = l.FileHandler(
+        f"logs/{str(datetime.datetime.now()).replace(' ', 'T')}.log",
+        mode="w",
+        encoding="utf-8",
+    )
+    file_handler.setLevel(l.DEBUG)
+    file_handler.setFormatter(formatter)
+    log.addHandler(file_handler)
+
+    stream_handler = l.StreamHandler(sys.stdout)
+    stream_handler.setLevel(l.INFO)
+    stream_handler.setFormatter(formatter)
+    log.addHandler(stream_handler)
