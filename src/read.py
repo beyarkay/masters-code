@@ -19,7 +19,9 @@ def read_model(directory: str) -> models.TemplateClassifier:
     return model
 
 
-def read_data(directory: str = "./gesture_data/train/") -> pd.DataFrame:
+def read_data(
+    directory: str = "./gesture_data/train/", offsets: typing.Optional[str] = None
+) -> pd.DataFrame:
     """Reads in CSV files from a directory and returns a concatenated Pandas DataFrame.
 
     Args:
@@ -31,6 +33,8 @@ def read_data(directory: str = "./gesture_data/train/") -> pd.DataFrame:
         "gesture", "file", "finger", "orientation" and additional columns
         representing finger data.
     """
+    if offsets is not None:
+        offsets = pd.read_csv(offsets)
     # Load finger data constants
     sensors: list[str] = list(common.read_constants()["sensors"].values())
     # Initialize empty list to store DataFrames
@@ -49,19 +53,27 @@ def read_data(directory: str = "./gesture_data/train/") -> pd.DataFrame:
         dfs.append(df)
     # Concatenate DataFrames into one
     together = pd.concat(dfs)
-    # Extract finger and orientation data from the gesture column and add to DataFrame
-    together["finger"] = together["gesture"].apply(
-        lambda g: None if g == "gesture0255" else int(g[-3:]) % 10
-    )
-    together["orientation"] = together["gesture"].apply(
-        lambda g: None if g == "gesture0255" else int(g[-3:]) // 10
-    )
     # Select relevant columns and reorder them
-    together = together[
-        ["datetime", "gesture", "file", "finger", "orientation"] + sensors
-    ]
-    # Sort DataFrame by datetime and reset index
-    return together.sort_values("datetime").reset_index(drop=True)
+    together = together[["datetime", "gesture", "file"] + sensors]
+    df = together.sort_values("datetime").reset_index(drop=True)
+
+    # If offsets have been specified, then read in the offsets and apply them
+    # to the DF
+    if offsets is not None:
+        offsets = pd.read_csv("offsets.csv")
+        # Set the new index to be old index + offset
+        offsets["new_idx"] = offsets["idx"] + offsets["offset"]
+        # Set the new gesture to be the re-indexed old gestures
+        offsets["new_gesture"] = df["gesture"].iloc[offsets["idx"].values].values
+        offsets = offsets.set_index("new_idx")
+        # Keep track of the unaligned gesture, just in case
+        df["unaligned_gesture"] = df["gesture"].copy()
+        # Set all the gestures to be 0255 by default
+        df["gesture"] = "gesture0255"
+        # And set only the correct new gestures
+        df["gesture"].iloc[offsets.index] = offsets["new_gesture"]
+
+    return df[["datetime", "gesture"] + sensors + ["file", "unaligned_gesture"]]
 
 
 def make_windows(
