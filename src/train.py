@@ -50,7 +50,7 @@ def main():
 
     optuna.logging.get_logger("optuna").addHandler(l.StreamHandler(sys.stdout))
     study = optuna.create_study(
-        study_name=f"neural-network-{now}",
+        study_name=f"optimizers-{now}",
         direction="minimize",
         storage="sqlite:///db.sqlite3",
         load_if_exists=False
@@ -59,27 +59,77 @@ def main():
     n_trials = 100
     for i in range(n_trials):
         study.optimize(
-            lambda trial: objective_nn(trial, X_trn, y_trn, X_val, y_val),
+            lambda trial: objective_wrapper(trial, X_trn, y_trn, X_val, y_val),
             n_trials=1,
             gc_after_trial=True,
         )
 
 
+def objective_wrapper(trial, X_trn, y_trn, X_val, y_val):
+    architecture = trial.suggest_categorical(
+        "architecture",
+        [
+            # "ffnn",
+            "hmm",
+            # "cusum",
+        ],
+    )
+    if architecture == "ffnn":
+        return objective_nn(trial, X_trn, y_trn, X_val, y_val)
+    elif architecture == "hmm":
+        return objective_hmm(trial, X_trn, y_trn, X_val, y_val)
+    elif architecture == "cusum":
+        return objective_cusum(trial, X_trn, y_trn, X_val, y_val)
+    else:
+        raise NotImplementedError
+
+
 def objective_hmm(trial, X_trn, y_trn, X_val, y_val):
-    pass
+    config = {
+        "n_timesteps": X_trn.shape[1],
+    }
+    model = models.HMMClassifier(config=config)
+    start = datetime.datetime.now()
+    model.fit(X_trn, y_trn, validation_data=(X_val, y_val), verbose=True)
+    finsh = datetime.datetime.now()
+
+    duration = finsh - start
+    duration_ms = duration.seconds * 1000 + duration.microseconds / 1000
+    trial.set_user_attr("duration_ms", duration_ms)
+
+    final_loss = 0  # TODO
+    return final_loss
+
+
+def objective_cusum(trial, X_trn, y_trn, X_val, y_val):
+    config = {
+        "n_timesteps": X_trn.shape[1],
+    }
+    model = models.CuSUMClassifier(config=config)
+    l.info("Fitting model")
+    start = datetime.datetime.now()
+    model.fit(X_trn, y_trn, validation_data=(X_val, y_val))
+    finsh = datetime.datetime.now()
+
+    duration = finsh - start
+    duration_ms = duration.seconds * 1000 + duration.microseconds / 1000
+    trial.set_user_attr("duration_ms", duration_ms)
+
+    final_loss = 0  # TODO
+    return final_loss
 
 
 def objective_nn(trial, X_trn, y_trn, X_val, y_val):
-    num_layers = trial.suggest_categorical("num_layers", range(1, 4))
+    num_layers = trial.suggest_int("num_layers", 1, 3)
     nodes_per_layer = [
         trial.suggest_int(f"nodes_per_layer.{layer_idx+1}", 4, 512, log=True)
         for layer_idx in range(num_layers)
     ]
     config = {
-        "n_timesteps": 30,
+        "n_timesteps": X_trn.shape[1],
         "nn": {
             "epochs": 20,
-            "batch_size": trial.suggest_categorical("batch_size", [64, 128, 256]),
+            "batch_size": trial.suggest_int("batch_size", 64, 256, log=True),
             "learning_rate": trial.suggest_float("learning_rate", 1e-6, 1e-1, log=True),
             "optimizer": "adam",
         },

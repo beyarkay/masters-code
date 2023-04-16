@@ -245,7 +245,7 @@ class OneNearestNeighbourClassifier(TemplateClassifier):
 
 
 class HMMClassifier(TemplateClassifier):
-    def fit(self, X, y, verbose=False, limit=None):
+    def fit(self, X, y, validation_data, verbose=False, limit=None, **kwargs) -> None:
         self._check_fit(X, y)
         assert (
             X.shape[1] == self.config["n_timesteps"]
@@ -371,9 +371,9 @@ class CuSUMClassifier(TemplateClassifier):
             s_lower[i] = min(0, s_lower[i - 1] + z[i] + lower)
         return s_lower, s_upper
 
-    def fit(self, X, y):
+    def fit(self, X, y, validation_data, **kwargs) -> None:
         self._check_fit(X, y)
-        # Return the classifier
+        raise NotImplementedError
         self.is_fitted_ = True
 
     def predict(self, X):
