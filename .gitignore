@@ -24,6 +24,7 @@ __pycache__/
 # Training data
 gesture_data/**/*.csv
 gesture_data/**/*.txt
+gesture_data/**/*.npz
 
 # Weights and Biases logs
 machine_learning/wandb/
