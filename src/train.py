@@ -15,18 +15,19 @@ Similarly, the choice of model architecture will likely constrain which
 hyperparameters are valid.
 """
 
+from pprint import pprint
+import datetime
+import logging as l
+import sys
 
 import common
-import logging as l
 import models
 import numpy as np
 import optuna
 import pandas as pd
 import read
 import sklearn
-import sys
-import tqdm
-
+import sklearn.model_selection
 
 MAX_OBSERVATIONS = None
 
@@ -36,63 +37,73 @@ def main():
     df: pd.DataFrame = read.read_data(offsets="offsets.csv")
     if MAX_OBSERVATIONS is not None:
         df = df.head(MAX_OBSERVATIONS)
-    l.info("Making windows")
-    X, y_str = read.make_windows(
-        df,
-        30,
-        pbar=tqdm.tqdm(total=len(df), desc="Making windows"),
+    trn = np.load("./gesture_data/trn.npz")
+    X = trn["X_trn"]
+    y = trn["y_trn"]
+
+    X_trn, X_val, y_trn, y_val = sklearn.model_selection.train_test_split(
+        X, y, stratify=y
     )
-    g2i, i2g = common.make_gestures_and_indices(y_str)
-    y = g2i(y_str)
-    X_trn, X_val, y_trn, y_val = sklearn.model_selection.train_test_split(X, y)
 
     # TODO Implement pruning: https://optuna.readthedocs.io/en/stable/reference/generated/optuna.pruners.SuccessiveHalvingPruner.html#optuna.pruners.SuccessiveHalvingPruner
+    now = datetime.datetime.now().isoformat(sep="T")[:-7]
+
     optuna.logging.get_logger("optuna").addHandler(l.StreamHandler(sys.stdout))
     study = optuna.create_study(
+        study_name=f"neural-network-{now}",
         direction="minimize",
         storage="sqlite:///db.sqlite3",
+        load_if_exists=False
         # pruner=optuna.pruners.HyperbandPruner(),
     )
-    study.optimize(
-        lambda trial: objective(trial, X_trn, y_trn, X_val, y_val),
-        n_trials=30,
-        gc_after_trial=True,
-    )
+    n_trials = 100
+    for i in range(n_trials):
+        study.optimize(
+            lambda trial: objective_nn(trial, X_trn, y_trn, X_val, y_val),
+            n_trials=1,
+            gc_after_trial=True,
+        )
 
 
-def objective(trial, X_trn, y_trn, X_val, y_val):
+def objective_hmm(trial, X_trn, y_trn, X_val, y_val):
+    pass
+
+
+def objective_nn(trial, X_trn, y_trn, X_val, y_val):
+    num_layers = trial.suggest_categorical("num_layers", range(1, 4))
+    nodes_per_layer = [
+        trial.suggest_int(f"nodes_per_layer.{layer_idx+1}", 4, 512, log=True)
+        for layer_idx in range(num_layers)
+    ]
     config = {
         "n_timesteps": 30,
         "nn": {
-            "epochs": 5,
+            "epochs": 20,
             "batch_size": trial.suggest_categorical("batch_size", [64, 128, 256]),
             "learning_rate": trial.suggest_float("learning_rate", 1e-6, 1e-1, log=True),
             "optimizer": "adam",
         },
-        "ffnn": {
-            "nodes_per_layer": [
-                trial.suggest_categorical(
-                    "nodes_per_layer.1", [10 * i for i in range(1, 20)]
-                ),
-                trial.suggest_categorical(
-                    "nodes_per_layer.2", [10 * i for i in range(0, 20)]
-                ),
-            ],
-        },
+        "ffnn": {"nodes_per_layer": nodes_per_layer},
     }
+    pprint(config)
     model = models.FFNNClassifier(config=config)
     l.info("Fitting model")
+    start = datetime.datetime.now()
     model.fit(X_trn, y_trn, validation_data=(X_val, y_val))
-    evaluation = model.evaluate(X_val, y_val)
+    finsh = datetime.datetime.now()
 
-    # Convert the `np.int64`s into `int`s so that optuna doesn't complain
-    evaluation = {
-        (k.item() if type(k) == np.int64 else k): v for k, v in evaluation.items()
-    }
+    # Save information about the model
+    now = datetime.datetime.now().isoformat(sep="T")[:-7]
+    model_dir = f"saved_models/ffnn/{now}"
+    model.write(model_dir, dump_model=False)
+    trial.set_user_attr("model_dir", model_dir)
 
-    # Store some data to the trial, to be used during model evaluation
-    trial.set_user_attr("evaluation", evaluation)
-    trial.set_user_attr("history", model.history.history)
+    duration = finsh - start
+    duration_ms = duration.seconds * 1000 + duration.microseconds / 1000
+    trial.set_user_attr("duration_ms", duration_ms)
+
+    trial.set_user_attr("val_loss", model.history.history["val_loss"][-1])
+    trial.set_user_attr("trn_loss", model.history.history["loss"][-1])
 
     final_loss = model.history.history["val_loss"][-1]
     return final_loss

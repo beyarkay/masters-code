@@ -14,12 +14,12 @@ TODO:
     - feature selection
     - different `n_timesteps`
     - others?
+- Make sure to weight the various classes automatically
 """
 
 from hmmlearn import hmm
+import sklearn
 from sklearn.base import BaseEstimator, ClassifierMixin
-from sklearn.metrics import euclidean_distances
-from sklearn.utils.multiclass import unique_labels
 from typing import Optional
 import common
 import numpy as np
@@ -30,8 +30,20 @@ import typing
 import yaml
 import tensorflow as tf
 from tensorflow import keras
-from keras import layers
 import logging as l
+import os
+import vis
+import matplotlib.pyplot as plt
+
+
+def calc_class_weights(y):
+    # NOTE: The np.log(weight) is *very* important.
+    # I don't know why, but it makes everything work
+    class_weight = {
+        int(class_): np.log(1.0 / count * 1_000_000)
+        for class_, count in zip(*np.unique(y, return_counts=True))
+    }
+    return class_weight
 
 
 class CusumConfig(typing.TypedDict):
@@ -40,6 +52,9 @@ class CusumConfig(typing.TypedDict):
 
 class NNConfig(typing.TypedDict):
     epochs: int
+    lr: float
+    optimizer: str
+    batch_size: int
 
 
 class FFNNConfig(typing.TypedDict):
@@ -77,10 +92,12 @@ class TemplateClassifier(BaseEstimator, ClassifierMixin):
 
         This will read in the config (if applicable), check X,y are valid,
         store the classes, and perform some general pre-fit chores."""
-        # Assert that exactly one of (config_path, config) is not None using
-        # boolean xor `^`
-        if bool(self.config_path is None) ^ bool(self.config is None):
-            raise ValueError("Exactly one of `config` and `config_path` must be None")
+        # Assert that exactly one of (config_path, config) is not None
+        if bool(self.config_path is None) == bool(self.config is None):
+            raise ValueError(
+                "Exactly one of (config_path, config) must be not None, but "
+                f"config_path is {self.config_path} and config is {self.config}"
+            )
         if self.config_path is not None:
             with open(self.config_path, "r") as f:
                 self.config: ConfigDict = yaml.safe_load(f)
@@ -88,7 +105,7 @@ class TemplateClassifier(BaseEstimator, ClassifierMixin):
         # Check that X and y have correct shape
         X, y = common.check_X_y(X, y)
         # Store the classes seen during fit
-        self.classes_ = unique_labels(y)
+        self.classes_ = sklearn.utils.multiclass.unique_labels(y)
 
         self.X_ = X
         self.y_ = y
@@ -99,9 +116,69 @@ class TemplateClassifier(BaseEstimator, ClassifierMixin):
     def predict(self, X):
         raise NotImplementedError
 
-    def write(self, model_path):
-        with open(f"{model_path}.pkl", "wb") as f:
-            pickle.dump(self, f)
+    def write(
+        self,
+        model_dir,
+        dump_model=True,
+        dump_conf_mat_plots=True,
+        dump_config=True,
+        dump_loss_plots=True,
+        dump_predictions=True,
+        dump_distribution_plots=True,
+    ):
+        if not os.path.exists(model_dir):
+            os.makedirs(model_dir)
+
+        # Save the model
+        if dump_model:
+            with open(f"{model_dir}/model.pkl", "wb") as f:
+                pickle.dump(self, f)
+
+        # Save plots of the confusion matrices
+        if dump_conf_mat_plots:
+            X_val, y_val = self.validation_data
+            vis.plot_conf_mats(
+                self,
+                (self.X_, X_val),
+                (self.y_, y_val),
+                ("Training", "Validation"),
+            )
+            plt.savefig(f"{model_dir}/conf_mats.png")
+
+        # Save plots of the loss over time
+        if dump_loss_plots:
+            h = self.history.history
+            fig, axs = plt.subplots(1, len(h.items()), figsize=(4 * len(h.items()), 3))
+            for ax, (key, values) in zip(axs, h.items()):
+                ax.plot(self.model.history.epoch, values, label=key)
+                ax.set_title(key)
+                ax.set(title=key, ylim=(0, np.max(values)))
+            plt.savefig(f"{model_dir}/loss_plots.png")
+
+        # Save the predictions
+        if dump_predictions:
+            X_val, y_val = self.validation_data
+            y_val_pred = self.predict(X_val)
+            y_trn_pred = self.predict(self.X_)
+            np.savez(f"{model_dir}/y_pred_y_val.npz", y_pred=y_val_pred, y_val=y_val)
+            np.savez(f"{model_dir}/y_pred_y_trn.npz", y_pred=y_trn_pred, y_trn=self.y_)
+
+        # Save the config
+        if dump_config:
+            with open(f"{model_dir}/config.yaml", "w") as f:
+                yaml.safe_dump(self.config, f)
+
+        if dump_distribution_plots:
+            fig, axs = vis.plot_distributions(y_val, self.predict(X_val))
+            plt.savefig(f"{model_dir}/prediction_distributions.png")
+
+    def evaluate(self, X_val, y_val):
+        return sklearn.metrics.classification_report(
+            y_val,
+            self.predict(X_val),
+            target_names=self.classes_,
+            output_dict=True,
+        )
 
     def confusion_matrix(self, y_true, y_pred=None, X_to_pred=None):
         """Calculate the confusion matrix of some predictions.
@@ -109,14 +186,16 @@ class TemplateClassifier(BaseEstimator, ClassifierMixin):
         Either pass in the alread-predicted values via y_pred, or pass in some
         X data which will be predicted and then used to calculate the confusion
         matrix."""
-        # Assert that exactly one of (y_pred, X_to_pred) is not None using
-        # boolean xor `^`.
-        if bool(y_pred is None) ^ bool(X_to_pred is None):
-            raise ValueError("Exactly one of (y_pred, X_to_pred) must be not None")
+        # Assert that exactly one of (y_pred, X_to_pred) is not None
+        if bool(y_pred is None) == bool(X_to_pred is None):
+            raise ValueError(
+                f"Exactly one of (y_pred, X_to_pred) must be not None, but \
+                y_pred is {y_pred} and X_to_pred is {X_to_pred}"
+            )
         if X_to_pred is not None:
             y_pred = self.predict(X_to_pred)
 
-        return tf.math.confusion_matrix(y_true, y_pred)
+        return tf.math.confusion_matrix(y_true, y_pred).numpy()
 
 
 class OneNearestNeighbourClassifier(TemplateClassifier):
@@ -161,7 +240,7 @@ class OneNearestNeighbourClassifier(TemplateClassifier):
         # Input validation
         X = sk_validation.check_array(X)
 
-        closest = np.argmin(euclidean_distances(X, self.X_), axis=1)
+        closest = np.argmin(sklearn.metrics.euclidean_distances(X, self.X_), axis=1)
         return self.y_[closest]
 
 
@@ -318,6 +397,23 @@ class TFClassifier(TemplateClassifier):
         l.info(logits)
         return tf.nn.softmax(logits).numpy()
 
+    def _resolve_optimizer(self):
+        """Returns the Keras Optimizer object given a config dict defining
+        learning rate, optimiser type, and other optimiser related
+        shenanigans"""
+        optimizer_string = self.config.get("nn", {}).get("optimizer", "adam")
+        learning_rate = self.config.get("nn", {}).get("learning_rate", 2.5e-5)
+        if optimizer_string == "adam":
+            # if self.uses_validation_weights:
+            #     print("Using legacy adam")
+            #     return tf.keras.optimizers.legacy.Adam(learning_rate=learning_rate)
+            # else:
+            return keras.optimizers.Adam(learning_rate=learning_rate)
+        elif optimizer_string == "rmsprop":
+            return keras.optimizers.RMSprop(learning_rate=2.5e-5)
+        else:
+            return keras.optimizers.Adam(learning_rate=2.5e-5)
+
 
 class FFNNClassifier(TFClassifier):
     """
@@ -337,14 +433,17 @@ class FFNNClassifier(TFClassifier):
     32
     """
 
-    def __init__(self, config_path=None, config=None):
+    def __init__(
+        self, config_path: Optional[str] = None, config: Optional[ConfigDict] = None
+    ):
         self.config_path: Optional[str] = config_path
         self.config: Optional[ConfigDict] = config
         self.normalizer = None
 
-    def fit(self, X, y, **kwargs):
+    def fit(self, X, y, validation_data, **kwargs) -> None:
         l.info("Checking fit of X, y")
         self._check_fit(X, y)
+        self.validation_data = validation_data
         # Fit the normalizer if not already fitted.
         if self.normalizer is None:
             l.info("Fitting normalizer")
@@ -360,6 +459,13 @@ class FFNNClassifier(TFClassifier):
             for npl in self.config["ffnn"]["nodes_per_layer"]
         ]
 
+        # TODO this function is unused
+        def init_biases(shape, dtype=None):
+            inv_freqs = np.array(
+                [1 / count for _class, count in zip(*np.unique(y, return_counts=True))]
+            )
+            return np.log(inv_freqs)
+
         # Construct the model as a sequence of layers
         self.model = tf.keras.Sequential(
             [
@@ -372,18 +478,38 @@ class FFNNClassifier(TFClassifier):
                 keras.layers.Dense(len(np.unique(y))),
             ]
         )
+        # If validation and class weights have been supplied, then add the
+        # sample weights to the validation data
+        # validation_data = kwargs.get("validation_data", [])
+        # print(f"val data: {validation_data}")
+        # class_weight = kwargs.get("class_weight", False)
+        # print(f"class_weight: {class_weight}")
+        # if len(validation_data) == 2 and class_weight:
+        #     print("Mutating validation data")
+        #     self.uses_validation_weights = True
+        #     X_val, y_val = kwargs["validation_data"]
+        #     self.weights_val = np.diag(list(class_weight.values()))[y_val].sum(axis=1)
+        #     print(f"weights_validation = {self.weights_val.shape}")
+        #     kwargs["validation_data"] = (X_val, y_val, self.weights_val)
 
         l.info("Compiling model")
-        # Compile the model using the ADAM optimiser and SCCE loss
+        optimizer = self._resolve_optimizer()
+        # Compile the model using SCCE loss
         self.model.compile(
-            optimizer=keras.optimizers.Adam(learning_rate=2.5e-5),
+            optimizer=optimizer,
             loss=keras.losses.SparseCategoricalCrossentropy(from_logits=True),
         )
 
         l.info("Fitting model")
         # Fit the model to the data, with a number of epochs dictated by config
         self.history = self.model.fit(
-            X, y, batch_size=128, epochs=self.config["nn"]["epochs"], **kwargs
+            X,
+            y,
+            batch_size=self.config["nn"]["batch_size"],
+            epochs=self.config["nn"]["epochs"],
+            class_weight=calc_class_weights(y),
+            validation_data=validation_data,
+            **kwargs,
         )
 
         # Sklearn expects is_fitted_ to be True after fitting

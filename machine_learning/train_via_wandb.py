@@ -1,6 +1,5 @@
 #!/usr/bin/env python
-from ml_utils import *
-from wandb.keras import WandbCallback
+import ml_utils
 import sys
 import wandb
 import yaml
@@ -17,7 +16,7 @@ def main():
 def train(wb_config=None):
     with wandb.init(config=wb_config):
         wb_config = wandb.config
-        df = parse_csvs()
+        df = ml_utils.parse_csvs()
         with open("config.yaml", "r") as file:
             brk_config = yaml.safe_load(file)
 
@@ -38,10 +37,10 @@ def train(wb_config=None):
             X_valid,
             y_train,
             y_valid,
-        ) = build_dataset(df, brk_config)
+        ) = ml_utils.build_dataset(df, brk_config)
 
         print("Starting to fit")
-        history, model = compile_and_fit(
+        history, model = ml_utils.compile_and_fit(
             X_train,
             y_train,
             X_valid,
@@ -53,10 +52,12 @@ def train(wb_config=None):
         print("Evaluating model...")
         # Now load the (contiguous) test dataset and calculate metrics on
         # that
-        df_test = parse_csvs("../gesture_data/test/")
-        (_, _, _, _, _, X_test, y_test, _, _, _, _) = build_dataset(df_test, brk_config)
+        df_test = ml_utils.parse_csvs("../gesture_data/test/")
+        (_, _, _, _, _, X_test, y_test, _, _, _, _) = ml_utils.build_dataset(
+            df_test, brk_config
+        )
         y_test_pred = model.predict(X_test, verbose=0)
-        mean_dtw = dtw_evaluation(y_test, y_test_pred, i2g)
+        mean_dtw = ml_utils.dtw_evaluation(y_test, y_test_pred, i2g)
         print("Evaluation complete, logging to W&B")
         wandb.log(
             {

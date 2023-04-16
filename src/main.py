@@ -1,15 +1,25 @@
+import logging as l
+
+import common
 import models
-import vis
+import numpy as np
 import pred
 import read
-import os
-import logging as l
-import datetime
-import pandas as pd
-import tqdm
-import common
 import sklearn
-import sys
+import vis
+
+
+def _():
+    """
+    1. train some models
+    2. save y_pred, y_true, and the indexes of y_true to disk
+    3. save the model to disk
+    4. save some summary statistics to disk, so long as they don't take too
+    long to calculate and don't slow down training
+        - Maybe save confusion matrix as a np array?
+        - save loss
+    """
+    pass
 
 
 def main():
@@ -26,29 +36,31 @@ def main():
 
 
 def get_model() -> models.TemplateClassifier:
+    pass
+
+
+def make_ffnn() -> models.TemplateClassifier:
     l.info("Making model")
     model = models.FFNNClassifier(
         config={
             "n_timesteps": 30,
+            "nn": {"epochs": 2},
             "ffnn": {
-                "epochs": 2,
                 "nodes_per_layer": [100],
             },
         }
     )
     l.info("Reading data")
-    df: pd.DataFrame = read.read_data().iloc[:50_000]
-    l.info("Making windows")
-    X, y_str = read.make_windows(
-        df,
-        model.config["n_timesteps"],
-        pbar=tqdm.tqdm(total=len(df), desc="Making windows"),
+    trn = np.load("./gesture_data/trn.npz")
+    X = trn["X_trn"]
+    y = trn["y_trn"]
+
+    X_trn, X_val, y_trn, y_val = sklearn.model_selection.train_test_split(
+        X, y, stratify=y
     )
-    g2i, i2g = common.make_gestures_and_indices(y_str)
-    y = g2i(y_str)
 
     l.info("Fitting model")
-    model.fit(X, y)
+    model.fit(X_trn, y_trn)
     return model
 
 

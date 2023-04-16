@@ -1,4 +1,6 @@
 """A collection of commonly used functions/classes for Ergo."""
+import tqdm
+import sklearn
 from enum import Enum
 import logging as l
 import numpy as np
@@ -6,6 +8,7 @@ import os
 import sys
 import typing
 import datetime
+import pandas as pd
 
 
 class ConstantsDict(typing.TypedDict):
@@ -152,3 +155,70 @@ def init_logs():
     stream_handler.setLevel(l.INFO)
     stream_handler.setFormatter(formatter)
     log.addHandler(stream_handler)
+
+
+def make_windows(
+    data: pd.DataFrame, window_size: int, pbar=None
+) -> (np.ndarray, np.ndarray):
+    """Process data into a windowed format for machine learning.
+
+    Args:
+    - data: A pandas DataFrame containing the data to be processed.
+    - window_size: An integer representing the size of the rolling window to use.
+
+    Returns:
+    A tuple containing two numpy ndarrays:
+    - X: A 3-dimensional ndarray with shape (size, window_size, 30).
+    - y: A 1-dimensional ndarray with shape (size,).
+    """
+
+    # Group data by file and apply rolling window of size window_size
+    rolling = data.groupby("file").rolling(window=window_size, min_periods=window_size)
+
+    # Calculate unique number of files
+    uniq = len(data.value_counts("file"))
+
+    # Calculate number of windows
+    size = len(data) - uniq * (window_size - 1) + 1
+
+    # Read finger constants from a file
+    const: ConstantsDict = read_constants()
+    sensors = const["sensors"].values()
+
+    # Loop over the windows and populate X and y
+    Xs = []
+    ys = []
+    for i, window in enumerate(rolling):
+        if pbar is not None:
+            pbar.update(1)
+        if len(window) < window_size:
+            continue
+        Xs.append(window[sensors].values)
+        ys.append(window.gesture.values[-1])
+
+    # Return X and y as a tuple
+    return (np.stack(Xs), np.array(ys))
+
+
+def save_as_windowed_npz(df):
+    """Given a DataFrame of gestures, split them into windows of 25 time steps
+    long and then save that windowed data as .npz files.
+
+    There will be one file `./gesture_data/trn.npz` which contains the training &
+    validation data, and one file `./gesture_data/tst.npz` which contains the
+    testing data."""
+    X, y_str = make_windows(
+        df,
+        25,
+        pbar=tqdm.tqdm(total=len(df), desc="Making windows"),
+    )
+    g2i, i2g = make_gestures_and_indices(y_str)
+    y = g2i(y_str)
+
+    X_trn, X_tst, y_trn, y_tst = sklearn.model_selection.train_test_split(
+        X,
+        y,
+        stratify=y,
+    )
+    np.savez("./gesture_data/trn.npz", X_trn=X_trn, y_trn=y_trn)
+    np.savez("./gesture_data/tst.npz", X_tst=X_tst, y_tst=y_tst)

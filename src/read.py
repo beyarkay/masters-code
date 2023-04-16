@@ -1,19 +1,19 @@
 """Takes care of reading in data from the serial port stream and converts it to
 numpy arrays. Also reads data in from disk.
 """
-import logging as l
-import serial
-import pandas as pd
-import typing
-import os
 import datetime
-import common
+import logging as l
+import os
 import pickle
-import models
+import typing
+
+import common
 import numpy as np
+import pandas as pd
+import serial
 
 
-def read_model(directory: str) -> models.TemplateClassifier:
+def read_model(directory: str):
     with open(f"{directory}/model.pkl", "rb") as f:
         model = pickle.load(f)
     return model
@@ -67,60 +67,16 @@ def read_data(
         offsets["new_gesture"] = df["gesture"].iloc[offsets["idx"].values].values
         offsets = offsets.set_index("new_idx")
         # Keep track of the unaligned gesture, just in case
-        df["unaligned_gesture"] = df["gesture"].copy()
+        df["unaligned_gesture"] = np.NaN
+        df["unaligned_gesture"] = df["gesture"].values
         # Set all the gestures to be 0255 by default
         df["gesture"] = "gesture0255"
         # And set only the correct new gestures
         df["gesture"].iloc[offsets.index] = offsets["new_gesture"]
-
-    return df[["datetime", "gesture"] + sensors + ["file", "unaligned_gesture"]]
-
-
-def make_windows(
-    data: pd.DataFrame, window_size: int, pbar=None
-) -> (np.ndarray, np.ndarray):
-    """Process data into a windowed format for machine learning.
-
-    Args:
-    - data: A pandas DataFrame containing the data to be processed.
-    - window_size: An integer representing the size of the rolling window to use.
-
-    Returns:
-    A tuple containing two numpy ndarrays:
-    - X: A 3-dimensional ndarray with shape (size, window_size, 30).
-    - y: A 1-dimensional ndarray with shape (size,).
-    """
-
-    # Group data by file and apply rolling window of size window_size
-    rolling = data.groupby("file").rolling(window=window_size, min_periods=window_size)
-
-    # Calculate unique number of files
-    uniq = len(data.value_counts("file"))
-
-    # Calculate number of windows
-    size = len(data) - uniq * (window_size - 1) + 1
-
-    # Initialize empty ndarrays for X and y
-    X = np.empty((size, window_size, 30))
-    y = np.empty((size,), dtype=data.gesture.dtype)
-
-    # Read finger constants from a file
-    const: common.ConstantsDict = common.read_constants()
-    sensors = const["sensors"].values()
-
-    # Loop over the windows and populate X and y
-    Xs = []
-    ys = []
-    for i, window in enumerate(rolling):
-        if pbar is not None:
-            pbar.update(1)
-        if len(window) < window_size:
-            continue
-        Xs.append(window[sensors].values)
-        ys.append(window.gesture.values[-1])
-
-    # Return X and y as a tuple
-    return (np.stack(Xs), np.array(ys))
+        column_order = ["datetime", "gesture"] + sensors + ["file", "unaligned_gesture"]
+    else:
+        column_order = ["datetime", "gesture"] + sensors + ["file"]
+    return df[column_order]
 
 
 # TODO this should be a rewrite of `ml_utils.get_serial_port`.

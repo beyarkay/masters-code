@@ -13,7 +13,7 @@ import numpy as np
 class PredictGestureHandler(common.AbstractHandler):
     """Use a model to predict the gesture from the latest observation."""
 
-    def __init__(self, model: models.TemplateClassifier):
+    def __init__(self, model):
         common.AbstractHandler.__init__(self)
         self.model: models.TemplateClassifier = model
 
