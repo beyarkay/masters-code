@@ -17,23 +17,25 @@ TODO:
 - Make sure to weight the various classes automatically
 """
 
-from hmmlearn import hmm
-import sklearn
-from sklearn.base import BaseEstimator, ClassifierMixin
-from typing import Optional
-import common
-import numpy as np
-import pickle
-import sklearn.utils.validation as sk_validation
-import tqdm
-import typing
-import yaml
-import tensorflow as tf
-from tensorflow import keras
 import logging as l
 import os
-import vis
+import pickle
+import typing
+from typing import Optional
+
+import common
 import matplotlib.pyplot as plt
+import numpy as np
+import pandas as pd
+import sklearn
+import sklearn.utils.validation as sk_validation
+import tensorflow as tf
+import tqdm
+import vis
+import yaml
+from hmmlearn import hmm
+from sklearn.base import BaseEstimator, ClassifierMixin
+from tensorflow import keras
 
 
 def calc_class_weights(y):
@@ -359,17 +361,52 @@ class CuSUMClassifier(TemplateClassifier):
         else:
             return None
 
-    def _cusum(self, data: np.ndarray, lower: float, upper: float):
-        """Calculate the cumulative sum of the data, using the upper/lower bounds."""
-        mu = data.mean()
-        sigma = data.std()
-        z = (data - mu) / sigma
-        s_upper = np.zeros(z.shape)
-        s_lower = np.zeros(z.shape)
-        for i in range(1, len(z)):
-            s_upper[i] = max(0, s_upper[i - 1] + z[i] - upper)
-            s_lower[i] = min(0, s_lower[i - 1] + z[i] + lower)
-        return s_lower, s_upper
+    def _cusum(x, target=None, std_dev=None, allowed_std_devs=5):
+        """Calculate the Cumulative Sum of some data.
+
+        If no target is provided, the mean of the first 5 values of `x` is
+        used as the value from which `x` should not deviate.
+        """
+        # Use the mean of the first five observations as the target if none is supplied
+        target = x[:5].mean() if target is None else target
+        # Use the std dev of the first five observations if none is supplied
+        std_dev = x[:5].std() if std_dev is None else std_dev
+        allowed_deviance = std_dev * allowed_std_devs
+
+        # Get the upper and lower limits
+        upper_limit = target + allowed_deviance
+        lower_limit = target - allowed_deviance
+
+        # Calculate the cusum for the upper limit
+        cusum_pos = pd.Series(np.zeros(len(x)))
+        cusum_pos[0] = max(0, x[0] - upper_limit)
+        for i in range(1, len(x)):
+            cusum_pos[i] = max(0, cusum_pos[i - 1] + x[i] - upper_limit)
+
+        # Calculate the cusum for the lower limit
+        cusum_neg = pd.Series(np.zeros(len(x)))
+        cusum_neg[0] = min(0, x[0] - lower_limit)
+        for i in range(1, len(x)):
+            cusum_neg[i] = min(0, cusum_neg[i - 1] + x[i] - lower_limit)
+
+        # Create arrays of booleans describing if the value was too high/too low
+        too_high = cusum_pos.apply(lambda cp: 0 if cp == 0 else 1)
+        too_low = cusum_neg.apply(lambda cn: 0 if cn == 0 else 1)
+
+        return pd.DataFrame(
+            {
+                "x": x,
+                "target": target,
+                "std_dev": std_dev,
+                "allowed_std_devs": allowed_std_devs,
+                "upper_limit": upper_limit,
+                "lower_limit": lower_limit,
+                "cusum_pos": cusum_pos,
+                "cusum_neg": cusum_neg,
+                "too_high": too_high,
+                "too_low": too_low,
+            }
+        )
 
     def fit(self, X, y, validation_data, **kwargs) -> None:
         self._check_fit(X, y)

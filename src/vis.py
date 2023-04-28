@@ -90,3 +90,68 @@ def plot_distributions(y_val, y_pred):
     )
     plt.tight_layout()
     return fig, axs
+
+
+def plot_cusum(df):
+    """Expects a dataframe like the one output by `_cusum`"""
+    fig, axs = plt.subplots(2, 1, figsize=(10, 7))
+    axs[0].plot(df["x"], color="tab:grey")
+    axs[0].plot(df["target"], color="tab:grey")
+
+    axs[0].fill_between(
+        df.index,
+        df["lower_limit"].values,
+        df["upper_limit"].values,
+        alpha=0.1,
+        color="grey",
+        label="Expected region",
+    )
+    axs[0].fill_between(
+        x=df.index,
+        y1=df["lower_limit"],
+        y2=df["x"],
+        where=(df["lower_limit"] > df["x"]),
+        alpha=0.1,
+        color="tab:orange",
+        label="Negative contributions",
+    )
+
+    axs[0].fill_between(
+        x=df.index,
+        y1=df["upper_limit"],
+        y2=df["x"],
+        where=(df["upper_limit"] < df["x"]),
+        alpha=0.1,
+        color="tab:blue",
+        label="Positive contributions",
+    )
+
+    axs[0].legend()
+
+    axs[1].plot(df["cusum_pos"], label="CuSUM statistic (positive)")
+    axs[1].plot(df["cusum_neg"], label="CuSUM statistic (negative)")
+
+    axs[1].scatter(
+        df.index[df["too_low"] > 0],
+        df["cusum_neg"][df["too_low"] > 0],
+        color="tab:orange",
+        s=15,
+        zorder=10,
+        label="Out of bounds datapoints (too low)",
+    )
+
+    axs[1].scatter(
+        df.index[df["too_high"] > 0],
+        df["cusum_pos"][df["too_high"] > 0],
+        color="tab:blue",
+        s=15,
+        zorder=10,
+        label="Out of bounds datapoints (too high)",
+    )
+    axs[1].legend()
+    plt.suptitle("CuSUM diagnostics")
+    axs[0].set_title("Raw data")
+    axs[1].set_title("+'ve and -'ve CuSUM statistics")
+    plt.tight_layout()
+
+    return fig, axs
