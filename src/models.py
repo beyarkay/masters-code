@@ -200,6 +200,29 @@ class TemplateClassifier(BaseEstimator, ClassifierMixin):
         return tf.math.confusion_matrix(y_true, y_pred).numpy()
 
 
+class MeanClassifier(TemplateClassifier):
+    def fit(self, X, y):
+        self._check_fit(X, y)
+        self.means = np.zeros((51, 30))
+        for g in range(51):
+            data = X[y == g]
+            self.means[g] = data.mean(axis=0)
+        # Return the classifier
+        self.is_fitted_ = True
+        return self
+
+    def predict(self, X):
+        # Check is fit had been called
+        sk_validation.check_is_fitted(self, ["X_", "y_"])
+
+        # Input validation
+        X = sk_validation.check_array(X)
+        result = np.empty((X.shape[0]))
+        for i, xi in enumerate(X):
+            result[i] = np.argmin(np.linalg.norm(self.means - xi, axis=(1, 2)))
+        return result
+
+
 class OneNearestNeighbourClassifier(TemplateClassifier):
     """Classifies data based on the single nearest neighbour"""
 
