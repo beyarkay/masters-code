@@ -48,14 +48,23 @@ def calc_class_weights(y):
     return class_weight
 
 
+class HMMConfig(typing.TypedDict):
+    # The number of iterations for which *each* HMM will be trained
+    n_iter: int
+
+
 class CusumConfig(typing.TypedDict):
     thresh: int
 
 
 class NNConfig(typing.TypedDict):
+    # The number of epochs for which each NN will be trained
     epochs: int
+    # The learning rate
     lr: float
+    # The optimiser to use
     optimizer: str
+    # The batch size to use during training
     batch_size: int
 
 
@@ -68,6 +77,7 @@ class ConfigDict(typing.TypedDict):
     cusum: Optional[CusumConfig]
     ffnn: Optional[FFNNConfig]
     nn: Optional[NNConfig]
+    hmm: Optional[HMMConfig]
 
 
 class TemplateClassifier(BaseEstimator, ClassifierMixin):
@@ -270,7 +280,25 @@ class OneNearestNeighbourClassifier(TemplateClassifier):
 
 
 class HMMClassifier(TemplateClassifier):
-    def fit(self, X, y, validation_data, verbose=False, limit=None, **kwargs) -> None:
+    def __init__(
+        self, config_path: Optional[str] = None, config: Optional[ConfigDict] = None
+    ):
+        self.config_path: Optional[str] = config_path
+        self.config: Optional[ConfigDict] = config
+
+    def fit(self, X, y, validation_data, verbose=False, **kwargs) -> None:
+        """Fit a HMM to the input data X and labels y.
+
+        Fit a Hidden Markov Model (HMM) with Gaussian emission probabilities to
+        the input data X and labels y. The HMM is trained separately for each
+        unique value of y using the GaussianHMM class from the hmm module of
+        the sklearn library.
+
+        The `limit` parameter is an integer indicating the maximum number of
+        samples to use for each label during training. If limit is not
+        specified, all samples for each label will be used."""
+        ""
+        limit = self.config["hmm"]["limit"]
         self._check_fit(X, y)
         assert (
             X.shape[1] == self.config["n_timesteps"]
@@ -299,7 +327,7 @@ class HMMClassifier(TemplateClassifier):
             self.models_[yi] = hmm.GaussianHMM(
                 n_components=self.config["n_timesteps"] + 2,
                 covariance_type="diag",
-                n_iter=10,
+                n_iter=self.config["hmm"]["n_iter"],
                 verbose=False,
             ).fit(X[y == yi][:limit])
             if verbose:

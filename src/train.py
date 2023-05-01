@@ -15,6 +15,7 @@ Similarly, the choice of model architecture will likely constrain which
 hyperparameters are valid.
 """
 
+import keras
 from pprint import pprint
 import datetime
 import logging as l
@@ -56,21 +57,19 @@ def main():
         load_if_exists=False
         # pruner=optuna.pruners.HyperbandPruner(),
     )
-    n_trials = 100
-    for i in range(n_trials):
-        study.optimize(
-            lambda trial: objective_wrapper(trial, X_trn, y_trn, X_val, y_val),
-            n_trials=1,
-            gc_after_trial=True,
-        )
+    study.optimize(
+        lambda trial: objective_wrapper(trial, X_trn, y_trn, X_val, y_val),
+        n_trials=1000,
+        gc_after_trial=True,
+    )
 
 
 def objective_wrapper(trial, X_trn, y_trn, X_val, y_val):
     architecture = trial.suggest_categorical(
         "architecture",
         [
-            # "ffnn",
-            "hmm",
+            "ffnn",
+            # "hmm",
             # "cusum",
         ],
     )
@@ -87,6 +86,10 @@ def objective_wrapper(trial, X_trn, y_trn, X_val, y_val):
 def objective_hmm(trial, X_trn, y_trn, X_val, y_val):
     config = {
         "n_timesteps": X_trn.shape[1],
+        "hmm": {
+            "n_iter": 1,
+            "limit": 100,
+        },
     }
     model = models.HMMClassifier(config=config)
     start = datetime.datetime.now()
@@ -97,8 +100,21 @@ def objective_hmm(trial, X_trn, y_trn, X_val, y_val):
     duration_ms = duration.seconds * 1000 + duration.microseconds / 1000
     trial.set_user_attr("duration_ms", duration_ms)
 
-    final_loss = 0  # TODO
-    return final_loss
+    print("Calculating training loss")
+    print(y_trn[:10].shape)
+    print(model.predict_score(X_trn[:10]))
+    trn_loss = keras.losses.sparse_categorical_crossentropy(
+        y_trn[:100], model.predict(X_trn[:100]), from_logits=False
+    )
+    trial.set_user_attr("trn_loss", trn_loss)
+
+    print("Calculating validation loss")
+    val_loss = keras.losses.sparse_categorical_crossentropy(
+        y_val[:100], model.predict(X_val[:100]), from_logits=False
+    )
+    trial.set_user_attr("val_loss", val_loss)
+
+    return val_loss
 
 
 def objective_cusum(trial, X_trn, y_trn, X_val, y_val):
@@ -120,6 +136,9 @@ def objective_cusum(trial, X_trn, y_trn, X_val, y_val):
 
 
 def objective_nn(trial, X_trn, y_trn, X_val, y_val):
+    # Keras has memory leak issues. `clear_session` reportedly fixes this
+    # https://github.com/optuna/optuna/issues/4587#issuecomment-1511564031
+    keras.backend.clear_session()
     num_layers = trial.suggest_int("num_layers", 1, 3)
     nodes_per_layer = [
         trial.suggest_int(f"nodes_per_layer.{layer_idx+1}", 4, 512, log=True)
