@@ -354,37 +354,7 @@ class CuSUMClassifier(TemplateClassifier):
         self.config_path = config_path
         self.config = config
 
-    def _deviant_sensors_to_gesture(self, sensors) -> str | None:
-        gestures_to_sensors: dict[str, set[str]] = {}
-        # Construct a dictionary that maps between sensors and the gestures
-        # they're often associated with.
-        for i in range(51):
-            l_or_r = "l" if i % 10 < 5 else "r"
-            number = {
-                0: "5",
-                1: "4",
-                2: "3",
-                3: "2",
-                4: "1",
-                5: "1",
-                6: "2",
-                7: "3",
-                8: "4",
-                9: "5",
-            }[i % 10]
-            xy_or_yz = "xy" if i % 10 not in (4, 5) else "yz"
-            gestures_to_sensors[f"gesture{i:0>4}"] = {
-                f"{l_or_r}{number}{xy_or_yz[0]}",
-                f"{l_or_r}{number}{xy_or_yz[1]}",
-            }
-
-        for g, s in gestures_to_sensors.keys():
-            if s.issubset(sensors):
-                return g
-        else:
-            return None
-
-    def _cusum(x, target=None, std_dev=None, allowed_std_devs=5):
+    def _cusum(self, x, target=None, std_dev=None, allowed_std_devs=4):
         """Calculate the Cumulative Sum of some data.
 
         If no target is provided, the mean of the first 5 values of `x` is
@@ -401,47 +371,85 @@ class CuSUMClassifier(TemplateClassifier):
         lower_limit = target - allowed_deviance
 
         # Calculate the cusum for the upper limit
-        cusum_pos = pd.Series(np.zeros(len(x)))
+        cusum_pos = np.zeros(len(x))
         cusum_pos[0] = max(0, x[0] - upper_limit)
-        for i in range(1, len(x)):
-            cusum_pos[i] = max(0, cusum_pos[i - 1] + x[i] - upper_limit)
-
         # Calculate the cusum for the lower limit
-        cusum_neg = pd.Series(np.zeros(len(x)))
+        cusum_neg = np.zeros(len(x))
         cusum_neg[0] = min(0, x[0] - lower_limit)
         for i in range(1, len(x)):
+            cusum_pos[i] = max(0, cusum_pos[i - 1] + x[i] - upper_limit)
             cusum_neg[i] = min(0, cusum_neg[i - 1] + x[i] - lower_limit)
 
         # Create arrays of booleans describing if the value was too high/too low
-        too_high = cusum_pos.apply(lambda cp: 0 if cp == 0 else 1)
-        too_low = cusum_neg.apply(lambda cn: 0 if cn == 0 else 1)
+        too_high = np.where(cusum_pos == 0, 0, 1)
+        too_low = np.where(cusum_neg == 0, 0, 1)
 
-        return pd.DataFrame(
-            {
-                "x": x,
-                "target": target,
-                "std_dev": std_dev,
-                "allowed_std_devs": allowed_std_devs,
-                "upper_limit": upper_limit,
-                "lower_limit": lower_limit,
-                "cusum_pos": cusum_pos,
-                "cusum_neg": cusum_neg,
-                "too_high": too_high,
-                "too_low": too_low,
-            }
-        )
+        return {
+            "x": x,
+            "cusum_pos": cusum_pos,
+            "cusum_neg": cusum_neg,
+            "too_high": too_high,
+            "too_low": too_low,
+            "target": target,
+            "std_dev": std_dev,
+            "allowed_std_devs": allowed_std_devs,
+            "upper_limit": upper_limit,
+            "lower_limit": lower_limit,
+        }
 
-    def fit(self, X, y, validation_data, **kwargs) -> None:
+    def fit(self, X, y, **kwargs) -> None:
         self._check_fit(X, y)
-        raise NotImplementedError
+        threshold = self.config["cusum"]["thresh"]
+        self.const: common.ConstantsDict = common.read_constants()
+
+        num_gestures = len(np.unique(y))
+
+        records = np.zeros((num_gestures, self.const["n_sensors"]))
+
+        # Loop over all gestures
+        for gesture_idx in range(num_gestures):
+            data = X[y == gesture_idx]
+            record = np.zeros((data.shape[0], self.const["n_sensors"]))
+
+            # Loop over all observations matching that gesture
+            for observation_idx in range(data.shape[0]):
+                subset = data[observation_idx, :, :]
+
+                # Loop over each sensor
+                for sensor_idx in range(self.const["n_sensors"]):
+                    # Calculate the CuSUM statistics
+                    csm = self._cusum(
+                        subset[:, sensor_idx],
+                        target=subset[:10, sensor_idx].mean(),
+                    )
+                    too_high = (np.abs(csm["cusum_neg"]) > threshold).any()
+                    too_low = (np.abs(csm["cusum_pos"]) > threshold).any()
+                    # record whether or not the cusum statistic passes the threshold
+                    record[observation_idx, sensor_idx] = int(too_high or too_low)
+
+            # We don't care about all the details, just the sum of all the
+            # times the statistic was over the threshold for a given gesture
+            records[gesture_idx] = record.sum(axis=0)
+        # Some gestures have more observations than others. Normalise the data
+        # so we can treat all gestures equally.
+        self.normalised = (records.T / records.T.sum(axis=0)).T
         self.is_fitted_ = True
 
     def predict(self, X):
-        # For each xi in X
-        # For each time series ts in xi
-        # perform CuSUM with upper and lower values learnt from fitting
-        # Alert if CuSUM passes threshold
-        raise NotImplementedError
+        preds = np.empty(X.shape[0])
+        threshold = self.config["cusum"]["thresh"]
+        for i, xi in enumerate(X):
+            values = np.zeros(self.const["n_sensors"])
+            for sensor_idx in range(self.const["n_sensors"]):
+                csm = self._cusum(
+                    xi[:, sensor_idx],
+                    target=xi[:10, sensor_idx].mean(),
+                )
+                too_high = (np.abs(csm["cusum_neg"]) > threshold).any()
+                too_low = (np.abs(csm["cusum_pos"]) > threshold).any()
+                values[sensor_idx] = int(too_high or too_low)
+            preds[i] = np.argmin(np.linalg.norm(self.normalised - values, axis=1))
+        return preds
 
 
 class TFClassifier(TemplateClassifier):

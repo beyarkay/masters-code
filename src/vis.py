@@ -92,35 +92,38 @@ def plot_distributions(y_val, y_pred):
     return fig, axs
 
 
-def plot_cusum(df):
+def plot_cusum(dictionary, axs=None):
     """Expects a dataframe like the one output by `_cusum`"""
-    fig, axs = plt.subplots(2, 1, figsize=(10, 7))
-    axs[0].plot(df["x"], color="tab:grey")
-    axs[0].plot(df["target"], color="tab:grey")
+    index = np.linspace(0, len(dictionary["x"]) - 1, len(dictionary["x"]))
+    if axs is None:
+        fig, axs = plt.subplots(2, 1, figsize=(10, 7))
+    axs[0].plot(dictionary["x"], color="tab:grey")
+    axs[0].plot(dictionary["target"], color="tab:grey")
 
+    std_devs = dictionary["allowed_std_devs"]
     axs[0].fill_between(
-        df.index,
-        df["lower_limit"].values,
-        df["upper_limit"].values,
+        index,
+        dictionary["lower_limit"],
+        dictionary["upper_limit"],
         alpha=0.1,
         color="grey",
-        label="Expected region",
+        label=f"Expected region ({std_devs} std devs)",
     )
     axs[0].fill_between(
-        x=df.index,
-        y1=df["lower_limit"],
-        y2=df["x"],
-        where=(df["lower_limit"] > df["x"]),
+        x=index,
+        y1=dictionary["lower_limit"],
+        y2=dictionary["x"],
+        where=(dictionary["lower_limit"] > dictionary["x"]),
         alpha=0.1,
         color="tab:orange",
         label="Negative contributions",
     )
 
     axs[0].fill_between(
-        x=df.index,
-        y1=df["upper_limit"],
-        y2=df["x"],
-        where=(df["upper_limit"] < df["x"]),
+        x=index,
+        y1=dictionary["upper_limit"],
+        y2=dictionary["x"],
+        where=(dictionary["upper_limit"] < dictionary["x"]),
         alpha=0.1,
         color="tab:blue",
         label="Positive contributions",
@@ -128,12 +131,12 @@ def plot_cusum(df):
 
     axs[0].legend()
 
-    axs[1].plot(df["cusum_pos"], label="CuSUM statistic (positive)")
-    axs[1].plot(df["cusum_neg"], label="CuSUM statistic (negative)")
+    axs[1].plot(dictionary["cusum_pos"], label="CuSUM statistic (positive)")
+    axs[1].plot(dictionary["cusum_neg"], label="CuSUM statistic (negative)")
 
     axs[1].scatter(
-        df.index[df["too_low"] > 0],
-        df["cusum_neg"][df["too_low"] > 0],
+        index[dictionary["too_low"] > 0],
+        dictionary["cusum_neg"][dictionary["too_low"] > 0],
         color="tab:orange",
         s=15,
         zorder=10,
@@ -141,8 +144,8 @@ def plot_cusum(df):
     )
 
     axs[1].scatter(
-        df.index[df["too_high"] > 0],
-        df["cusum_pos"][df["too_high"] > 0],
+        index[dictionary["too_high"] > 0],
+        dictionary["cusum_pos"][dictionary["too_high"] > 0],
         color="tab:blue",
         s=15,
         zorder=10,
@@ -154,4 +157,4 @@ def plot_cusum(df):
     axs[1].set_title("+'ve and -'ve CuSUM statistics")
     plt.tight_layout()
 
-    return fig, axs
+    return axs
