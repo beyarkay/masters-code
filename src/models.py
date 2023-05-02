@@ -66,6 +66,10 @@ class NNConfig(typing.TypedDict):
     batch_size: int
 
 
+class LSTMConfig(typing.TypedDict):
+    units: int
+
+
 class FFNNConfig(typing.TypedDict):
     nodes_per_layer: list[int]
 
@@ -73,8 +77,9 @@ class FFNNConfig(typing.TypedDict):
 class ConfigDict(typing.TypedDict):
     n_timesteps: int
     cusum: Optional[CusumConfig]
-    ffnn: Optional[FFNNConfig]
     nn: Optional[NNConfig]
+    ffnn: Optional[FFNNConfig]
+    lstm: Optional[LSTMConfig]
     hmm: Optional[HMMConfig]
 
 
@@ -233,7 +238,7 @@ class HMMClassifier(TemplateClassifier):
         self.config_path: Optional[str] = config_path
         self.config: Optional[ConfigDict] = config
 
-    def fit(self, X, y, validation_data, verbose=False, **kwargs) -> None:
+    def fit(self, X, y, validation_data=None, verbose=False, **kwargs) -> None:
         """Fit a HMM to the input data X and labels y.
 
         Fit a Hidden Markov Model (HMM) with Gaussian emission probabilities to
@@ -245,40 +250,40 @@ class HMMClassifier(TemplateClassifier):
         samples to use for each label during training. If limit is not
         specified, all samples for each label will be used."""
         ""
-        limit = self.config["hmm"]["limit"]
         self._check_fit(X, y)
         assert (
             X.shape[1] == self.config["n_timesteps"]
         ), f"{X.shape[1]} != {self.config['n_timesteps']}"
 
-        # FIXME this assumes all X are continuous, which they're not
-        X = np.concatenate(X)
-        y = np.repeat(y, self.config["n_timesteps"])
-
         self.X_ = X
         self.y_ = y
 
         self.models_ = {}
-        should_limit = limit is not None
         if verbose:
-            if should_limit:
-                total = sum(min(limit, len(X[y == yi])) for yi in np.unique(y))
-            else:
-                total = X.shape[0]
+            total = X.shape[0]
             pbar = tqdm.tqdm(total=total)
         for yi in np.unique(y):
-            if not should_limit:
-                limit = np.sum(y == yi)
             if verbose:
-                pbar.desc = f"{yi}: ({limit}) {len(X[y == yi][:limit])}"
+                print(f"Training {yi} on {len(X[y == yi])} observations")
+                if (y == yi).sum() < 30:
+                    print(
+                        f"WARN: gesture {yi} has fewer than 30 observations. This might make things unstable"
+                    )
             self.models_[yi] = hmm.GaussianHMM(
                 n_components=self.config["n_timesteps"] + 2,
                 covariance_type="diag",
                 n_iter=self.config["hmm"]["n_iter"],
                 verbose=False,
-            ).fit(X[y == yi][:limit])
-            if verbose:
-                pbar.update(len(X[y == yi][:limit]))
+            ).fit(np.concatenate(X[y == yi]))
+
+        # Now check that every model's transition matrix has rows summing to 1
+        # (so that every HMM state has an entry (or exit?) point)
+        for key, m in self.models_.items():
+            rows = m.transmat_.sum(axis=1)
+            if not np.isclose(rows, 1).all():
+                print(
+                    f"WARN: HMM for gesture {key} has rows not all summing to 1: {rows}"
+                )
 
         self.is_fitted_ = True
         return self
@@ -483,7 +488,7 @@ class FFNNClassifier(TFClassifier):
         self.config: Optional[ConfigDict] = config
         self.normalizer = None
 
-    def fit(self, X, y, validation_data, **kwargs) -> None:
+    def fit(self, X, y, validation_data=None, **kwargs) -> None:
         l.info("Checking fit of X, y")
         self._check_fit(X, y)
         self.validation_data = validation_data
@@ -531,6 +536,10 @@ class FFNNClassifier(TFClassifier):
         )
 
         l.info("Fitting model")
+        # Add the validation data to the kwargs iff they're not None
+        kwargs.update(
+            {} if validation_data is None else {"validation_data": validation_data}
+        )
         # Fit the model to the data, with a number of epochs dictated by config
         self.history = self.model.fit(
             X,
@@ -538,7 +547,6 @@ class FFNNClassifier(TFClassifier):
             batch_size=self.config["nn"]["batch_size"],
             epochs=self.config["nn"]["epochs"],
             class_weight=calc_class_weights(y),
-            validation_data=validation_data,
             **kwargs,
         )
 
@@ -565,10 +573,10 @@ class RNNClassifier(TFClassifier):
         # Construct the fully connected layers from the model config
         dense_layers = [
             keras.layers.Dense(
-                units=npl,
+                units=num_nodes,
                 activation="relu",
             )
-            for npl in self.config["ffnn"]["nodes_per_layer"]
+            for num_nodes in self.config["ffnn"]["nodes_per_layer"]
         ]
 
         # Construct the model as a sequence of layers
@@ -605,8 +613,8 @@ class LSTMClassifier(TFClassifier):
         self.config: Optional[ConfigDict] = config
         self.normalizer = None
 
-    def fit(self, X, y, **kwargs):
-        # TF.LSTM *requires* floats for matmul operations
+    def fit(self, X, y, validation_data, **kwargs):
+        # tensorflow's LSTM *requires* floats for matmul operations
         X = X.astype(np.float32)
         y = y.astype(np.float32)
         self._check_fit(X, y)
@@ -619,20 +627,26 @@ class LSTMClassifier(TFClassifier):
         self.model = keras.models.Sequential(
             [
                 # Shape [batch, time, features] => [batch, time, lstm_units]
-                keras.layers.LSTM(35, return_sequences=False),
+                keras.layers.LSTM(self.config["lstm"]["units"], return_sequences=False),
                 # Shape => [batch, time, features]
                 keras.layers.Dense(len(self.classes_)),
             ]
         )
-        # Compile the model using the ADAM optimiser and SCCE loss
+
         self.model.compile(
             loss=keras.losses.SparseCategoricalCrossentropy(from_logits=True),
-            optimizer=keras.optimizers.Adam(learning_rate=2.5e-5),
+            optimizer=self._resolve_optimizer(),
         )
 
         # Fit the model to the data, with a number of epochs dictated by config
         self.history = self.model.fit(
-            X, y, batch_size=128, epochs=self.config["nn"]["epochs"], **kwargs
+            X,
+            y,
+            batch_size=self.config["nn"]["batch_size"],
+            epochs=self.config["nn"]["epochs"],
+            class_weight=calc_class_weights(y),
+            validation_data=validation_data,
+            **kwargs,
         )
 
         # Sklearn expects is_fitted_ to be True after fitting
