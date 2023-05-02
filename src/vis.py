@@ -12,6 +12,7 @@ import logging as l
 import common
 import pred
 import read
+from matplotlib.colors import LogNorm, Normalize
 
 
 class StdOutHandler(common.AbstractHandler):
@@ -40,11 +41,17 @@ def plot_conf_mats(model, Xs, ys, titles=None):
     conf_mats = []
     for X, y in zip(Xs, ys):
         conf_mats.append(model.confusion_matrix(y, X_to_pred=X))
-    vmax = np.log10(np.max(np.array(conf_mats).flatten()))
     fig, axs = plt.subplots(1, len(conf_mats), figsize=(5 * len(conf_mats), 4))
 
     for cm, ax, title in zip(conf_mats, axs, titles):
-        sns.heatmap(np.log10(cm), ax=ax, vmin=0, vmax=vmax, square=True)
+        sns.heatmap(
+            cm,
+            ax=ax,
+            vmin=0,
+            vmax=cm.max(),
+            square=True,
+            norm=LogNorm(),
+        )
         ax.set(
             xlabel="Predicted Gesture",
             ylabel="Actual Gesture",
