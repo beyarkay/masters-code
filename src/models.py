@@ -26,7 +26,6 @@ from typing import Optional
 import common
 import matplotlib.pyplot as plt
 import numpy as np
-import pandas as pd
 import sklearn
 import sklearn.utils.validation as sk_validation
 import tensorflow as tf
@@ -40,7 +39,6 @@ from tensorflow import keras
 
 def calc_class_weights(y):
     # NOTE: The np.log(weight) is *very* important.
-    # I don't know why, but it makes everything work
     class_weight = {
         int(class_): np.log(1.0 / count * 1_000_000)
         for class_, count in zip(*np.unique(y, return_counts=True))
@@ -213,70 +211,19 @@ class TemplateClassifier(BaseEstimator, ClassifierMixin):
 class MeanClassifier(TemplateClassifier):
     def fit(self, X, y):
         self._check_fit(X, y)
-        self.means = np.zeros((51, 30))
+        self.means = np.zeros((51, 25, 30))
         for g in range(51):
             data = X[y == g]
             self.means[g] = data.mean(axis=0)
-        # Return the classifier
         self.is_fitted_ = True
         return self
 
     def predict(self, X):
-        # Check is fit had been called
-        sk_validation.check_is_fitted(self, ["X_", "y_"])
-
-        # Input validation
-        X = sk_validation.check_array(X)
+        assert self.is_fitted_
         result = np.empty((X.shape[0]))
         for i, xi in enumerate(X):
             result[i] = np.argmin(np.linalg.norm(self.means - xi, axis=(1, 2)))
         return result
-
-
-class OneNearestNeighbourClassifier(TemplateClassifier):
-    """Classifies data based on the single nearest neighbour"""
-
-    def fit(self, X, y):
-        """A reference implementation of a fitting function.
-
-        Parameters
-        ----------
-        X : {array-like, sparse matrix}, shape (n_samples, n_features)
-            The training input samples.
-        y : array-like, shape (n_samples,) or (n_samples, n_outputs)
-            The target values (class labels in classification, real numbers in
-            regression).
-        Returns
-        -------
-        self : object
-            Returns self.
-        """
-        self._check_fit(X, y)
-        # Return the classifier
-        self.is_fitted_ = True
-        return self
-
-    def predict(self, X):
-        """A reference implementation of a prediction for a classifier.
-        Parameters
-        ----------
-        X : array-like, shape (n_samples, n_features)
-            The input samples.
-
-        Returns
-        -------
-        y : ndarray, shape (n_samples,)
-            The label for each sample is the label of the closest sample
-            seen during fit.
-        """
-        # Check is fit had been called
-        sk_validation.check_is_fitted(self, ["X_", "y_"])
-
-        # Input validation
-        X = sk_validation.check_array(X)
-
-        closest = np.argmin(sklearn.metrics.euclidean_distances(X, self.X_), axis=1)
-        return self.y_[closest]
 
 
 class HMMClassifier(TemplateClassifier):
@@ -574,19 +521,6 @@ class FFNNClassifier(TFClassifier):
                 keras.layers.Dense(len(np.unique(y))),
             ]
         )
-        # If validation and class weights have been supplied, then add the
-        # sample weights to the validation data
-        # validation_data = kwargs.get("validation_data", [])
-        # print(f"val data: {validation_data}")
-        # class_weight = kwargs.get("class_weight", False)
-        # print(f"class_weight: {class_weight}")
-        # if len(validation_data) == 2 and class_weight:
-        #     print("Mutating validation data")
-        #     self.uses_validation_weights = True
-        #     X_val, y_val = kwargs["validation_data"]
-        #     self.weights_val = np.diag(list(class_weight.values()))[y_val].sum(axis=1)
-        #     print(f"weights_validation = {self.weights_val.shape}")
-        #     kwargs["validation_data"] = (X_val, y_val, self.weights_val)
 
         l.info("Compiling model")
         optimizer = self._resolve_optimizer()
@@ -612,6 +546,7 @@ class FFNNClassifier(TFClassifier):
         self.is_fitted_ = True
 
 
+# TODO implement this
 class RNNClassifier(TFClassifier):
     def __init__(self, config_path=None, config=None):
         self.config_path: Optional[str] = config_path
