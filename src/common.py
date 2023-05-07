@@ -188,6 +188,7 @@ def make_windows(
     # Loop over the windows and populate X and y
     Xs = []
     ys = []
+    dts = []
     for i, window in enumerate(rolling):
         if pbar is not None:
             pbar.update(1)
@@ -195,30 +196,35 @@ def make_windows(
             continue
         Xs.append(window[sensors].values)
         ys.append(window.gesture.values[-1])
+        dts.append(window.datetime.values[-1])
 
     # Return X and y as a tuple
-    return (np.stack(Xs), np.array(ys))
+    return (np.stack(Xs), np.array(ys), np.array(dts))
 
 
-def save_as_windowed_npz(df):
-    """Given a DataFrame of gestures, split them into windows of 25 time steps
+def save_as_windowed_npz(df, n_timesteps=25):
+    """Given a DataFrame of gestures, split them into windows of n_timesteps
     long and then save that windowed data as .npz files.
 
     There will be one file `./gesture_data/trn.npz` which contains the training &
     validation data, and one file `./gesture_data/tst.npz` which contains the
     testing data."""
-    X, y_str = make_windows(
+    X, y_str, dt = make_windows(
         df,
-        25,
+        n_timesteps,
         pbar=tqdm.tqdm(total=len(df), desc="Making windows"),
     )
     g2i, i2g = make_gestures_and_indices(y_str)
     y = g2i(y_str)
 
-    X_trn, X_tst, y_trn, y_tst = sklearn.model_selection.train_test_split(
-        X,
-        y,
-        stratify=y,
+    # fmt: off
+    X_trn, X_tst, y_trn, y_tst, dt_trn, dt_tst = sklearn.model_selection.train_test_split(    # noqa: E501
+        X, y, dt, stratify=y,
     )
-    np.savez("./gesture_data/trn.npz", X_trn=X_trn, y_trn=y_trn)
-    np.savez("./gesture_data/tst.npz", X_tst=X_tst, y_tst=y_tst)
+    # fmt: on
+    np.savez(
+        f"./gesture_data/trn_{n_timesteps}.npz", X_trn=X_trn, y_trn=y_trn, dt_trn=dt_trn
+    )
+    np.savez(
+        f"./gesture_data/tst_{n_timesteps}.npz", X_tst=X_tst, y_tst=y_tst, dt_tst=dt_tst
+    )

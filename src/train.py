@@ -41,10 +41,16 @@ def main():
     trn = np.load("./gesture_data/trn.npz")
     X = trn["X_trn"]
     y = trn["y_trn"]
+    dt = trn["dt_trn"]
 
-    X_trn, X_val, y_trn, y_val = sklearn.model_selection.train_test_split(
-        X, y, stratify=y
-    )
+    (
+        X_trn,
+        X_val,
+        y_trn,
+        y_val,
+        dt_trn,
+        dt_val,
+    ) = sklearn.model_selection.train_test_split(X, y, dt, stratify=y)
 
     # TODO Implement pruning: https://optuna.readthedocs.io/en/stable/reference/generated/optuna.pruners.SuccessiveHalvingPruner.html#optuna.pruners.SuccessiveHalvingPruner
     now = datetime.datetime.now().isoformat(sep="T")[:-7]
