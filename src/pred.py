@@ -8,6 +8,7 @@ import read
 import common
 import logging as l
 import numpy as np
+from autocorrect import Speller
 
 
 class PredictGestureHandler(common.AbstractHandler):
@@ -36,3 +37,20 @@ class PredictGestureHandler(common.AbstractHandler):
         const: common.ConstantsDict = common.read_constants()
         sample = sample[const["sensors"].values()].values
         self.prediction = self.model.predict(sample.astype(np.float32))
+
+
+class SpellCheckHandler(common.AbstractHandler):
+    """Use a spell checker to go back and correct typos"""
+
+    def __init__(self) -> None:
+        common.AbstractHandler.__init__(self)
+        self.speller = Speller(fast=True)
+
+    def execute(
+        self,
+        past_handlers: list[common.AbstractHandler],
+    ) -> None:
+        print("Executing SpellCheckHandler")
+        # TODO: Keep a log of the words which have been emitted so that we can
+        # run the spell checker on them.
+        raise NotImplementedError("Spell Check handler has not been implemented yet")

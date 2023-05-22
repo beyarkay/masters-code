@@ -1,21 +1,4 @@
-"""Defines the models which are used for prediction/classification.
-
-These models all use the [sklearn
-API](https://scikit-learn.org/stable/developers/develop.html#rolling-your-own-estimator))
-for estimators to ensure that they can be used with sklearn's GridSearchCV and
-RandomSearchCV. This will make checking multimple hyperparameters a lot easier.
-
-TODO:
-- Make a RandomSearchCV pipeline for every model, that will check a very wide
-  range of hyperparameters
-- Also allow that pipeline to check a wide range of preprocessing steps, such
-  as:
-    - dimensionality reduction via PCA
-    - feature selection
-    - different `n_timesteps`
-    - others?
-- Make sure to weight the various classes automatically
-"""
+"""Defines the models which are used for prediction/classification."""
 
 import logging as l
 import os
@@ -75,7 +58,16 @@ class FFNNConfig(typing.TypedDict):
     nodes_per_layer: list[int]
 
 
+class PreprocessingConfig(typing.TypedDict):
+    n_timesteps: int
+    delay: int
+    max_obs_per_class: int
+    gesture_allowlist: list[int]
+    seed: int
+
+
 class ConfigDict(typing.TypedDict):
+    preprocessing: PreprocessingConfig
     n_timesteps: int
     cusum: Optional[CusumConfig]
     nn: Optional[NNConfig]
@@ -103,11 +95,16 @@ class TemplateClassifier(BaseEstimator, ClassifierMixin):
         self.config_path = config_path
         self.config = config
 
-    def _check_fit(self, X, y):
+    def _check_model_params(self, X, y, dt, validation_data):
         """Validate model parameters before fitting.
 
         This will read in the config (if applicable), check X,y are valid,
         store the classes, and perform some general pre-fit chores."""
+        X_val, y_val, dt_val = validation_data
+        print(
+            f"Checking model params: {X.shape=} {y.shape=} {X_val.shape=} {y_val.shape=}"
+        )
+
         # Assert that exactly one of (config_path, config) is not None
         if bool(self.config_path is None) == bool(self.config is None):
             raise ValueError(
@@ -118,13 +115,119 @@ class TemplateClassifier(BaseEstimator, ClassifierMixin):
             with open(self.config_path, "r") as f:
                 self.config: ConfigDict = yaml.safe_load(f)
 
+        delay = self.config["preprocessing"]["delay"]
+        # First sort all the arrays with the datetime as the key
+        argsort = np.argsort(dt)
+        X = X[argsort]
+        y = y[argsort]
+        dt = dt[argsort]
+        # Then chop off either the front or the end of the arrays by amount `delay`
+        # https://stackoverflow.com/a/76252774/14555505
+        # ------Original--------
+        # X: [0 1 2 3 4 5 6]
+        # y: [0 1 2 3 4 5 6]
+        # ------Delayed by 2------
+        # X[+2:None] =>  [    2 3 4 5 6]
+        # y[None:-2] =>      [0 1 2 3 4    ]
+        # ------Delayed by -2------
+        # X[None:-2] =>     [0 1 2 3 4    ]
+        # y[+2:None] => [    2 3 4 5 6]
+        start_index = delay if delay > 0 else None
+        finsh_index = delay if delay < 0 else None
+        X = X[start_index:finsh_index]
+        X_val = X_val[start_index:finsh_index]
+        dt = dt[start_index:finsh_index]
+        dt_val = dt_val[start_index:finsh_index]
+        # We need to shift the labels in the opposite direction so that they
+        # line up correctly. So trimming the last element of X should also mean
+        # we trim the first element of y, and vice versa. This is equivalent to
+        # negating the delay
+        start_index = -delay if delay < 0 else None
+        finsh_index = -delay if delay > 0 else None
+        y = y[start_index:finsh_index]
+        y_val = y_val[start_index:finsh_index]
+        print(
+            f"Shapes after {delay=}: {X.shape=} {y.shape=} {X_val.shape=} {y_val.shape=}"  # noqa: E501
+        )
+
+        # Remove any gestures which aren't on the allowlist
+        allowlist = self.config["preprocessing"]["gesture_allowlist"]
+        allowed_trn_gestures = np.isin(y, allowlist)
+        X = X[allowed_trn_gestures]
+        y = y[allowed_trn_gestures]
+        dt = dt[allowed_trn_gestures]
+        allowed_val_gestures = np.isin(y_val, allowlist)
+        X_val = X_val[allowed_val_gestures]
+        y_val = y_val[allowed_val_gestures]
+        dt_val = dt_val[allowed_val_gestures]
+        self.g2i, self.i2g = common.make_gestures_and_indices(
+            y,
+            not_g255=lambda g: g != 50,
+            to_i=lambda g: g,
+            to_g=lambda i: i,
+            g255=50,
+        )
+        print(
+            f"Shapes after allowlist: {X.shape=} {y.shape=} {X_val.shape=} {y_val.shape=}"  # noqa: E501
+        )
+
+        # Ensure that there are no more than `max_obs_per_class` observations
+        # per class
+        max_obs_per_class = self.config["preprocessing"]["max_obs_per_class"]
+        if max_obs_per_class is not None:
+            indexes_trn = []
+            indexes_val = []
+            for cls in np.unique(y):
+                num_trn_observations = (y == cls).sum()
+                indexes_trn.extend(
+                    np.random.choice(
+                        np.nonzero(y == cls)[0],
+                        min(num_trn_observations, max_obs_per_class),
+                        replace=False,
+                    )
+                )
+                num_val_observations = (y_val == cls).sum()
+                indexes_val.extend(
+                    np.random.choice(
+                        np.nonzero(y_val == cls)[0],
+                        min(num_val_observations, max_obs_per_class),
+                        replace=False,
+                    )
+                )
+            X = X[indexes_trn]
+            y = y[indexes_trn]
+            dt = dt[indexes_trn]
+            X_val = X_val[indexes_val]
+            y_val = y_val[indexes_val]
+            dt_val = dt_val[indexes_val]
+        print(
+            f"Shapes after {max_obs_per_class=}: {X.shape=} {y.shape=} {X_val.shape=} {y_val.shape=}"  # noqa: E501
+        )
+
+        # Ensure that there are no more than `n_timesteps` timesteps for each
+        # observation
+        # TODO is the timestep modifier working?
+        n_timesteps = self.config["preprocessing"]["n_timesteps"]
+        if n_timesteps > X.shape[1]:
+            print(
+                f"WARN: {n_timesteps=} > {X.shape[1]=}, which means that"
+                " n_timesteps isn't doing anything useful"
+            )
+        X = X[:, -n_timesteps:, :]
+        X_val = X_val[:, -n_timesteps:, :]
+        print(
+            f"Shapes after {n_timesteps=}: {X.shape=} {y.shape=} {X_val.shape=} {y_val.shape=}"  # noqa: E501
+        )
+
         # Check that X and y have correct shape
         X, y = common.check_X_y(X, y)
+
         # Store the classes seen during fit
         self.classes_ = sklearn.utils.multiclass.unique_labels(y)
-
         self.X_ = X
         self.y_ = y
+        self.dt_ = dt
+        self.validation_data = (X_val, y_val, dt_val)
 
     def fit(self, X, y):
         raise NotImplementedError
@@ -137,6 +240,7 @@ class TemplateClassifier(BaseEstimator, ClassifierMixin):
         model_dir,
         dump_model=True,
         dump_conf_mat_plots=True,
+        dump_conf_mats=True,
         dump_config=True,
         dump_loss_plots=True,
         dump_predictions=True,
@@ -145,6 +249,58 @@ class TemplateClassifier(BaseEstimator, ClassifierMixin):
         if not os.path.exists(model_dir):
             os.makedirs(model_dir)
 
+        with open(f"{model_dir}/config.yaml", "w") as f:
+            yaml.safe_dump(self.config, f)
+
+        history = (
+            {}
+            if not hasattr(getattr(self, "model", None), "history")
+            else self.model.history.history
+        )
+
+        fit_time = self.fit_finsh_time - self.fit_start_time
+        # Save the training stats
+        y_trn_pred = self.predict(self.X_)
+        pred_time_trn = self.predict_finsh_time - self.predict_start_time
+        conf_mat_trn = self.confusion_matrix(self.y_, y_pred=y_trn_pred)
+        results_trn = {
+            "time_to_predict": pred_time_trn,
+            "num_observations": self.X_.shape[0],
+            "prediction_time_per_obs": pred_time_trn / self.X_.shape[0],
+            "confidence_matrix": conf_mat_trn.tolist(),
+            "history": {k: v for k, v in history.items() if "val" not in k},
+        }
+        np.savez(f"{model_dir}/y_pred_y_trn.npz", y_pred=y_trn_pred, y_trn=self.y_)
+        np.savez(f"{model_dir}/conf_mat_trn.npz", conf_mat_trn)
+
+        # Save the validation stats
+        X_val, y_val, dt_val = self.validation_data
+        y_val_pred = self.predict(X_val)
+        pred_time_val = self.predict_finsh_time - self.predict_start_time
+        conf_mat_val = self.confusion_matrix(y_val, y_pred=y_val_pred)
+        results_val = {
+            "time_to_predict": pred_time_val,
+            "num_observations": self.X_.shape[0],
+            "prediction_time_per_obs": pred_time_val / self.X_.shape[0],
+            "history": {
+                (k.replace("val_", "")): v for k, v in history.items() if "val" in k
+            },
+            "confidence_matrix": conf_mat_val.tolist(),
+        }
+        np.savez(f"{model_dir}/y_pred_y_val.npz", y_pred=y_val_pred, y_val=y_val)
+        np.savez(f"{model_dir}/conf_mat_val.npz", conf_mat_val)
+
+        with open(f"{model_dir}/results.yaml", "w") as f:
+            yaml.safe_dump(
+                {
+                    "trn": results_trn,
+                    "val": results_val,
+                    "fit_time": fit_time,
+                },
+                f,
+                default_flow_style=True,
+            )
+
         # Save the model
         if dump_model:
             with open(f"{model_dir}/model.pkl", "wb") as f:
@@ -152,7 +308,7 @@ class TemplateClassifier(BaseEstimator, ClassifierMixin):
 
         # Save plots of the confusion matrices
         if dump_conf_mat_plots:
-            X_val, y_val = self.validation_data
+            X_val, y_val, dt_val = self.validation_data
             vis.plot_conf_mats(
                 self,
                 (self.X_, X_val),
@@ -162,7 +318,11 @@ class TemplateClassifier(BaseEstimator, ClassifierMixin):
             plt.savefig(f"{model_dir}/conf_mats.png")
 
         # Save plots of the loss over time
-        if dump_loss_plots:
+        if (
+            dump_loss_plots
+            and hasattr(self, "history")
+            and hasattr(getattr(self, "history"), "history")
+        ):
             h = self.history.history
             fig, axs = plt.subplots(1, len(h.items()), figsize=(4 * len(h.items()), 3))
             for ax, (key, values) in zip(axs, h.items()):
@@ -170,19 +330,6 @@ class TemplateClassifier(BaseEstimator, ClassifierMixin):
                 ax.set_title(key)
                 ax.set(title=key, ylim=(0, np.max(values)))
             plt.savefig(f"{model_dir}/loss_plots.png")
-
-        # Save the predictions
-        if dump_predictions:
-            X_val, y_val = self.validation_data
-            y_val_pred = self.predict(X_val)
-            y_trn_pred = self.predict(self.X_)
-            np.savez(f"{model_dir}/y_pred_y_val.npz", y_pred=y_val_pred, y_val=y_val)
-            np.savez(f"{model_dir}/y_pred_y_trn.npz", y_pred=y_trn_pred, y_trn=self.y_)
-
-        # Save the config
-        if dump_config:
-            with open(f"{model_dir}/config.yaml", "w") as f:
-                yaml.safe_dump(self.config, f)
 
         if dump_distribution_plots:
             fig, axs = vis.plot_distributions(y_val, self.predict(X_val))
@@ -213,22 +360,32 @@ class TemplateClassifier(BaseEstimator, ClassifierMixin):
 
         return tf.math.confusion_matrix(y_true, y_pred).numpy()
 
+    def set_random_seed(self, seed: int):
+        tf.random.set_seed(seed)
+        np.random.seed(seed)
+
 
 class MeanClassifier(TemplateClassifier):
-    def fit(self, X, y):
-        self._check_fit(X, y)
-        self.means = np.zeros((51, 25, 30))
+    def fit(self, X, y, dt):
+        self.fit_start_time = time.time()
+        self.set_random_seed(self.config["preprocessing"]["seed"])
+        self._check_model_params(X, y, dt)
+        n_timesteps = self.config["preprocessing"]["n_timesteps"]
+        self.means = np.zeros((51, n_timesteps, 30))
         for g in range(51):
             data = X[y == g]
             self.means[g] = data.mean(axis=0)
         self.is_fitted_ = True
+        self.fit_finsh_time = time.time()
         return self
 
     def predict(self, X):
+        self.predict_start_time = time.time()
         assert self.is_fitted_
         result = np.empty((X.shape[0]))
         for i, xi in enumerate(X):
             result[i] = np.argmin(np.linalg.norm(self.means - xi, axis=(1, 2)))
+        self.predict_finsh_time = time.time()
         return result
 
 
@@ -238,44 +395,36 @@ class HMMClassifier(TemplateClassifier):
     ):
         self.config_path: Optional[str] = config_path
         self.config: Optional[ConfigDict] = config
+        self.config["model_type"] = self.config.get("model_type", "HMM")
 
-    def fit(self, X, y, validation_data=None, verbose=False, **kwargs) -> None:
-        """Fit a HMM to the input data X and labels y.
-
-        Fit a Hidden Markov Model (HMM) with Gaussian emission probabilities to
-        the input data X and labels y. The HMM is trained separately for each
-        unique value of y using the GaussianHMM class from the hmm module of
-        the sklearn library.
-
-        The `limit` parameter is an integer indicating the maximum number of
-        samples to use for each label during training. If limit is not
-        specified, all samples for each label will be used."""
-        ""
-        self._check_fit(X, y)
-        assert (
-            X.shape[1] == self.config["n_timesteps"]
-        ), f"{X.shape[1]} != {self.config['n_timesteps']}"
-
-        self.X_ = X
-        self.y_ = y
+    def fit(self, X, y, dt, validation_data=None, verbose=False, **kwargs) -> None:
+        self.fit_start_time = time.time()
+        self.set_random_seed(self.config["preprocessing"]["seed"])
+        self._check_model_params(X, y, dt, validation_data)
 
         self.models_ = {}
-        if verbose:
-            total = X.shape[0]
-            pbar = tqdm.tqdm(total=total)
-        for yi in np.unique(y):
+        iterator = (
+            tqdm.tqdm(np.unique(self.y_))
+            if kwargs.get("verbose", False)
+            else np.unique(self.y_)
+        )
+        for yi in iterator:
             if verbose:
-                print(f"Training {yi} on {len(X[y == yi])} observations")
-                if (y == yi).sum() < 30:
-                    print(
-                        f"WARN: gesture {yi} has fewer than 30 observations. This might make things unstable"
-                    )
+                print(
+                    f"HMM: Training {self.i2g(yi)} on {len(self.X_[self.y_ == yi])} observations"  # noqa: E501
+                )
+            if (self.y_ == yi).sum() < (self.X_.shape[1] + 2):
+                print(
+                    f"WARN: gesture {self.i2g(yi)} has only {(self.y_ == yi).sum()} observations "  # noqa: E501
+                    f" but {self.X_.shape[1] + 2} states. This might make things unstable."  # noqa: E501
+                )
             self.models_[yi] = hmm.GaussianHMM(
-                n_components=self.config["n_timesteps"] + 2,
+                n_components=self.X_.shape[1] + 2,
                 covariance_type="diag",
                 n_iter=self.config["hmm"]["n_iter"],
-                verbose=False,
-            ).fit(np.concatenate(X[y == yi]))
+                verbose=verbose,
+                random_state=self.config["preprocessing"]["seed"],
+            ).fit(np.concatenate(self.X_[self.y_ == yi]))
 
         # Now check that every model's transition matrix has rows summing to 1
         # (so that every HMM state has an entry (or exit?) point)
@@ -287,9 +436,11 @@ class HMMClassifier(TemplateClassifier):
                 )
 
         self.is_fitted_ = True
+        self.fit_finsh_time = time.time()
         return self
 
     def predict(self, X, verbose=False):
+        self.predict_start_time = time.time()
         predictions = np.empty(X.shape[0])
         if verbose:
             pbar = tqdm.tqdm(total=X.shape[0])
@@ -298,16 +449,22 @@ class HMMClassifier(TemplateClassifier):
             best_key = None
             best_score = float("-inf")
             for key, m in self.models_.items():
-                score = m.score(xi)
+                try:
+                    score = m.score(xi)
+                except ValueError as e:
+                    print(f"Value error for HMM {self.i2g(key)}, observation {i}: {e}")
+                    score = float("-inf")
                 if score > best_score:
                     best_score = score
                     best_key = key
             predictions[i] = best_key
             if verbose:
                 pbar.update(1)
+        self.predict_finsh_time = time.time()
         return predictions
 
     def predict_score(self, X, verbose=False):
+        self.predict_score_start_time = time.time()
         scores = np.empty((X.shape[0], len(self.models_)))
 
         if verbose:
@@ -317,6 +474,7 @@ class HMMClassifier(TemplateClassifier):
             scores[i] = [model.score(xi) for model in self.models_.values()]
             if verbose:
                 pbar.update(1)
+        self.predict_score_finsh_time = time.time()
         return scores
 
 
@@ -334,6 +492,7 @@ class CuSUMClassifier(TemplateClassifier):
     def __init__(self, config_path=None, config=None):
         self.config_path = config_path
         self.config = config
+        self.config["model_type"] = self.config.get("model_type", "CuSUM")
 
     def _cusum(self, x, target=None, std_dev=None, allowed_std_devs=4):
         """Calculate the Cumulative Sum of some data.
@@ -378,22 +537,35 @@ class CuSUMClassifier(TemplateClassifier):
             "lower_limit": lower_limit,
         }
 
-    def fit(self, X, y, **kwargs) -> None:
-        self._check_fit(X, y)
+    def fit(self, X, y, dt, validation_data, **kwargs) -> None:
+        self.fit_start_time = time.time()
+        self.set_random_seed(self.config["preprocessing"]["seed"])
+        self._check_model_params(X, y, dt, validation_data)
         threshold = self.config["cusum"]["thresh"]
         self.const: common.ConstantsDict = common.read_constants()
 
-        num_gestures = len(np.unique(y))
+        num_gestures = len(np.unique(self.y_))
 
         records = np.zeros((num_gestures, self.const["n_sensors"]))
 
+        pbar = (
+            range(num_gestures)
+            if kwargs.get("verbose", False)
+            else tqdm.trange(num_gestures)
+        )
         # Loop over all gestures
-        for gesture_idx in range(num_gestures):
-            data = X[y == gesture_idx]
+        for gesture_idx in pbar:
+            pbar.set_description(f"CuSUM gesture: {self.i2g(gesture_idx)}")
+            data = self.X_[self.y_ == gesture_idx]
             record = np.zeros((data.shape[0], self.const["n_sensors"]))
 
             # Loop over all observations matching that gesture
-            for observation_idx in range(data.shape[0]):
+            iterator = (
+                tqdm.trange(data.shape[0])
+                if kwargs.get("verbose", False)
+                else range(data.shape[0])
+            )
+            for observation_idx in iterator:
                 subset = data[observation_idx, :, :]
 
                 # Loop over each sensor
@@ -415,8 +587,10 @@ class CuSUMClassifier(TemplateClassifier):
         # so we can treat all gestures equally.
         self.normalised = (records.T / records.T.sum(axis=0)).T
         self.is_fitted_ = True
+        self.fit_finsh_time = time.time()
 
     def predict(self, X):
+        self.predict_start_time = time.time()
         preds = np.empty(X.shape[0])
         threshold = self.config["cusum"]["thresh"]
         for i, xi in enumerate(X):
@@ -430,6 +604,7 @@ class CuSUMClassifier(TemplateClassifier):
                 too_low = (np.abs(csm["cusum_pos"]) > threshold).any()
                 values[sensor_idx] = int(too_high or too_low)
             preds[i] = np.argmin(np.linalg.norm(self.normalised - values, axis=1))
+        self.predict_finsh_time = time.time()
         return preds
 
 
@@ -438,13 +613,17 @@ class TFClassifier(TemplateClassifier):
 
     def predict(self, X):
         """Give label predictions for each observation in X"""
-        return np.argmax(self.predict_proba(X), axis=1)
+        self.predict_start_time = time.time()
+        preds = self.i2g(np.argmax(self.predict_proba(X), axis=1))
+        self.predict_finsh_time = time.time()
+        return preds
 
     def predict_proba(self, X):
         """Give label probabilities for each observation in X"""
-        logits = self.model(X)
-        l.info(logits)
-        return tf.nn.softmax(logits).numpy()
+        self.predict_proba_start_time = time.time()
+        pred_probas = tf.nn.softmax((self.model(X))).numpy()
+        self.predict_proba_finsh_time = time.time()
+        return pred_probas
 
     def _resolve_optimizer(self):
         """Returns the Keras Optimizer object given a config dict defining
@@ -465,39 +644,36 @@ class TFClassifier(TemplateClassifier):
 
 
 class FFNNClassifier(TFClassifier):
-    """
-
-    Examples
-    --------
-    >>> X_trn, X_val, y_trn, y_val = train_test_split(X, y)
-    >>> m = models.FFNNClassifier(config={
-    ...     "n_timesteps": 30,
-    ...     "ffnn": {
-    ...         "epochs": 3,
-    ...         "nodes_per_layer": [100],
-    ...     }
-    ... })
-    >>> m.fit(X_trn, y_trn, validation_data=(X_val, y_val))
-    >>> m.predict(X_trn[:1])[0]
-    32
-    """
-
     def __init__(
         self, config_path: Optional[str] = None, config: Optional[ConfigDict] = None
     ):
+        keras.backend.clear_session()
         self.config_path: Optional[str] = config_path
         self.config: Optional[ConfigDict] = config
+        self.config["model_type"] = self.config.get("model_type", "FFNN")
         self.normalizer = None
 
-    def fit(self, X, y, validation_data=None, **kwargs) -> None:
-        l.info("Checking fit of X, y")
-        self._check_fit(X, y)
-        self.validation_data = validation_data
+    def fit(self, X, y, dt, validation_data=None, **kwargs) -> None:
+        self.fit_start_time = time.time()
+
+        # -----------------
+        # Set up everything
+        # -----------------
+        self.set_random_seed(self.config["preprocessing"]["seed"])
+        keras.backend.clear_session()
+        print("Checking fit of X, y")
+        self._check_model_params(X, y, dt, validation_data)
+
+        # ----------------------
+        # Actually fit the model
+        # ----------------------
         # Fit the normalizer if not already fitted.
-        if self.normalizer is None:
-            l.info("Fitting normalizer")
-            self.normalizer = keras.layers.Normalization(axis=-2)
-            self.normalizer.adapt(X)
+        self.normalizer = keras.layers.Normalization(axis=-2)
+        if self.config["nn"]["epochs"] is not None:
+            print("Fitting normalizer")
+            self.normalizer.adapt(self.X_)
+        else:
+            print("WARN: Not fitting normalizer because epochs is None")
 
         # Construct the fully connected layers from the model config
         dense_layers = [
@@ -508,17 +684,10 @@ class FFNNClassifier(TFClassifier):
             for npl in self.config["ffnn"]["nodes_per_layer"]
         ]
 
-        # TODO this function is unused
-        def init_biases(shape, dtype=None):
-            inv_freqs = np.array(
-                [1 / count for _class, count in zip(*np.unique(y, return_counts=True))]
-            )
-            return np.log(inv_freqs)
-
         # Construct the model as a sequence of layers
         self.model = tf.keras.Sequential(
             [
-                keras.layers.Input(shape=X.shape[1:]),
+                keras.layers.Input(shape=self.X_.shape[1:]),
                 self.normalizer,
                 keras.layers.Flatten(),
                 *dense_layers,
@@ -528,7 +697,7 @@ class FFNNClassifier(TFClassifier):
             ]
         )
 
-        l.info("Compiling model")
+        print("Compiling model")
         optimizer = self._resolve_optimizer()
         # Compile the model using SCCE loss
         self.model.compile(
@@ -536,35 +705,45 @@ class FFNNClassifier(TFClassifier):
             loss=keras.losses.SparseCategoricalCrossentropy(from_logits=True),
         )
 
-        l.info("Fitting model")
-        # Add the validation data to the kwargs iff they're not None
+        print("Fitting model")
+        # Add the validation data to the kwargs iff they're not None. The last
+        # element of validation data is the dt array, which gets omitted.
         kwargs.update(
-            {} if validation_data is None else {"validation_data": validation_data}
+            {}
+            if self.validation_data is None
+            else {"validation_data": self.validation_data[:-1]}
         )
         # Fit the model to the data, with a number of epochs dictated by config
-        self.history = self.model.fit(
-            X,
-            y,
-            batch_size=self.config["nn"]["batch_size"],
-            epochs=self.config["nn"]["epochs"],
-            class_weight=calc_class_weights(y),
-            **kwargs,
-        )
+        if self.config["nn"]["epochs"] is not None:
+            self.history = self.model.fit(
+                self.X_,
+                self.g2i(self.y_),
+                batch_size=self.config["nn"]["batch_size"],
+                epochs=self.config["nn"]["epochs"],
+                class_weight=calc_class_weights(self.g2i(self.y_)),
+                **kwargs,
+            )
+        else:
+            print("WARN: Not fitting FFNN because epochs is None")
 
         # Sklearn expects is_fitted_ to be True after fitting
         self.is_fitted_ = True
+        self.fit_finsh_time = time.time()
 
 
-# TODO implement this
 class RNNClassifier(TFClassifier):
     def __init__(self, config_path=None, config=None):
         self.config_path: Optional[str] = config_path
         self.config: Optional[ConfigDict] = config
+        self.config["model_type"] = self.config.get("model_type", "RNN")
         self.normalizer = None
 
-    def fit(self, X, y, **kwargs):
+    def fit(self, X, y, dt, **kwargs):
+        raise NotImplementedError("RNN hasn't been updated to use self.X_")
+        self.fit_start_time = time.time()
+        self.set_random_seed(self.config["preprocessing"]["seed"])
         raise NotImplementedError
-        self._check_fit(X, y)
+        self._check_model_params(X, y, dt)
         # Fit the normalizer if not already fitted.
         if self.normalizer is None:
             print("Fitting normalizer")
@@ -606,19 +785,24 @@ class RNNClassifier(TFClassifier):
 
         # Sklearn expects is_fitted_ to be True after fitting
         self.is_fitted_ = True
+        self.fit_finsh_time = time.time()
 
 
 class LSTMClassifier(TFClassifier):
     def __init__(self, config_path=None, config=None):
         self.config_path: Optional[str] = config_path
         self.config: Optional[ConfigDict] = config
+        self.config["model_type"] = self.config.get("model_type", "LSTM")
         self.normalizer = None
 
-    def fit(self, X, y, validation_data, **kwargs):
+    def fit(self, X, y, dt, validation_data=None, **kwargs):
+        raise NotImplementedError("LSTM hasn't been updated to use self.X_")
+        self.fit_start_time = time.time()
+        self.set_random_seed(self.config["preprocessing"]["seed"])
         # tensorflow's LSTM *requires* floats for matmul operations
         X = X.astype(np.float32)
         y = y.astype(np.float32)
-        self._check_fit(X, y)
+        self._check_model_params(X, y, dt)
         # Fit the normalizer if not already fitted.
         if self.normalizer is None:
             print("Fitting normalizer")
@@ -638,17 +822,24 @@ class LSTMClassifier(TFClassifier):
             loss=keras.losses.SparseCategoricalCrossentropy(from_logits=True),
             optimizer=self._resolve_optimizer(),
         )
-
-        # Fit the model to the data, with a number of epochs dictated by config
-        self.history = self.model.fit(
-            X,
-            y,
-            batch_size=self.config["nn"]["batch_size"],
-            epochs=self.config["nn"]["epochs"],
-            class_weight=calc_class_weights(y),
-            validation_data=validation_data,
-            **kwargs,
+        kwargs.update(
+            {} if validation_data is None else {"validation_data": validation_data}
         )
+
+        print(self.config)
+        # Fit the model to the data, with a number of epochs dictated by config
+        if self.config["nn"]["epochs"] is not None:
+            self.history = self.model.fit(
+                X,
+                y,
+                batch_size=self.config["nn"]["batch_size"],
+                epochs=self.config["nn"]["epochs"],
+                class_weight=calc_class_weights(y),
+                **kwargs,
+            )
+        else:
+            print("WARN: Not fitting LSTM because epochs is None")
 
         # Sklearn expects is_fitted_ to be True after fitting
         self.is_fitted_ = True
+        self.fit_finsh_time = time.time()

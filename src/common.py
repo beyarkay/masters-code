@@ -46,7 +46,9 @@ def check_X_y(X: np.ndarray, y: np.ndarray):
     return X, y
 
 
-def make_gestures_and_indices(y_str):
+def make_gestures_and_indices(
+    y_str, not_g255=None, to_i=None, to_g=None, g255="gesture0255"
+):
     """Create two vectorized functions to convert gesture names to integer
     indices and vice versa.
 
@@ -55,12 +57,24 @@ def make_gestures_and_indices(y_str):
 
     Args:
     - y_str: A 1-dimensional ndarray containing the gesture names.
+    - not_g255: A one-parameter function that returns a bool and determines if
+      an element in y_str is the g255 element.
+    - to_i: a one-parameter function that converts an element of y_str into an
+      integer.
+    - to_g: a one-parameter function that converts an integer into a gesture.
+    - g255: the representation of gesture0255 in y_str.
 
     Returns:
     A tuple containing two vectorized functions:
     - to_index: A function that takes a gesture name and returns an integer index.
     - to_gesture: A function that takes an integer index and returns a gesture name.
     """
+    if to_g is None:
+        to_g = lambda i: f"gesture{i:0>4}"  # noqa: E731
+    if to_i is None:
+        to_i = lambda g: int(g[-4:])  # noqa: E731
+    if not_g255 is None:
+        not_g255 = lambda g: g != g255  # noqa: E731
 
     # Determine the maximum integer value, which is one less than the number of
     # unique gestures.
@@ -68,10 +82,8 @@ def make_gestures_and_indices(y_str):
 
     # Define two vectorized functions to convert gestures to indices and vice
     # versa.
-    to_index = np.vectorize(lambda g: int(g[-4:]) if g != "gesture0255" else maximum)
-    to_gesture = np.vectorize(
-        lambda i: f"gesture{i:0>4}" if i != maximum else "gesture0255"
-    )
+    to_index = np.vectorize(lambda g: to_i(g) if not_g255(g) else maximum)
+    to_gesture = np.vectorize(lambda i: to_g(i) if i != maximum else g255)
     return (to_index, to_gesture)
 
 
@@ -206,7 +218,7 @@ def save_as_windowed_npz(df, n_timesteps=25):
     """Given a DataFrame of gestures, split them into windows of n_timesteps
     long and then save that windowed data as .npz files.
 
-    There will be one file `./gesture_data/trn.npz` which contains the training &
+    There will be one file `./gesture_data/trn_40.npz` which contains the training &
     validation data, and one file `./gesture_data/tst.npz` which contains the
     testing data."""
     X, y_str, dt = make_windows(

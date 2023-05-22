@@ -38,7 +38,7 @@ def main():
     df: pd.DataFrame = read.read_data(offsets="offsets.csv")
     if MAX_OBSERVATIONS is not None:
         df = df.head(MAX_OBSERVATIONS)
-    trn = np.load("./gesture_data/trn.npz")
+    trn = np.load("./gesture_data/trn_40.npz")
     X = trn["X_trn"]
     y = trn["y_trn"]
     dt = trn["dt_trn"]
@@ -91,7 +91,6 @@ def objective_wrapper(trial, X_trn, y_trn, X_val, y_val):
 
 def objective_hmm(trial, X_trn, y_trn, X_val, y_val):
     config = {
-        "n_timesteps": X_trn.shape[1],
         "hmm": {
             "n_iter": 1,
             "limit": 100,
@@ -99,6 +98,7 @@ def objective_hmm(trial, X_trn, y_trn, X_val, y_val):
     }
     model = models.HMMClassifier(config=config)
     start = datetime.datetime.now()
+    # FIXME model.fit should also take in dt
     model.fit(X_trn, y_trn, validation_data=(X_val, y_val), verbose=True)
     finsh = datetime.datetime.now()
 
@@ -124,9 +124,7 @@ def objective_hmm(trial, X_trn, y_trn, X_val, y_val):
 
 
 def objective_cusum(trial, X_trn, y_trn, X_val, y_val):
-    config = {
-        "n_timesteps": X_trn.shape[1],
-    }
+    config = {}
     model = models.CuSUMClassifier(config=config)
     l.info("Fitting model")
     start = datetime.datetime.now()
@@ -151,7 +149,6 @@ def objective_nn(trial, X_trn, y_trn, X_val, y_val):
         for layer_idx in range(num_layers)
     ]
     config = {
-        "n_timesteps": X_trn.shape[1],
         "nn": {
             "epochs": 20,
             "batch_size": trial.suggest_int("batch_size", 64, 256, log=True),

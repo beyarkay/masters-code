@@ -51,6 +51,7 @@ def plot_conf_mats(model, Xs, ys, titles=None):
             vmax=cm.max(),
             square=True,
             norm=LogNorm(),
+            cmap="turbo_r",
         )
         ax.set(
             xlabel="Predicted Gesture",
@@ -59,6 +60,12 @@ def plot_conf_mats(model, Xs, ys, titles=None):
         if titles is not None:
             ax.set_title(title)
     return fig, axs
+
+
+def plot_observations(model, index_slice):
+    max(0, 1)
+    assert model.is_fitted_, "Model must be fitted before observations are plotted"
+    raise NotImplementedError("Plot observations is not implemented.")
 
 
 def plot_distributions(y_val, y_pred):
