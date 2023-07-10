@@ -1,5 +1,6 @@
 """Defines the models which are used for prediction/classification."""
 import datetime
+from wrapt_timeout_decorator import timeout
 
 import pandas as pd
 from sklearn.metrics import classification_report
@@ -238,6 +239,7 @@ class TemplateClassifier(BaseEstimator, ClassifierMixin):
         self.dt_ = dt
         self.validation_data = (X_val, y_val, dt_val)
 
+    @timeout(20)
     def fit(self, X, y):
         raise NotImplementedError
 
@@ -522,6 +524,7 @@ class TemplateClassifier(BaseEstimator, ClassifierMixin):
 
 
 class MeanClassifier(TemplateClassifier):
+    @timeout(20)
     def fit(self, X, y, dt):
         self.fit_start_time = time.time()
         self.set_random_seed(self.config["preprocessing"]["seed"])
@@ -549,10 +552,12 @@ class HMMClassifier(TemplateClassifier):
     def __init__(
         self, config_path: Optional[str] = None, config: Optional[ConfigDict] = None
     ):
+        super().__init__()
         self.config_path: Optional[str] = config_path
         self.config: Optional[ConfigDict] = config
         self.config["model_type"] = self.config.get("model_type", "HMM")
 
+    @timeout(20)
     def fit(self, X, y, dt, validation_data=None, verbose=False, **kwargs) -> None:
         self.fit_start_time = time.time()
         self.set_random_seed(self.config["preprocessing"]["seed"])
@@ -694,6 +699,7 @@ class CuSUMClassifier(TemplateClassifier):
             "lower_limit": lower_limit,
         }
 
+    @timeout(20)
     def fit(self, X, y, dt, validation_data, **kwargs) -> None:
         self.fit_start_time = time.time()
         self.set_random_seed(self.config["preprocessing"]["seed"])
@@ -806,12 +812,14 @@ class FFNNClassifier(TFClassifier):
     def __init__(
         self, config_path: Optional[str] = None, config: Optional[ConfigDict] = None
     ):
+        super().__init__()
         keras.backend.clear_session()
         self.config_path: Optional[str] = config_path
         self.config: Optional[ConfigDict] = config
         self.config["model_type"] = self.config.get("model_type", "FFNN")
         self.normalizer = None
 
+    @timeout(20)
     def fit(self, X, y, dt, validation_data=None, **kwargs) -> None:
         self.fit_start_time = time.time()
 
@@ -892,11 +900,13 @@ class FFNNClassifier(TFClassifier):
 
 class RNNClassifier(TFClassifier):
     def __init__(self, config_path=None, config=None):
+        super().__init__()
         self.config_path: Optional[str] = config_path
         self.config: Optional[ConfigDict] = config
         self.config["model_type"] = self.config.get("model_type", "RNN")
         self.normalizer = None
 
+    @timeout(20)
     def fit(self, X, y, dt, **kwargs):
         raise NotImplementedError("RNN hasn't been updated to use self.X_")
         self.fit_start_time = time.time()
@@ -949,11 +959,13 @@ class RNNClassifier(TFClassifier):
 
 class LSTMClassifier(TFClassifier):
     def __init__(self, config_path=None, config=None):
+        super().__init__()
         self.config_path: Optional[str] = config_path
         self.config: Optional[ConfigDict] = config
         self.config["model_type"] = self.config.get("model_type", "LSTM")
         self.normalizer = None
 
+    @timeout(20)
     def fit(self, X, y, dt, validation_data=None, **kwargs):
         raise NotImplementedError("LSTM hasn't been updated to use self.X_")
         self.fit_start_time = time.time()

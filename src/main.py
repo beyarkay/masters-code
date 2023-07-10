@@ -130,14 +130,17 @@ def run_experiment_01(args):
                 f"{C.Style.BRIGHT}{C.Fore.BLUE}Training model {clf.config['model_type']}{C.Fore.RESET}{C.Style.DIM}"
             )
             tf.keras.backend.clear_session()
-            clf.fit(
-                X_trn,
-                y_trn,
-                dt_trn,
-                validation_data=(X_val, y_val, dt_val),
-                verbose=False,
-            )
-            print(f"{clf.X_.shape=}, {clf.validation_data[0].shape=}")
+            try:
+                clf.fit(
+                    X_trn,
+                    y_trn,
+                    dt_trn,
+                    validation_data=(X_val, y_val, dt_val),
+                    verbose=False,
+                )
+                print(f"{clf.X_.shape=}, {clf.validation_data[0].shape=}")
+            except TimeoutError as e:
+                print(f"Timed out!: {e}")
             now = datetime.datetime.now().isoformat(sep="T")[:-7]
             print("Saving model")
             clf.write_as_jsonl("saved_models/results.jsonl")
