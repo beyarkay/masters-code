@@ -113,39 +113,19 @@ def run_experiment_01(args):
         (X_trn, X_val, y_trn, y_val, dt_trn, dt_val,) = train_test_split(
             X, y, dt, stratify=y, random_state=preprocessing_config["seed"]
         )
-        print("\n\nppc", preprocessing_config)
+        print("\n\npreprocessing config:", preprocessing_config)
         for model_type, make_model_fn in model_types.items():
             hpars_path = "saved_models/hpars.csv"
-            hpars = (
-                pd.read_csv(hpars_path)
-                if os.path.exists(hpars_path)
-                else pd.DataFrame(
-                    columns=[
-                        "rep_num",
-                        "n_timesteps",
-                        "num_gesture_classes",
-                        "max_obs_per_class",
-                        "delay",
-                        "model_type",
-                    ]
-                )
+            cont, hpars = should_continue(
+                hpars_path,
+                rep_num,
+                n_timesteps,
+                num_gesture_classes,
+                max_obs_per_class,
+                delay,
+                model_type
             )
-            new_hpar_line = {
-                "rep_num": [rep_num],
-                "n_timesteps": [n_timesteps],
-                "num_gesture_classes": [num_gesture_classes],
-                "max_obs_per_class": [max_obs_per_class],
-                "delay": [delay],
-                "model_type": [model_type],
-            }
-            hpars = pd.concat(
-                [pd.DataFrame(new_hpar_line), hpars], ignore_index=True)
-            duplicated = hpars.duplicated()
-            if duplicated.any():
-                print(
-                    f"{C.Style.NORMAL}{C.Fore.YELLOW}Already trained this model:\n{hpars[duplicated]}{C.Style.DIM}{C.Fore.RESET}"  # noqa: E501
-                )
-                hpars = hpars.drop_duplicates()
+            if cont:
                 continue
             clf = make_model_fn(preprocessing_config)
             print(
@@ -172,6 +152,42 @@ def run_experiment_01(args):
             # NOTE: This save MUST come last, so that we don't accidentally
             # record us having trained a model when we have not.
             hpars.to_csv(hpars_path, index=False)
+
+
+def should_continue(
+    hpars_path, rep_num, n_timesteps, num_gesture_classes, max_obs_per_class, delay, model_type
+) -> tuple[bool, pd.DataFrame]:
+    hpars = (
+        pd.read_csv(hpars_path)
+        if os.path.exists(hpars_path)
+        else pd.DataFrame(
+            columns=[
+                "rep_num",
+                "n_timesteps",
+                "num_gesture_classes",
+                "max_obs_per_class",
+                "delay",
+                "model_type",
+            ]
+        )
+    )
+    new_hpar_line = {
+        "rep_num": [rep_num],
+        "n_timesteps": [n_timesteps],
+        "num_gesture_classes": [num_gesture_classes],
+        "max_obs_per_class": [max_obs_per_class],
+        "delay": [delay],
+        "model_type": [model_type],
+    }
+    hpars = pd.concat([pd.DataFrame(new_hpar_line), hpars], ignore_index=True)
+    duplicated = hpars.duplicated()
+    if duplicated.any():
+        print(
+            f"{C.Style.NORMAL}{C.Fore.YELLOW}Already trained this model:\n{hpars[duplicated]}{C.Style.DIM}{C.Fore.RESET}"  # noqa: E501
+        )
+        hpars = hpars.drop_duplicates()
+        return (True, hpars)
+    return (False, hpars)
 
 
 def make_cusum(preprocessing_config: models.PreprocessingConfig):
