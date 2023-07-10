@@ -12,6 +12,7 @@ import common
 import models
 import pred
 import read
+import save
 import vis
 from sklearn.model_selection import train_test_split
 
@@ -19,7 +20,7 @@ C.init()
 const = common.read_constants()
 
 # This defines the default config for preprocessing the data
-preprocessing_config = {
+preprocessing_config: models.PreprocessingConfig = {
     "seed": 42,
     "n_timesteps": 40,
     "delay": 0,
@@ -40,13 +41,21 @@ preprocessing_config = {
 def main(args):
     common.init_logs()
 
-    model: models.TemplateClassifier = models.MeanClassifier()
+    model: models.TemplateClassifier = make_ffnn(preprocessing_config)
+    # TODO read model from file
+    model_path = "saved_models/ffnn/2023-05-13T11:53:30/config.yaml"
+    reading = read.find_port()
+    if reading is not None:
+        port_name, baud_rate = reading
     handlers = [
-        read.ReadLineHandler(mock="gesture_data/train/2022-10-19T19:22:46.781569.csv"),
+        # read.ReadLineHandler(port_name=port_name, baud_rate=baud_rate),
+        read.ReadLineHandler(
+            mock="gesture_data/train/2022-11-06T18:49:26.928149.csv"),
         read.ParseLineHandler(),
         pred.PredictGestureHandler(model),
-        # pred.SpellCheckHandler(),
+        pred.SpellCheckHandler(),
         vis.StdOutHandler(),
+        # save.SaveHandler("tmp.csv"),
     ]
     print("Executing handlers")
     read.execute_handlers(handlers)
@@ -60,10 +69,10 @@ def run_experiment_01(args):
     dt = trn["dt_trn"]
 
     REP_DOMAIN = range(30)
-    N_TIMESTEPS_DOMAIN = (10, 15, 20, 25, 30, 35, 40)
-    NUM_GESTURE_CLASSES_DOMAIN = (5, 10, 20, 30, 40, 50)
+    N_TIMESTEPS_DOMAIN = (10, 20, 30, 40)
+    NUM_GESTURE_CLASSES_DOMAIN = (5, 20, 35, 50)
     MAX_OBS_PER_CLASS_DOMAIN = (30, 50, 70, 90)
-    DELAY_DOMAIN = (0, 1, 2, 5, 10, 15)
+    DELAY_DOMAIN = (0, 1, 2, 5, 10)
     iterables = [
         REP_DOMAIN,
         N_TIMESTEPS_DOMAIN,
@@ -72,9 +81,9 @@ def run_experiment_01(args):
         DELAY_DOMAIN,
     ]
     items = itertools.product(*iterables)
-    num_tests = np.prod([len(iterable) for iterable in iterables])
+    num_tests = int(np.prod([len(iterable) for iterable in iterables]))
     pbar = tqdm.tqdm(enumerate(items), total=num_tests)
-    for i, item in pbar:
+    for _i, item in pbar:
         (
             rep_num,
             n_timesteps,
@@ -104,6 +113,7 @@ def run_experiment_01(args):
         (X_trn, X_val, y_trn, y_val, dt_trn, dt_val,) = train_test_split(
             X, y, dt, stratify=y, random_state=preprocessing_config["seed"]
         )
+        print("\n\nppc", preprocessing_config)
         for model_type, make_model_fn in model_types.items():
             hpars_path = "saved_models/hpars.csv"
             hpars = (
@@ -128,7 +138,8 @@ def run_experiment_01(args):
                 "delay": [delay],
                 "model_type": [model_type],
             }
-            hpars = pd.concat([pd.DataFrame(new_hpar_line), hpars], ignore_index=True)
+            hpars = pd.concat(
+                [pd.DataFrame(new_hpar_line), hpars], ignore_index=True)
             duplicated = hpars.duplicated()
             if duplicated.any():
                 print(
@@ -184,6 +195,7 @@ def make_ffnn(preprocessing_config: models.PreprocessingConfig):
     ffnn_clf = models.FFNNClassifier(
         config={
             "preprocessing": preprocessing_config,
+            "n_timesteps": 40,
             "nn": {
                 "epochs": 20,
                 "batch_size": 205,
@@ -199,7 +211,8 @@ def make_ffnn(preprocessing_config: models.PreprocessingConfig):
 
 
 if __name__ == "__main__":
-    parser = argparse.ArgumentParser(description="The main entrypoint for Ergo")
+    parser = argparse.ArgumentParser(
+        description="The main entrypoint for Ergo")
     # Optional positional argument
     parser.add_argument(
         "--experiment",

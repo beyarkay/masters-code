@@ -6,12 +6,14 @@ import logging as l
 import numpy as np
 import os
 import sys
-import typing
+from typing import List, Optional, TypedDict, TypeVar
 import datetime
 import pandas as pd
 
+T = TypeVar("T")
 
-class ConstantsDict(typing.TypedDict):
+
+class ConstantsDict(TypedDict):
     sensors: dict[int, str]
     n_sensors: int
     sensor_bounds: dict[str, int]
@@ -240,3 +242,12 @@ def save_as_windowed_npz(df, n_timesteps=25):
     np.savez(
         f"./gesture_data/tst_{n_timesteps}.npz", X_tst=X_tst, y_tst=y_tst, dt_tst=dt_tst
     )
+
+
+def first_or_fail(arr: List[T], msg: Optional[str] = None) -> T:
+    if len(arr) == 1:
+        return arr[0]
+    else:
+        raise Exception(
+            msg if msg else f"Provided array had {len(arr)} (!= 1) elements: {arr}"
+        )

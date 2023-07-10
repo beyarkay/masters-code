@@ -21,6 +21,8 @@ import datetime
 import logging as l
 import sys
 
+from numpy.lib.npyio import NpzFile
+
 import common
 import models
 import numpy as np
@@ -30,18 +32,14 @@ import read
 import sklearn
 import sklearn.model_selection
 
-MAX_OBSERVATIONS = None
-
 
 def main():
     l.info("Reading data")
-    df: pd.DataFrame = read.read_data(offsets="offsets.csv")
-    if MAX_OBSERVATIONS is not None:
-        df = df.head(MAX_OBSERVATIONS)
-    trn = np.load("./gesture_data/trn_40.npz")
-    X = trn["X_trn"]
-    y = trn["y_trn"]
-    dt = trn["dt_trn"]
+    trn: NpzFile = np.load("./gesture_data/trn_40.npz")
+    X: np.ndarray = trn["X_trn"]
+    y: np.ndarray = trn["y_trn"]
+    dt: np.ndarray = trn["dt_trn"]
+    trn.close()
 
     (
         X_trn,

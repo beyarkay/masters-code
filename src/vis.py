@@ -4,6 +4,8 @@ This should include functions for visualising results via a live GUI, as well
 as for visualising results via the CLI.
 """
 
+import sys
+from typing import Iterable, Generic, List, TypeVar, Optional
 import tensorflow as tf
 import numpy as np
 import matplotlib.pyplot as plt
@@ -13,6 +15,7 @@ import common
 import pred
 import read
 from matplotlib.colors import LogNorm, Normalize
+import colorama as C
 
 
 class StdOutHandler(common.AbstractHandler):
@@ -22,18 +25,54 @@ class StdOutHandler(common.AbstractHandler):
         self,
         past_handlers: list[common.AbstractHandler],
     ):
-        read_line_handler: read.ReadLineHandler = next(
-            h for h in past_handlers if type(h) is read.ReadLineHandler
+        read_line_handler: read.ReadLineHandler = common.first_or_fail(
+            [h for h in past_handlers if type(h) is read.ReadLineHandler]
         )
-        truth: str = read_line_handler.truth
-        pred_handler: pred.PredictGestureHandler = next(
+        truth: Optional[str] = read_line_handler.truth
+
+        parse_line_handler: read.ParseLineHandler = common.first_or_fail(
+            [h for h in past_handlers if type(h) is read.ParseLineHandler]
+        )
+
+        def colour_map(low, high):
+            colours = [
+                C.Fore.YELLOW,
+                C.Fore.RED,
+                C.Fore.MAGENTA,
+                C.Fore.BLUE,
+                C.Fore.CYAN,
+                C.Fore.GREEN,
+            ]
+
+            def f(x):
+                oob = ""
+                if x > high:
+                    oob = C.Style.DIM
+                    x = high
+                elif x < low:
+                    oob = C.Style.DIM
+                    x = low
+                normed = (x - low) / (high - low)
+                return oob + colours[int(normed * (len(colours) - 1))]
+
+            return f
+
+        coloured = [
+            f"{colour_map(300, 900)(int(e))}{e}{C.Style.RESET_ALL}"
+            for e in parse_line_handler.raw_values
+        ]
+        print(f"Line: {' '.join(coloured)}")  # noqa: F821
+        maybe_pred_handler: list[pred.PredictGestureHandler] = [
             h for h in past_handlers if type(h) is pred.PredictGestureHandler
-        )
-        l.info(f"Prediction: {str(pred_handler.prediction): <20} Truth: {truth: <20}")
-        print(f"Prediction: {str(pred_handler.prediction): <20} Truth: {truth: <20}")
+        ]
+        if len(maybe_pred_handler) == 1:
+            pred_handler = maybe_pred_handler[0]
+            print(
+                f"Prediction: {str(pred_handler.prediction): <20} Truth: {truth: <20}"
+            )
 
 
-def plot_conf_mats(model, Xs, ys, titles=None):
+def plot_conf_mats(model, Xs, ys, titles):
     """Plots the confusion matrices for the given model with the given data.
 
     The confusion matrices are log10 transformed to highlight low-occuring
@@ -94,6 +133,7 @@ def plot_distributions(y_val, y_pred):
         if np.isfinite(x) and np.isfinite(y):
             axs[2].text(x, y, t)
 
+    # NOTE: this is called a CalibrationDisplay
     axs[2].plot([0, 10], [0, 10])
     axs[2].set(
         xlim=(0, np.max(np.log10(rows))),

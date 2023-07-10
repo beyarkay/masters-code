@@ -1,5 +1,7 @@
 """Defines the models which are used for prediction/classification."""
 
+import pandas as pd
+from sklearn.metrics import classification_report
 import logging as l
 import os
 import pickle
@@ -61,7 +63,7 @@ class FFNNConfig(typing.TypedDict):
 class PreprocessingConfig(typing.TypedDict):
     n_timesteps: int
     delay: int
-    max_obs_per_class: int
+    max_obs_per_class: Optional[int]
     gesture_allowlist: list[int]
     seed: int
 
@@ -94,6 +96,10 @@ class TemplateClassifier(BaseEstimator, ClassifierMixin):
         """
         self.config_path = config_path
         self.config = config
+        self.fit_start_time: Optional[float] = None
+        self.fit_finsh_time: Optional[float] = None
+        self.predict_start_time: Optional[float] = None
+        self.predict_finsh_time: Optional[float] = None
 
     def _check_model_params(self, X, y, dt, validation_data):
         """Validate model parameters before fitting.
@@ -113,7 +119,7 @@ class TemplateClassifier(BaseEstimator, ClassifierMixin):
             )
         if self.config_path is not None:
             with open(self.config_path, "r") as f:
-                self.config: ConfigDict = yaml.safe_load(f)
+                self.config: Optional[ConfigDict] = yaml.safe_load(f)
 
         delay = self.config["preprocessing"]["delay"]
         # First sort all the arrays with the datetime as the key
@@ -235,15 +241,24 @@ class TemplateClassifier(BaseEstimator, ClassifierMixin):
     def predict(self, X):
         raise NotImplementedError
 
+    def write_scores(self, model_dir):
+        if not os.path.exists(model_dir):
+            os.makedirs(model_dir)
+        """
+        Items to save for both validation & training
+        - confusion matrices
+        - loss plots
+        - sklearn classification report (pd.json_normalize(data, sep='.'))
+        """
+
+        pass
+
     def write(
         self,
         model_dir,
         dump_model=True,
         dump_conf_mat_plots=True,
-        dump_conf_mats=True,
-        dump_config=True,
         dump_loss_plots=True,
-        dump_predictions=True,
         dump_distribution_plots=True,
     ):
         if not os.path.exists(model_dir):
@@ -258,36 +273,100 @@ class TemplateClassifier(BaseEstimator, ClassifierMixin):
             else self.model.history.history
         )
 
-        fit_time = self.fit_finsh_time - self.fit_start_time
+        # Calculate the time taken to fit the model
+        fit_time = None
+        if self.fit_finsh_time is not None and self.fit_start_time is not None:
+            fit_time = self.fit_finsh_time - self.fit_start_time
+
         # Save the training stats
         y_trn_pred = self.predict(self.X_)
-        pred_time_trn = self.predict_finsh_time - self.predict_start_time
+
+        # Calculate the time taken to predict with the model
+        pred_time_trn = None
+        if self.predict_finsh_time is not None and self.predict_start_time is not None:
+            pred_time_trn = self.predict_finsh_time - self.predict_start_time
+        else:
+            print(
+                f"WARN: {self.predict_finsh_time=}, {self.predict_start_time=}")
+
+        clf_report_trn = pd.json_normalize(classification_report(
+            self.y_,
+            y_trn_pred,
+            output_dict=True,
+            zero_division=np.nan,
+        ))
+        clf_report_trn.columns = [f'trn.{c}' for c in clf_report_trn.columns]
+
+        cfg = pd.json_normalize(self.config)
+        to_save = pd.concat(
+            (clf_report_trn, cfg),
+            axis=1
+        )
+
         conf_mat_trn = self.confusion_matrix(self.y_, y_pred=y_trn_pred)
         results_trn = {
             "time_to_predict": pred_time_trn,
             "num_observations": self.X_.shape[0],
-            "prediction_time_per_obs": pred_time_trn / self.X_.shape[0],
+            "prediction_time_per_obs":
+                None
+                if pred_time_trn is None
+                else pred_time_trn / self.X_.shape[0],
             "confidence_matrix": conf_mat_trn.tolist(),
             "history": {k: v for k, v in history.items() if "val" not in k},
         }
-        np.savez(f"{model_dir}/y_pred_y_trn.npz", y_pred=y_trn_pred, y_trn=self.y_)
+        np.savez(f"{model_dir}/y_pred_y_trn.npz",
+                 y_pred=y_trn_pred, y_trn=self.y_)
         np.savez(f"{model_dir}/conf_mat_trn.npz", conf_mat_trn)
 
         # Save the validation stats
         X_val, y_val, dt_val = self.validation_data
         y_val_pred = self.predict(X_val)
-        pred_time_val = self.predict_finsh_time - self.predict_start_time
+        pred_time_val = None
+        if self.predict_finsh_time is not None and self.predict_start_time is not None:
+            pred_time_val = self.predict_finsh_time - self.predict_start_time
+        else:
+            print(
+                f"WARN: {self.predict_finsh_time=}, {self.predict_start_time=}")
+
+        prefixes = ["trn", "val"]
+        datasets = [(self.y_, self.X_, self.dt_), self.validation_data]
+        df = pd.DataFrame()
+        for prefix, (X, y, dt) in zip(prefixes, datasets):
+            print(f"Predicting for {prefix}")
+            # Make predictions
+            y_pred = self.predict(X)
+            # Get a classification_report formatted as a pandas DF
+            clf_report = pd.json_normalize(classification_report(
+                y_pred,
+                y,
+                output_dict=True,
+                zero_division=np.nan,
+            ))
+            # Rename the columns to start with the correct prefix
+            clf_report.columns = [f'{prefix}.{c}' for c in clf_report.columns]
+            raise
+
+            df = pd.concat(
+                (df, clf_report),
+                axis=1
+            )
+
+
         conf_mat_val = self.confusion_matrix(y_val, y_pred=y_val_pred)
         results_val = {
             "time_to_predict": pred_time_val,
             "num_observations": self.X_.shape[0],
-            "prediction_time_per_obs": pred_time_val / self.X_.shape[0],
+            "prediction_time_per_obs":
+                None
+                if pred_time_val is None
+                else pred_time_val / self.X_.shape[0],
             "history": {
                 (k.replace("val_", "")): v for k, v in history.items() if "val" in k
             },
             "confidence_matrix": conf_mat_val.tolist(),
         }
-        np.savez(f"{model_dir}/y_pred_y_val.npz", y_pred=y_val_pred, y_val=y_val)
+        np.savez(f"{model_dir}/y_pred_y_val.npz",
+                 y_pred=y_val_pred, y_val=y_val)
         np.savez(f"{model_dir}/conf_mat_val.npz", conf_mat_val)
 
         with open(f"{model_dir}/results.yaml", "w") as f:
@@ -324,7 +403,8 @@ class TemplateClassifier(BaseEstimator, ClassifierMixin):
             and hasattr(getattr(self, "history"), "history")
         ):
             h = self.history.history
-            fig, axs = plt.subplots(1, len(h.items()), figsize=(4 * len(h.items()), 3))
+            fig, axs = plt.subplots(
+                1, len(h.items()), figsize=(4 * len(h.items()), 3))
             for ax, (key, values) in zip(axs, h.items()):
                 ax.plot(self.model.history.epoch, values, label=key)
                 ax.set_title(key)
@@ -343,7 +423,7 @@ class TemplateClassifier(BaseEstimator, ClassifierMixin):
             output_dict=True,
         )
 
-    def confusion_matrix(self, y_true, y_pred=None, X_to_pred=None):
+    def confusion_matrix(self, y_true, y_pred=None, X_to_pred=None) -> np.ndarray:
         """Calculate the confusion matrix of some predictions.
 
         Either pass in the alread-predicted values via y_pred, or pass in some
@@ -352,8 +432,7 @@ class TemplateClassifier(BaseEstimator, ClassifierMixin):
         # Assert that exactly one of (y_pred, X_to_pred) is not None
         if bool(y_pred is None) == bool(X_to_pred is None):
             raise ValueError(
-                f"Exactly one of (y_pred, X_to_pred) must be not None, but \
-                y_pred is {y_pred} and X_to_pred is {X_to_pred}"
+                f"Exactly one of(y_pred, X_to_pred) must be not None, but y_pred is {y_pred} and X_to_pred is {X_to_pred}"
             )
         if X_to_pred is not None:
             y_pred = self.predict(X_to_pred)
@@ -452,7 +531,8 @@ class HMMClassifier(TemplateClassifier):
                 try:
                     score = m.score(xi)
                 except ValueError as e:
-                    print(f"Value error for HMM {self.i2g(key)}, observation {i}: {e}")
+                    print(
+                        f"Value error for HMM {self.i2g(key)}, observation {i}: {e}")
                     score = float("-inf")
                 if score > best_score:
                     best_score = score
@@ -578,7 +658,8 @@ class CuSUMClassifier(TemplateClassifier):
                     too_high = (np.abs(csm["cusum_neg"]) > threshold).any()
                     too_low = (np.abs(csm["cusum_pos"]) > threshold).any()
                     # record whether or not the cusum statistic passes the threshold
-                    record[observation_idx, sensor_idx] = int(too_high or too_low)
+                    record[observation_idx, sensor_idx] = int(
+                        too_high or too_low)
 
             # We don't care about all the details, just the sum of all the
             # times the statistic was over the threshold for a given gesture
@@ -603,7 +684,8 @@ class CuSUMClassifier(TemplateClassifier):
                 too_high = (np.abs(csm["cusum_neg"]) > threshold).any()
                 too_low = (np.abs(csm["cusum_pos"]) > threshold).any()
                 values[sensor_idx] = int(too_high or too_low)
-            preds[i] = np.argmin(np.linalg.norm(self.normalised - values, axis=1))
+            preds[i] = np.argmin(np.linalg.norm(
+                self.normalised - values, axis=1))
         self.predict_finsh_time = time.time()
         return preds
 
@@ -693,7 +775,7 @@ class FFNNClassifier(TFClassifier):
                 *dense_layers,
                 # NOTE: Last layer isn't softmax because it's impossible to get
                 # a stable loss calculation using softmax output
-                keras.layers.Dense(len(np.unique(y))),
+                keras.layers.Dense(len(np.unique(self.y_))),
             ]
         )
 
@@ -812,7 +894,8 @@ class LSTMClassifier(TFClassifier):
         self.model = keras.models.Sequential(
             [
                 # Shape [batch, time, features] => [batch, time, lstm_units]
-                keras.layers.LSTM(self.config["lstm"]["units"], return_sequences=False),
+                keras.layers.LSTM(
+                    self.config["lstm"]["units"], return_sequences=False),
                 # Shape => [batch, time, features]
                 keras.layers.Dense(len(self.classes_)),
             ]

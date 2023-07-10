@@ -5,12 +5,14 @@ import datetime
 import logging as l
 import os
 import pickle
-import typing
+import sys
+from typing import Optional, NewType, Callable
 
 import common
 import numpy as np
 import pandas as pd
 import serial
+from serial.tools.list_ports import comports
 
 
 def read_model(directory: str):
@@ -20,7 +22,7 @@ def read_model(directory: str):
 
 
 def read_data(
-    directory: str = "./gesture_data/train/", offsets: typing.Optional[str] = None
+    directory: str = "./gesture_data/train/", offsets: Optional[str] = None
 ) -> pd.DataFrame:
     """Reads in CSV files from a directory and returns a concatenated Pandas DataFrame.
 
@@ -73,19 +75,75 @@ def read_data(
         df["gesture"] = "gesture0255"
         # And set only the correct new gestures
         df["gesture"].iloc[offsets.index] = offsets["new_gesture"]
-        column_order = ["datetime", "gesture"] + sensors + ["file", "unaligned_gesture"]
+        column_order = ["datetime", "gesture"] + \
+            sensors + ["file", "unaligned_gesture"]
     else:
         column_order = ["datetime", "gesture"] + sensors + ["file"]
     return df[column_order]
 
 
+SerialPort = NewType("SerialPort", str)
+BaudRate = NewType("BaudRate", int)
+
 # TODO this should be a rewrite of `ml_utils.get_serial_port`.
-def find_port() -> str:
-    raise NotImplementedError
+
+
+def find_port() -> Optional[tuple[SerialPort, BaudRate]]:
+    """Look at the open serial ports and return one if it's correctly
+    formatted, otherwise exit with status code 1.
+
+    Only considers serial ports starting with `/dev/cu.usbmodem` and will offer
+    the user a choice if more than one port is available."""
+    # Read in all the available ports starting with `/dev/cu.usbmodem`
+    ports = [p.device for p in comports(
+    ) if p.device.startswith("/dev/cu.usbmodem")]
+    port = ""
+    print(f"Looking through ports {ports}")
+    if len(ports) >= 1:
+        # check that the available ports are actually communicating
+        filtered_ports = []
+        for i, port in enumerate(ports):
+            try:
+                with serial.Serial(
+                    port=port, baudrate=19_200, timeout=1
+                ) as serial_port:
+                    if serial_port.isOpen():
+                        # flush the port so the line we read will definitely
+                        # start from the beginning of the line
+                        line = serial_port.readline().decode("utf-8").strip()
+                        if line and "#" not in line:
+                            print(
+                                f"Port {port} is returning non empty non-comment lines"
+                            )
+                            filtered_ports.append(port)
+            except Exception as e:
+                continue
+        if len(filtered_ports) != 1:
+            for i, port in filtered_ports:
+                print(f"[{i}]: {port}")
+            idx = int(
+                input(f"Please choose a port index [0..{len(ports)-1}]: "))
+            port = ports[idx]
+        elif len(filtered_ports) == 0:
+            print("No ports beginning with `/dev/cu.usbmodem` found")
+            return None
+        else:
+            port = filtered_ports[0]
+    elif len(ports) == 0:
+        # If there are no ports available, exit with status code 1
+        print("No ports beginning with `/dev/cu.usbmodem` found")
+        return None
+    # Finally, return the port
+    return SerialPort(port), BaudRate(19_200)
 
 
 class ReadLineHandler(common.AbstractHandler):
-    def __init__(self, port_name=None, baud_rate=None, mock=None):
+    def __init__(
+        self,
+        port_name: Optional[SerialPort] = None,
+        baud_rate: Optional[BaudRate] = None,
+        mock=None,
+    ):
         common.AbstractHandler.__init__(self)
         # keep track of how many timesteps have passed
         self.timesteps = 0
@@ -96,14 +154,14 @@ class ReadLineHandler(common.AbstractHandler):
             # There are 3 ways to mock:
             if type(mock) is bool and mock:
                 # Just always return a constant array of 500s
-                self.mock_fn: typing.Callable = lambda _t: (
+                self.mock_fn: Callable = lambda _t: (
                     ["500"] * self.const["n_sensors"],
                     None,
                 )
                 l.info("Mocking data using 500s")
             elif callable(mock):
                 # The returned values are dictated by a provided callback
-                self.mock_fn: typing.Callable = mock
+                self.mock_fn: Callable = mock
                 l.info("Mocking data using custom callable")
             elif type(mock) is str and os.path.exists(mock):
                 # The returned values are dictated by the contents of a file on
@@ -116,25 +174,33 @@ class ReadLineHandler(common.AbstractHandler):
                     else:
                         values = self._data.iloc[timestep].values
                         truth: str = values[1]
-                        l.info(f"Returning mock data for timestep {timestep}: {values}")
+                        l.info(
+                            f"Returning mock data for timestep {timestep}: {values}")
                         return (",".join([str(i) for i in values[2:]]), truth)
 
-                self.mock_fn: typing.Callable = mock_fn
-                l.info(f"Mocking data using '{mock}' ({len(self._data)} lines)")
+                self.mock_fn: Callable = mock_fn
+                l.info(
+                    f"Mocking data using '{mock}' ({len(self._data)} lines)")
         elif port_name is not None and mock is None:
+            # Read the serial data live from the serial port
             self.should_mock: bool = False
             self.port_name: str = port_name
             self.baud_rate: int = (
-                common.read_constants()["baud_rate"] if baud_rate is None else baud_rate
+                common.read_constants()[
+                    "baud_rate"] if baud_rate is None else baud_rate
             )
             self.port: serial.serialposix.Serial = serial.Serial(
-                port=self.port, baudrate=self.baud_rate, timeout=1
+                port=self.port_name, baudrate=self.baud_rate, timeout=1
             )
 
             def not_implemented(_t: int):
+                # TODO this should read data from the serial port
+                # TODO also have a checker that ensures a decent signal is
+                # coming from each sensor, and errors helpfully if that's not
+                # the case
                 raise NotImplementedError
 
-            self.mock_fn: typing.Callable = not_implemented
+            self.mock_fn: Callable = not_implemented
 
         else:
             raise ValueError(
@@ -151,6 +217,7 @@ class ReadLineHandler(common.AbstractHandler):
         past_handlers: list[common.AbstractHandler],
     ):
         l.info("Executing ReadLineHandler")
+        self.truth: Optional[str] = None
         if self.should_mock:
             result, truth = self.mock_fn(self.timesteps)
             if result is None:
@@ -279,6 +346,7 @@ def execute_handlers(handlers: list[common.AbstractHandler]):
 
     while True:
         for i in range(len(handlers)):
+            # print(f"Executing handlers[{i}]: {handlers[i]}")
             # Execute the handler, and provide context by passing in
             # all previously executed handlers
             handlers[i].execute(handlers[:i])

@@ -9,6 +9,7 @@ import common
 import logging as l
 import numpy as np
 from autocorrect import Speller
+import yaml
 
 
 class PredictGestureHandler(common.AbstractHandler):
@@ -31,12 +32,44 @@ class PredictGestureHandler(common.AbstractHandler):
             self.control_flow = common.ControlFlow.BREAK
             n_samples = len(parse_line_handler.samples)
             n_timesteps = self.model.config["n_timesteps"]
-            l.warn(f"Not enough samples recorded ({n_samples} < {n_timesteps})")
+            l.warn(
+                f"Not enough samples recorded ({n_samples} < {n_timesteps})")
             return
-        sample = parse_line_handler.samples.tail(self.model.config["n_timesteps"])
+        sample = parse_line_handler.samples.tail(
+            self.model.config["n_timesteps"])
         const: common.ConstantsDict = common.read_constants()
         sample = sample[const["sensors"].values()].values
         self.prediction = self.model.predict(sample.astype(np.float32))
+
+
+class MapToKeystrokeHandler(common.AbstractHandler):
+    """Use the gesture to keystroke mapping to convert from predictions to
+    keystrokes."""
+
+    def __init__(self) -> None:
+        common.AbstractHandler.__init__(self)
+        with open("gesture_data/gesture_info.yaml", 'r') as f:
+            self.g2k = yaml.safe_load(f)['gestures']
+
+    def execute(
+        self,
+        past_handlers: list[common.AbstractHandler],
+    ) -> None:
+        print("Executing MapToKeystrokeHandler")
+        prediction_handler: PredictGestureHandler = next(
+            h for h in past_handlers if type(h) is PredictGestureHandler
+        )
+        if not hasattr(prediction_handler, "prediction"):
+            print("WARN: prediction_handler doesn't have any predictions")
+            return
+
+        gesture = 'unknown'
+        keystroke = 'unknown'
+        print(
+            f'prediction: {prediction_handler.prediction}, gesture: {gesture}, keystroke: {keystroke}')  # noqa: E501
+
+        raise NotImplementedError(
+            "MapToKeystrokeHandler has not been implemented yet")
 
 
 class SpellCheckHandler(common.AbstractHandler):
@@ -53,4 +86,5 @@ class SpellCheckHandler(common.AbstractHandler):
         print("Executing SpellCheckHandler")
         # TODO: Keep a log of the words which have been emitted so that we can
         # run the spell checker on them.
-        raise NotImplementedError("Spell Check handler has not been implemented yet")
+        raise NotImplementedError(
+            "Spell Check handler has not been implemented yet")
