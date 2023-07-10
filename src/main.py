@@ -23,6 +23,8 @@ const = common.read_constants()
 preprocessing_config: models.PreprocessingConfig = {
     "seed": 42,
     "n_timesteps": 40,
+    "num_gesture_classes": None,
+    "rep_num": None,
     "delay": 0,
     "max_obs_per_class": None,
     "gesture_allowlist": [

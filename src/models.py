@@ -244,18 +244,6 @@ class TemplateClassifier(BaseEstimator, ClassifierMixin):
     def predict(self, X):
         raise NotImplementedError
 
-    def write_scores(self, model_dir):
-        if not os.path.exists(model_dir):
-            os.makedirs(model_dir)
-        """
-        Items to save for both validation & training
-        - confusion matrices
-        - loss plots
-        - sklearn classification report (pd.json_normalize(data, sep='.'))
-        """
-
-        pass
-
     def write_as_jsonl(self, path):
         # Calculate the columns that should be included in the CSV
         # Create some placeholder variables which will be used to construct the
@@ -301,10 +289,23 @@ class TemplateClassifier(BaseEstimator, ClassifierMixin):
             # columns
             assert len(set(actual_cols).union(set(columns))) == len(columns)
 
-            # Append the new data as new columns in the DF
-            row_of_data = pd.concat((row_of_data, clf_report), axis='columns')
+            # Collect metrics about the time taken to predict
+            pred_time = None
+            if self.predict_finsh_time is not None and self.predict_start_time is not None:
+                pred_time = self.predict_finsh_time - self.predict_start_time
 
-        cfg = pd.json_normalize(self.config)
+            perf_metrics = pd.DataFrame({
+                f'{prefix}.pred_time': [pred_time],
+                f'{prefix}.num_observations': [X.shape[0]],
+            })
+
+            # Append the new data as new columns in the DF
+            row_of_data = pd.concat(
+                (row_of_data, clf_report, perf_metrics),
+                axis='columns'
+            )
+
+        cfg = pd.json_normalize(self.config)  # type: ignore
 
         to_save = pd.concat(
             (cfg, row_of_data),
