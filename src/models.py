@@ -305,10 +305,20 @@ class TemplateClassifier(BaseEstimator, ClassifierMixin):
                 axis='columns'
             )
 
+        # Get a DF of the model's config
         cfg = pd.json_normalize(self.config)  # type: ignore
 
+        # Keep track of how long it took to fit the model
+        fit_time = None
+        if self.fit_finsh_time is not None and self.fit_start_time is not None:
+            fit_time = self.fit_finsh_time - self.fit_start_time
+        extra_data = pd.DataFrame({
+            'fit_time': [fit_time],
+            'saved_at': [datetime.datetime.now()],
+        })
+
         to_save = pd.concat(
-            (cfg, row_of_data),
+            (cfg, row_of_data, extra_data),
             axis='columns',
             sort=True
         )
