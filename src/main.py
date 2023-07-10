@@ -71,10 +71,10 @@ def run_experiment_01(args):
     dt = trn["dt_trn"]
 
     REP_DOMAIN = range(30)
-    N_TIMESTEPS_DOMAIN = (10, 20, 30, 40)
-    NUM_GESTURE_CLASSES_DOMAIN = (5, 20, 35, 50)
-    MAX_OBS_PER_CLASS_DOMAIN = (30, 50, 70, 90)
-    DELAY_DOMAIN = (0, 1, 2, 5, 10)
+    N_TIMESTEPS_DOMAIN = (40, 20)
+    NUM_GESTURE_CLASSES_DOMAIN = (50, 5)
+    MAX_OBS_PER_CLASS_DOMAIN = (None, 30)
+    DELAY_DOMAIN = (10, 1, 0)
     iterables = [
         REP_DOMAIN,
         N_TIMESTEPS_DOMAIN,
@@ -96,7 +96,7 @@ def run_experiment_01(args):
 
         now = datetime.datetime.now()
         pbar.set_description(
-            f"{C.Style.BRIGHT}{now} rep:{rep_num: >2} t:{n_timesteps: >2} nClasses:{num_gesture_classes: >2} maxObs:{max_obs_per_class: >2} delay:{delay: >2}"  # noqa: E501
+            f"{C.Style.BRIGHT}{now} rep:{rep_num: >2} t:{n_timesteps: >2} nClasses:{num_gesture_classes: >2} maxObs:{max_obs_per_class} delay:{delay: >2}"  # noqa: E501
         )
         print(f"{C.Style.DIM}")
         preprocessing_config["n_timesteps"] = n_timesteps
