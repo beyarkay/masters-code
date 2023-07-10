@@ -323,8 +323,9 @@ class TemplateClassifier(BaseEstimator, ClassifierMixin):
             sort=True
         )
 
+        print(f"Saving data to jsonlines {path}")
         to_save.to_json(
-            path.replace(".csv", ".jsonl"),
+            path,
             lines=True,
             orient='records',
             mode='a',
