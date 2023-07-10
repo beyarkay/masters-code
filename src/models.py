@@ -1,4 +1,5 @@
 """Defines the models which are used for prediction/classification."""
+import datetime
 
 import pandas as pd
 from sklearn.metrics import classification_report
@@ -255,36 +256,68 @@ class TemplateClassifier(BaseEstimator, ClassifierMixin):
 
         pass
 
-    def append_results_to_csv(self, path):
-        # Calculate the classification report for training and validation
+    def write_as_jsonl(self, path):
+        # Calculate the columns that should be included in the CSV
+        # Create some placeholder variables which will be used to construct the
+        # columns list
         prefixes = ["trn", "val"]
-        datasets = [(self.y_, self.X_, self.dt_), self.validation_data]
-        df = pd.DataFrame()
+        classes = [str(i) for i in list(range(0, 51))] + \
+            ["weighted avg", "macro avg"]
+        metrics = ["precision", "recall", "f1-score", "support"]
+        # Each column is of the form {prefix}.{cls}.{metric}
+        columns = [
+            f"{prefix}.{cls}.{metric}"
+            for prefix in prefixes
+            for cls in classes
+            for metric in metrics
+        ]
+        # Except for the accuracy column, which is just {prefix}.accuracy
+        columns += [
+            f"{prefix}.accuracy"
+            for prefix in prefixes
+        ]
+
+        # Calculate the classification report for training and validation
+        datasets = [(self.X_, self.y_, self.dt_), self.validation_data]
+        df = pd.DataFrame(columns=columns)
+        row_of_data = pd.DataFrame()
         for prefix, (X, y, dt) in zip(prefixes, datasets):
             # Make predictions
             y_pred = self.predict(X)
 
             # Get a classification_report formatted as a pandas DF
-            clf_report = pd.json_normalize(classification_report(  # type: ignore
-                y_pred,
-                y,
+            report = classification_report(  # type: ignore
+                y_pred.astype(int),
+                y.astype(int),
                 output_dict=True,
                 zero_division=np.nan,  # type: ignore
-            ))
+            )
+            clf_report = pd.json_normalize(report)  # type: ignore
 
             # Rename the columns to start with the correct prefix
             clf_report.columns = [f'{prefix}.{c}' for c in clf_report.columns]
+            actual_cols = clf_report.columns
+            # Ensure that the calculated columns are a super set of the actual
+            # columns
+            assert len(set(actual_cols).union(set(columns))) == len(columns)
 
             # Append the new data as new columns in the DF
-            df = pd.concat(
-                (df, clf_report),
-                axis=1
-            )
+            row_of_data = pd.concat((row_of_data, clf_report), axis='columns')
 
-        # Append the DF to the CSV at `path`, and include a header line iff we
-        # haven't written to the file before
-        # https://stackoverflow.com/a/17975690/14555505
-        df.to_csv(path, mode='a', header=(not os.path.exists(path)))
+        cfg = pd.json_normalize(self.config)
+
+        to_save = pd.concat(
+            (cfg, row_of_data),
+            axis='columns',
+            sort=True
+        )
+
+        to_save.to_json(
+            path.replace(".csv", ".jsonl"),
+            lines=True,
+            orient='records',
+            mode='a',
+        )
 
     def write(
         self,

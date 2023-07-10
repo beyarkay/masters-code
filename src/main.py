@@ -105,15 +105,11 @@ def run_experiment_01(args):
         preprocessing_config["num_gesture_classes"] = len(allowlist)
         preprocessing_config["rep_num"] = rep_num
         preprocessing_config["seed"] = 42 + rep_num
-        print(f"Making classifiers with preprocessing {preprocessing_config}")
+        print(f"Making classifiers with preprocessing: {preprocessing_config}")
         model_types = {"HMM": make_hmm, "CuSUM": make_cusum, "FFNN": make_ffnn}
-        print(
-            f"Splitting on seed {preprocessing_config['seed']} into train and validation splits"  # noqa: E501
-        )
         (X_trn, X_val, y_trn, y_val, dt_trn, dt_val,) = train_test_split(
             X, y, dt, stratify=y, random_state=preprocessing_config["seed"]
         )
-        print("\n\npreprocessing config:", preprocessing_config)
         for model_type, make_model_fn in model_types.items():
             hpars_path = "saved_models/hpars.csv"
             cont, hpars = should_continue(
@@ -142,14 +138,7 @@ def run_experiment_01(args):
             print(f"{clf.X_.shape=}, {clf.validation_data[0].shape=}")
             now = datetime.datetime.now().isoformat(sep="T")[:-7]
             print("Saving model")
-            clf.write(
-                f"saved_models/{model_type}/{now}",
-                dump_conf_mat_plots=True,
-                dump_model=False,
-                dump_loss_plots=False,
-                dump_distribution_plots=False,
-            )
-            clf.append_results_to_csv("saved_models/results.csv")
+            clf.write_as_jsonl("saved_models/results.jsonl")
             # NOTE: This save MUST come last, so that we don't accidentally
             # record us having trained a model when we have not.
             hpars.to_csv(hpars_path, index=False)
@@ -212,7 +201,6 @@ def make_ffnn(preprocessing_config: models.PreprocessingConfig):
     ffnn_clf = models.FFNNClassifier(
         config={
             "preprocessing": preprocessing_config,
-            "n_timesteps": 40,
             "nn": {
                 "epochs": 20,
                 "batch_size": 205,
