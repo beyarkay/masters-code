@@ -652,6 +652,7 @@ class CuSUMClassifier(TemplateClassifier):
     algorithm."""
 
     def __init__(self, config_path=None, config=None):
+        super().__init__()
         self.config_path = config_path
         self.config = config
         self.config["model_type"] = self.config.get("model_type", "CuSUM")
