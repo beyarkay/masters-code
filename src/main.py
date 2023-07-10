@@ -149,6 +149,7 @@ def run_experiment_01(args):
                 dump_loss_plots=False,
                 dump_distribution_plots=False,
             )
+            clf.append_results_to_csv("saved_models/results.csv")
             # NOTE: This save MUST come last, so that we don't accidentally
             # record us having trained a model when we have not.
             hpars.to_csv(hpars_path, index=False)

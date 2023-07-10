@@ -66,6 +66,8 @@ class PreprocessingConfig(typing.TypedDict):
     max_obs_per_class: Optional[int]
     gesture_allowlist: list[int]
     seed: int
+    num_gesture_classes: Optional[int]
+    rep_num: Optional[int]
 
 
 class ConfigDict(typing.TypedDict):
@@ -253,6 +255,37 @@ class TemplateClassifier(BaseEstimator, ClassifierMixin):
 
         pass
 
+    def append_results_to_csv(self, path):
+        # Calculate the classification report for training and validation
+        prefixes = ["trn", "val"]
+        datasets = [(self.y_, self.X_, self.dt_), self.validation_data]
+        df = pd.DataFrame()
+        for prefix, (X, y, dt) in zip(prefixes, datasets):
+            # Make predictions
+            y_pred = self.predict(X)
+
+            # Get a classification_report formatted as a pandas DF
+            clf_report = pd.json_normalize(classification_report(  # type: ignore
+                y_pred,
+                y,
+                output_dict=True,
+                zero_division=np.nan,  # type: ignore
+            ))
+
+            # Rename the columns to start with the correct prefix
+            clf_report.columns = [f'{prefix}.{c}' for c in clf_report.columns]
+
+            # Append the new data as new columns in the DF
+            df = pd.concat(
+                (df, clf_report),
+                axis=1
+            )
+
+        # Append the DF to the CSV at `path`, and include a header line iff we
+        # haven't written to the file before
+        # https://stackoverflow.com/a/17975690/14555505
+        df.to_csv(path, mode='a', header=(not os.path.exists(path)))
+
     def write(
         self,
         model_dir,
@@ -350,7 +383,6 @@ class TemplateClassifier(BaseEstimator, ClassifierMixin):
                 (df, clf_report),
                 axis=1
             )
-
 
         conf_mat_val = self.confusion_matrix(y_val, y_pred=y_val_pred)
         results_val = {
