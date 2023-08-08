@@ -140,7 +140,7 @@ def run_experiment_01(args):
                 )
                 print(f"{clf.X_.shape=}, {clf.validation_data[0].shape=}")
             except TimeoutError as e:
-                print(f"Timed out!: {e}")
+                print(f"Timed out while fitting: {e}")
             now = datetime.datetime.now().isoformat(sep="T")[:-7]
             print("Saving model")
             clf.write_as_jsonl("saved_models/results.jsonl")
