@@ -239,11 +239,11 @@ class TemplateClassifier(BaseEstimator, ClassifierMixin):
         self.dt_ = dt
         self.validation_data = (X_val, y_val, dt_val)
 
-    @timeout(60)
+    @timeout(600)
     def fit(self, X, y):
         raise NotImplementedError
 
-    @timeout(60)
+    @timeout(600)
     def predict(self, X):
         raise NotImplementedError
 
@@ -273,7 +273,7 @@ class TemplateClassifier(BaseEstimator, ClassifierMixin):
         df = pd.DataFrame(columns=columns)
         row_of_data = pd.DataFrame()
         for prefix, (X, y, dt) in zip(prefixes, datasets):
-            # Make predictions
+            # Make predictions, attempting to mitigate the effect of a timeout
             while True:
                 try:
                     y_pred = self.predict(X)
@@ -537,7 +537,7 @@ class TemplateClassifier(BaseEstimator, ClassifierMixin):
 
 
 class MeanClassifier(TemplateClassifier):
-    @timeout(60)
+    @timeout(600)
     def fit(self, X, y, dt):
         self.fit_start_time = time.time()
         self.set_random_seed(self.config["preprocessing"]["seed"])
@@ -551,7 +551,7 @@ class MeanClassifier(TemplateClassifier):
         self.fit_finsh_time = time.time()
         return self
 
-    @timeout(60)
+    @timeout(600)
     def predict(self, X):
         self.predict_start_time = time.time()
         assert self.is_fitted_
@@ -571,7 +571,7 @@ class HMMClassifier(TemplateClassifier):
         self.config: Optional[ConfigDict] = config
         self.config["model_type"] = self.config.get("model_type", "HMM")
 
-    @timeout(60)
+    @timeout(600)
     def fit(self, X, y, dt, validation_data=None, verbose=False, **kwargs) -> None:
         self.fit_start_time = time.time()
         self.set_random_seed(self.config["preprocessing"]["seed"])
@@ -584,10 +584,10 @@ class HMMClassifier(TemplateClassifier):
             else np.unique(self.y_)
         )
         for yi in iterator:
-            if verbose:
-                print(
-                    f"HMM: Training {self.i2g(yi)} on {len(self.X_[self.y_ == yi])} observations"  # noqa: E501
-                )
+            # if verbose:
+            print(
+                f"HMM: Training {self.i2g(yi)} on {len(self.X_[self.y_ == yi])} observations"  # noqa: E501
+            )
             if (self.y_ == yi).sum() < (self.X_.shape[1] + 2):
                 print(
                     f"WARN: gesture {self.i2g(yi)} has only {(self.y_ == yi).sum()} observations "  # noqa: E501
@@ -614,7 +614,7 @@ class HMMClassifier(TemplateClassifier):
         self.fit_finsh_time = time.time()
         return self
 
-    @timeout(60)
+    @timeout(600)
     def predict(self, X, verbose=False):
         self.predict_start_time = time.time()
         predictions = np.empty(X.shape[0])
@@ -645,7 +645,7 @@ class HMMClassifier(TemplateClassifier):
         self.predict_finsh_time = time.time()
         return predictions
 
-    @timeout(60)
+    @timeout(600)
     def predict_score(self, X, verbose=False):
         self.predict_score_start_time = time.time()
         scores = np.empty((X.shape[0], len(self.models_)))
@@ -721,7 +721,7 @@ class CuSUMClassifier(TemplateClassifier):
             "lower_limit": lower_limit,
         }
 
-    @timeout(60)
+    @timeout(600)
     def fit(self, X, y, dt, validation_data, **kwargs) -> None:
         self.fit_start_time = time.time()
         self.set_random_seed(self.config["preprocessing"]["seed"])
@@ -775,7 +775,7 @@ class CuSUMClassifier(TemplateClassifier):
         self.is_fitted_ = True
         self.fit_finsh_time = time.time()
 
-    @timeout(60)
+    @timeout(600)
     def predict(self, X):
         self.predict_start_time = time.time()
         preds = np.empty(X.shape[0])
@@ -799,7 +799,7 @@ class CuSUMClassifier(TemplateClassifier):
 class TFClassifier(TemplateClassifier):
     """Just an abstract class for TensorFlow-style models"""
 
-    @timeout(60)
+    @timeout(600)
     def predict(self, X):
         """Give label predictions for each observation in X"""
         self.predict_start_time = time.time()
@@ -807,7 +807,7 @@ class TFClassifier(TemplateClassifier):
         self.predict_finsh_time = time.time()
         return preds
 
-    @timeout(60)
+    @timeout(600)
     def predict_proba(self, X):
         """Give label probabilities for each observation in X"""
         self.predict_proba_start_time = time.time()
@@ -844,7 +844,7 @@ class FFNNClassifier(TFClassifier):
         self.config["model_type"] = self.config.get("model_type", "FFNN")
         self.normalizer = None
 
-    @timeout(60)
+    @timeout(600)
     def fit(self, X, y, dt, validation_data=None, **kwargs) -> None:
         self.fit_start_time = time.time()
 
@@ -931,7 +931,7 @@ class RNNClassifier(TFClassifier):
         self.config["model_type"] = self.config.get("model_type", "RNN")
         self.normalizer = None
 
-    @timeout(60)
+    @timeout(600)
     def fit(self, X, y, dt, **kwargs):
         raise NotImplementedError("RNN hasn't been updated to use self.X_")
         self.fit_start_time = time.time()
@@ -990,7 +990,7 @@ class LSTMClassifier(TFClassifier):
         self.config["model_type"] = self.config.get("model_type", "LSTM")
         self.normalizer = None
 
-    @timeout(60)
+    @timeout(600)
     def fit(self, X, y, dt, validation_data=None, **kwargs):
         raise NotImplementedError("LSTM hasn't been updated to use self.X_")
         self.fit_start_time = time.time()

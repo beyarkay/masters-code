@@ -71,40 +71,34 @@ def run_experiment_01(args):
     dt = trn["dt_trn"]
 
     REP_DOMAIN = range(30)
-    N_TIMESTEPS_DOMAIN = (40, 20)
-    NUM_GESTURE_CLASSES_DOMAIN = (50, 5)
-    MAX_OBS_PER_CLASS_DOMAIN = (None, 30)
-    DELAY_DOMAIN = (10, 1, 0)
+    NUM_GESTURE_CLASSES_DOMAIN = (5, 20, 35, 50, 51)
     iterables = [
         REP_DOMAIN,
-        N_TIMESTEPS_DOMAIN,
         NUM_GESTURE_CLASSES_DOMAIN,
-        MAX_OBS_PER_CLASS_DOMAIN,
-        DELAY_DOMAIN,
     ]
     items = itertools.product(*iterables)
     num_tests = int(np.prod([len(iterable) for iterable in iterables]))
-    pbar = tqdm.tqdm(enumerate(items), total=num_tests)
-    for _i, item in pbar:
+    pbar = tqdm.tqdm(items, total=num_tests)
+    for item in pbar:
         (
             rep_num,
-            n_timesteps,
             num_gesture_classes,
-            max_obs_per_class,
-            delay,
         ) = item
+        n_timesteps = 40
+        max_obs_per_class = 200
+        delay = 0
 
         now = datetime.datetime.now()
         pbar.set_description(
-            f"{C.Style.BRIGHT}{now} rep:{rep_num: >2} t:{n_timesteps: >2} nClasses:{num_gesture_classes: >2} maxObs:{max_obs_per_class} delay:{delay: >2}"  # noqa: E501
+            f"{C.Style.BRIGHT}{now} rep:{rep_num: >2} nClasses:{num_gesture_classes: >2}"  # noqa: E501
         )
         print(f"{C.Style.DIM}")
         preprocessing_config["n_timesteps"] = n_timesteps
         preprocessing_config["max_obs_per_class"] = max_obs_per_class
         preprocessing_config["delay"] = delay
-        allowlist = [50] + list(range(num_gesture_classes))
-        preprocessing_config["gesture_allowlist"] = allowlist
-        preprocessing_config["num_gesture_classes"] = len(allowlist)
+        preprocessing_config["gesture_allowlist"] = list(
+            range(num_gesture_classes))
+        preprocessing_config["num_gesture_classes"] = num_gesture_classes
         preprocessing_config["rep_num"] = rep_num
         preprocessing_config["seed"] = 42 + rep_num
         print(f"Making classifiers with preprocessing: {preprocessing_config}")
