@@ -65,6 +65,111 @@ def main(args):
     read.execute_handlers(handlers)
 
 
+def run_ffnn_hpar_opt(args):
+    print("Executing 'FFNN Hyperparameter Optimisation'")
+    trn = np.load("./gesture_data/trn_40.npz")
+    X = trn["X_trn"]
+    y = trn["y_trn"]
+    dt = trn["dt_trn"]
+
+    REP_DOMAIN = range(30)
+    LEARNING_RATE_DOMAIN = np.power(10, -np.linspace(2.0, 6.0, 5))
+    NODES_IN_LAYER_1_DOMAIN = np.linspace(20, 200, 3)
+    NODES_IN_LAYER_2_DOMAIN = np.linspace(20, 200, 3)
+    iterables = [
+        REP_DOMAIN,
+        NODES_IN_LAYER_1_DOMAIN,
+        NODES_IN_LAYER_2_DOMAIN,
+        LEARNING_RATE_DOMAIN,
+    ]
+
+    n_timesteps = 40
+    epochs = 20
+    max_obs_per_class = None
+    delay = 0
+    num_gesture_classes = 51
+
+    items = itertools.product(*iterables)
+    num_tests = int(np.prod([len(iterable) for iterable in iterables]))
+    pbar = tqdm.tqdm(items, total=num_tests)
+    for item in pbar:
+        (
+            rep_num,
+            nodes_in_layer_1,
+            nodes_in_layer_2,
+            learning_rate,
+        ) = item
+
+        now = datetime.datetime.now()
+        pbar.set_description(
+            f"""{C.Style.BRIGHT}{now}  \
+            rep:{rep_num: >2}  \
+            nodes: [{nodes_in_layer_1}, {nodes_in_layer_2}] \
+            lr: {learning_rate:#7.2g}"""
+        )
+        print(f"{C.Style.DIM}")
+        preprocessing_config["n_timesteps"] = n_timesteps
+        preprocessing_config["max_obs_per_class"] = max_obs_per_class
+        preprocessing_config["delay"] = delay
+        preprocessing_config["gesture_allowlist"] = list(
+            range(num_gesture_classes))
+        preprocessing_config["num_gesture_classes"] = num_gesture_classes
+        preprocessing_config["rep_num"] = rep_num
+        preprocessing_config["seed"] = 42 + rep_num
+        print(f"Making classifiers with preprocessing: {preprocessing_config}")
+        (X_trn, X_val, y_trn, y_val, dt_trn, dt_val,) = train_test_split(
+            X, y, dt, stratify=y, random_state=preprocessing_config["seed"]
+        )
+        hpars_path = "saved_models/hpars_ffnn_opt.csv"
+        print(rep_num, nodes_in_layer_1, nodes_in_layer_2, learning_rate)
+        cont, hpars = should_continue(
+            hpars_path,
+            rep_num=rep_num,
+            nodes_in_layer_1=nodes_in_layer_1,
+            nodes_in_layer_2=nodes_in_layer_2,
+            learning_rate=learning_rate,
+        )
+        if cont:
+            continue
+
+        clf = models.FFNNClassifier(config={
+            "model_type": "FFNN",
+            "preprocessing": preprocessing_config,
+            "nn": {
+                "epochs": epochs,
+                "batch_size": 256,
+                "learning_rate": learning_rate,
+                "optimizer": "adam",
+            },
+            "ffnn": {
+                "nodes_per_layer": [nodes_in_layer_1, nodes_in_layer_2],
+            },
+            "cusum": None,
+            "lstm": None,
+            "hmm": None,
+            "n_timesteps": -1,
+        })
+
+        tf.keras.backend.clear_session()
+        try:
+            clf.fit(
+                X_trn,
+                y_trn,
+                dt_trn,
+                validation_data=(X_val, y_val, dt_val),
+                verbose=True,
+            )
+            print(f"{clf.X_.shape=}, {clf.validation_data[0].shape=}")
+        except TimeoutError as e:
+            print(f"Timed out while fitting: {e}")
+        now = datetime.datetime.now().isoformat(sep="T")[:-7]
+        print("Saving model")
+        clf.write_as_jsonl("saved_models/results_ffnn_opt.jsonl")
+        # NOTE: This save MUST come last, so that we don't accidentally
+        # record us having trained a model when we have not.
+        hpars.to_csv(hpars_path, index=False)
+
+
 def run_experiment_01(args):
     print("Executing experiment 01")
     trn = np.load("./gesture_data/trn_40.npz")
@@ -220,5 +325,7 @@ if __name__ == "__main__":
     args = parser.parse_args()
     if args.experiment == 1:
         run_experiment_01(args)
+    if args.experiment == 2:
+        run_ffnn_hpar_opt(args)
     else:
         main(args)
