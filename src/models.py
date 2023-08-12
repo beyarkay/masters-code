@@ -47,7 +47,7 @@ class NNConfig(typing.TypedDict):
     # The number of epochs for which each NN will be trained
     epochs: int
     # The learning rate
-    lr: float
+    learning_rate: float
     # The optimiser to use
     optimizer: str
     # The batch size to use during training

@@ -197,20 +197,24 @@ def make_hmm(preprocessing_config: models.PreprocessingConfig):
 
 
 def make_ffnn(preprocessing_config: models.PreprocessingConfig):
-    ffnn_clf = models.FFNNClassifier(
-        config={
-            "preprocessing": preprocessing_config,
-            "nn": {
-                "epochs": 20,
-                "batch_size": 205,
-                "learning_rate": 0.0005229989312667862,
-                "optimizer": "adam",
-            },
-            "ffnn": {
-                "nodes_per_layer": [36, 84, 271],
-            },
-        }
-    )
+    config: models.ConfigDict = {
+        "preprocessing": preprocessing_config,
+        "nn": {
+            "epochs": 20,
+            "batch_size": 205,
+            "learning_rate": 0.0005229989312667862,
+            "optimizer": "adam",
+        },
+        "ffnn": {
+            "nodes_per_layer": [36, 84, 271],
+        },
+        "cusum": None,
+        "lstm": None,
+        "hmm": None,
+        "n_timesteps": -1,
+    }
+
+    ffnn_clf = models.FFNNClassifier(config=config)
     return ffnn_clf
 
 
