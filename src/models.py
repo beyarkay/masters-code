@@ -1,4 +1,5 @@
 """Defines the models which are used for prediction/classification."""
+import seaborn as sns
 import datetime
 from wrapt_timeout_decorator import timeout
 
@@ -111,6 +112,7 @@ class TemplateClassifier(BaseEstimator, ClassifierMixin):
 
         This will read in the config (if applicable), check X,y are valid,
         store the classes, and perform some general pre-fit chores."""
+
         X_val, y_val, dt_val = validation_data
         print(
             f"Checking model params: {X.shape=} {y.shape=} {X_val.shape=} {y_val.shape=}"
@@ -838,6 +840,68 @@ class TFClassifier(TemplateClassifier):
             return keras.optimizers.Adam(learning_rate=2.5e-5)
 
 
+class DisplayConfMat(keras.callbacks.Callback):
+    def __init__(self, validation_data, fig_path, conf_mat=False):
+        self.validation_data = validation_data
+        self.X_val = validation_data[0]
+        self.y_val = validation_data[1]
+        self.history = {'loss': [], 'val_loss': []}
+        self.conf_mat = conf_mat
+        self.fig_path = fig_path
+
+    def on_epoch_end(self, _epoch, logs=None):
+        assert hasattr(self, 'history')
+        assert hasattr(self, 'X_val')
+        assert hasattr(self, 'y_val')
+        assert hasattr(self, 'conf_mat')
+        assert hasattr(self, 'validation_data')
+        assert hasattr(self, 'model') and self.model is not None
+        assert logs is not None
+        self.history['loss'].append(logs.get('loss', None))
+        self.history['val_loss'].append(logs.get('val_loss', None))
+        if self.conf_mat:
+            y_val_pred = np.argmax(tf.nn.softmax(
+                self.model(self.X_val)).numpy(), axis=1)
+            cm_val = tf.math.confusion_matrix(
+                self.y_val,
+                y_val_pred
+            ).numpy()
+        else:
+            y_val_pred = np.argmax(tf.nn.softmax(
+                self.model(self.X_val)).numpy(), axis=-1)
+            cm_val = tf.math.confusion_matrix(
+                self.y_val.flatten(),
+                y_val_pred.flatten()
+            ).numpy()
+            cm_val[-1, -1] = 0
+
+        fig, axs = plt.subplots(1, 3, figsize=(20, 5))
+
+        if len(np.unique(y_val_pred)) == 2:
+            sns.heatmap(cm_val, annot=True, fmt='d', ax=axs[2], square=True)
+        else:
+            sns.heatmap(
+                cm_val,
+                ax=axs[2],
+                square=True,
+                #                 norm=LogNorm(),
+                mask=(cm_val == 0)
+            )
+        axs[2].set_title('Validation Confusion Matrix')
+
+        axs[0].plot(self.history['loss'])
+        max_loss: float = max(self.history['loss'])
+        axs[0].set_ylim((0, max_loss * 1.1))
+        axs[0].set_title(f'Loss ({self.history["loss"][-1]:.6f})')
+
+        axs[1].plot(self.history['val_loss'])
+        max_val_loss: float = max(self.history['val_loss'])
+        axs[1].set_ylim((0, max_val_loss * 1.1))
+        axs[1].set_title(f'Val. loss ({self.history["val_loss"][-1]:.6f})')
+        plt.savefig(self.fig_path, bbox_inches='tight')
+        plt.close()
+
+
 class FFNNClassifier(TFClassifier):
     def __init__(
         self, config_path: Optional[str] = None, config: Optional[ConfigDict] = None
@@ -922,6 +986,13 @@ class FFNNClassifier(TFClassifier):
                 batch_size=self.config["nn"]["batch_size"],
                 epochs=self.config["nn"]["epochs"],
                 class_weight=calc_class_weights(self.g2i(self.y_)),
+                callbacks=[
+                    DisplayConfMat(
+                        validation_data=self.validation_data,
+                        conf_mat=False,
+                        fig_path="saved_models/ffnn_plot.png"
+                    ),
+                ],
                 **kwargs,
             )
         else:
