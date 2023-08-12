@@ -1,4 +1,6 @@
 import argparse
+import typing
+from typing import cast
 import os
 import pandas as pd
 import colorama as C
@@ -110,12 +112,12 @@ def run_experiment_01(args):
             hpars_path = "saved_models/hpars.csv"
             cont, hpars = should_continue(
                 hpars_path,
-                rep_num,
-                n_timesteps,
-                num_gesture_classes,
-                max_obs_per_class,
-                delay,
-                model_type
+                rep_num=rep_num,
+                n_timesteps=n_timesteps,
+                num_gesture_classes=num_gesture_classes,
+                max_obs_per_class=max_obs_per_class,
+                delay=delay,
+                model_type=model_type,
             )
             if cont:
                 continue
@@ -144,37 +146,23 @@ def run_experiment_01(args):
 
 
 def should_continue(
-    hpars_path, rep_num, n_timesteps, num_gesture_classes, max_obs_per_class, delay, model_type
+    hpars_path, **kwargs
 ) -> tuple[bool, pd.DataFrame]:
     hpars = (
         pd.read_csv(hpars_path)
         if os.path.exists(hpars_path)
-        else pd.DataFrame(
-            columns=[
-                "rep_num",
-                "n_timesteps",
-                "num_gesture_classes",
-                "max_obs_per_class",
-                "delay",
-                "model_type",
-            ]
-        )
+        else pd.DataFrame(columns=list(kwargs.keys()))
     )
-    new_hpar_line = {
-        "rep_num": [rep_num],
-        "n_timesteps": [n_timesteps],
-        "num_gesture_classes": [num_gesture_classes],
-        "max_obs_per_class": [max_obs_per_class],
-        "delay": [delay],
-        "model_type": [model_type],
-    }
+    new_hpar_line = {k: [v] for k, v in kwargs.items()}
+    print("new_hpar_line", new_hpar_line)
+    print("kwargs", kwargs)
     hpars = pd.concat([pd.DataFrame(new_hpar_line), hpars], ignore_index=True)
     duplicated = hpars.duplicated()
     if duplicated.any():
         print(
             f"{C.Style.NORMAL}{C.Fore.YELLOW}Already trained this model:\n{hpars[duplicated]}{C.Style.DIM}{C.Fore.RESET}"  # noqa: E501
         )
-        hpars = hpars.drop_duplicates()
+        hpars = cast(pd.DataFrame, hpars.drop_duplicates())
         return (True, hpars)
     return (False, hpars)
 
