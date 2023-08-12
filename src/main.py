@@ -198,6 +198,7 @@ def make_hmm(preprocessing_config: models.PreprocessingConfig):
 
 def make_ffnn(preprocessing_config: models.PreprocessingConfig):
     config: models.ConfigDict = {
+        "model_type": "FFNN",
         "preprocessing": preprocessing_config,
         "nn": {
             "epochs": 20,

@@ -8,7 +8,7 @@ import logging as l
 import os
 import pickle
 import typing
-from typing import Optional
+from typing import Optional, Literal, TypedDict
 import time
 
 import common
@@ -34,16 +34,16 @@ def calc_class_weights(y):
     return class_weight
 
 
-class HMMConfig(typing.TypedDict):
+class HMMConfig(TypedDict):
     # The number of iterations for which *each* HMM will be trained
     n_iter: int
 
 
-class CusumConfig(typing.TypedDict):
+class CusumConfig(TypedDict):
     thresh: int
 
 
-class NNConfig(typing.TypedDict):
+class NNConfig(TypedDict):
     # The number of epochs for which each NN will be trained
     epochs: int
     # The learning rate
@@ -54,15 +54,15 @@ class NNConfig(typing.TypedDict):
     batch_size: int
 
 
-class LSTMConfig(typing.TypedDict):
+class LSTMConfig(TypedDict):
     units: int
 
 
-class FFNNConfig(typing.TypedDict):
+class FFNNConfig(TypedDict):
     nodes_per_layer: list[int]
 
 
-class PreprocessingConfig(typing.TypedDict):
+class PreprocessingConfig(TypedDict):
     n_timesteps: int
     delay: int
     max_obs_per_class: Optional[int]
@@ -72,7 +72,7 @@ class PreprocessingConfig(typing.TypedDict):
     rep_num: Optional[int]
 
 
-class ConfigDict(typing.TypedDict):
+class ConfigDict(TypedDict):
     preprocessing: PreprocessingConfig
     n_timesteps: int
     cusum: Optional[CusumConfig]
@@ -80,6 +80,7 @@ class ConfigDict(typing.TypedDict):
     ffnn: Optional[FFNNConfig]
     lstm: Optional[LSTMConfig]
     hmm: Optional[HMMConfig]
+    model_type: Optional[Literal["FFNN", "HMM", "CuSUM"]]
 
 
 class TemplateClassifier(BaseEstimator, ClassifierMixin):
@@ -354,6 +355,8 @@ class TemplateClassifier(BaseEstimator, ClassifierMixin):
         dump_loss_plots=True,
         dump_distribution_plots=True,
     ):
+        assert hasattr(self, 'config') and self.config is not None
+
         if not os.path.exists(model_dir):
             os.makedirs(model_dir)
 
@@ -539,6 +542,7 @@ class TemplateClassifier(BaseEstimator, ClassifierMixin):
 class MeanClassifier(TemplateClassifier):
     @timeout(600)
     def fit(self, X, y, dt):
+        assert hasattr(self, 'config') and self.config is not None
         self.fit_start_time = time.time()
         self.set_random_seed(self.config["preprocessing"]["seed"])
         self._check_model_params(X, y, dt)
@@ -573,6 +577,7 @@ class HMMClassifier(TemplateClassifier):
 
     @timeout(600)
     def fit(self, X, y, dt, validation_data=None, verbose=False, **kwargs) -> None:
+        assert hasattr(self, 'config') and self.config is not None
         self.fit_start_time = time.time()
         self.set_random_seed(self.config["preprocessing"]["seed"])
         self._check_model_params(X, y, dt, validation_data)
@@ -841,12 +846,16 @@ class FFNNClassifier(TFClassifier):
         keras.backend.clear_session()
         self.config_path: Optional[str] = config_path
         self.config: Optional[ConfigDict] = config
-        self.config["model_type"] = self.config.get("model_type", "FFNN")
+        if self.config is not None:
+            self.config["model_type"] = self.config.get("model_type", "FFNN")
+        else:
+            self.config["model_type"] = "FFNN"
         self.normalizer = None
 
     @timeout(600)
     def fit(self, X, y, dt, validation_data=None, **kwargs) -> None:
         self.fit_start_time = time.time()
+        assert hasattr(self, 'config') and self.config is not None
 
         # -----------------
         # Set up everything
