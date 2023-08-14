@@ -75,7 +75,6 @@ class PreprocessingConfig(TypedDict):
 
 class ConfigDict(TypedDict):
     preprocessing: PreprocessingConfig
-    n_timesteps: int
     cusum: Optional[CusumConfig]
     nn: Optional[NNConfig]
     ffnn: Optional[FFNNConfig]
@@ -912,8 +911,6 @@ class FFNNClassifier(TFClassifier):
         self.config: Optional[ConfigDict] = config
         if self.config is not None:
             self.config["model_type"] = self.config.get("model_type", "FFNN")
-        else:
-            self.config["model_type"] = "FFNN"
         self.normalizer = None
 
     @timeout(600)
@@ -986,13 +983,13 @@ class FFNNClassifier(TFClassifier):
                 batch_size=self.config["nn"]["batch_size"],
                 epochs=self.config["nn"]["epochs"],
                 class_weight=calc_class_weights(self.g2i(self.y_)),
-                callbacks=[
-                    DisplayConfMat(
-                        validation_data=self.validation_data,
-                        conf_mat=False,
-                        fig_path="saved_models/ffnn_plot.png"
-                    ),
-                ],
+                # callbacks=[
+                #     DisplayConfMat(
+                #         validation_data=self.validation_data,
+                #         conf_mat=False,
+                #         fig_path="saved_models/ffnn_plot.png"
+                #     ),
+                # ],
                 **kwargs,
             )
         else:

@@ -1,22 +1,23 @@
-import argparse
-import typing
-from typing import cast
-import os
-import pandas as pd
-import colorama as C
-import tqdm
-import itertools
-import numpy as np
-import tensorflow as tf
-
-import datetime
-import common
-import models
-import pred
-import read
-import save
-import vis
 from sklearn.model_selection import train_test_split
+import vis
+import save
+import read
+import pred
+import models
+import common
+import datetime
+import tensorflow as tf
+import numpy as np
+import itertools
+import tqdm
+import colorama as C
+import pandas as pd
+import os
+from typing import cast
+import typing
+import argparse
+import sys
+
 
 C.init()
 const = common.read_constants()
@@ -73,7 +74,7 @@ def run_ffnn_hpar_opt(args):
     dt = trn["dt_trn"]
 
     REP_DOMAIN = range(30)
-    LEARNING_RATE_DOMAIN = np.power(10, -np.linspace(2.0, 6.0, 5))
+    LEARNING_RATE_DOMAIN = np.power(10, -np.linspace(2.0, 6.0, 3))
     NODES_IN_LAYER_1_DOMAIN = np.linspace(20, 200, 3)
     NODES_IN_LAYER_2_DOMAIN = np.linspace(20, 200, 3)
     iterables = [
@@ -103,9 +104,9 @@ def run_ffnn_hpar_opt(args):
         now = datetime.datetime.now()
         pbar.set_description(
             f"""{C.Style.BRIGHT}{now}  \
-            rep:{rep_num: >2}  \
-            nodes: [{nodes_in_layer_1}, {nodes_in_layer_2}] \
-            lr: {learning_rate:#7.2g}"""
+rep:{rep_num: >2}  \
+nodes: [{nodes_in_layer_1}, {nodes_in_layer_2}] \
+lr: {learning_rate:#7.2g}"""
         )
         print(f"{C.Style.DIM}")
         preprocessing_config["n_timesteps"] = n_timesteps
@@ -147,7 +148,6 @@ def run_ffnn_hpar_opt(args):
             "cusum": None,
             "lstm": None,
             "hmm": None,
-            "n_timesteps": -1,
         })
 
         tf.keras.backend.clear_session()
@@ -192,7 +192,7 @@ def run_experiment_01(args):
             num_gesture_classes,
         ) = item
         n_timesteps = 40
-        max_obs_per_class = 200
+        max_obs_per_class = None
         delay = 0
 
         now = datetime.datetime.now()
@@ -305,11 +305,34 @@ def make_ffnn(preprocessing_config: models.PreprocessingConfig):
         "cusum": None,
         "lstm": None,
         "hmm": None,
-        "n_timesteps": -1,
+        # "n_timesteps": -1,
     }
 
     ffnn_clf = models.FFNNClassifier(config=config)
     return ffnn_clf
+
+
+def save_from_serial(args):
+    print("saving from serial")
+    reading = read.find_port()
+    if reading is not None:
+        port_name, baud_rate = reading
+    else:
+        print("Could not infer serial port number")
+        sys.exit(1)
+        print(port_name, baud_rate)
+    handlers = [
+        read.ReadLineHandler(port_name=port_name, baud_rate=baud_rate),
+        read.ParseLineHandler(),
+        # pred.PredictGestureHandler(model),
+        # pred.SpellCheckHandler(),
+        vis.StdOutHandler(),
+        save.SaveHandler("tmp.csv"),
+    ]
+    print("Executing handlers")
+    read.execute_handlers(handlers)
+
+    sys.exit(0)
 
 
 if __name__ == "__main__":
@@ -317,15 +340,22 @@ if __name__ == "__main__":
         description="The main entrypoint for Ergo")
     # Optional positional argument
     parser.add_argument(
+        "--save",
+        action='store_true',
+        help="Whether or not to save the data from the serial port",
+    )
+    parser.add_argument(
         "--experiment",
         type=int,
         help="The experiment number to run",
     )
 
     args = parser.parse_args()
-    if args.experiment == 1:
+    if args.save:
+        save_from_serial(args)
+    elif args.experiment == 1:
         run_experiment_01(args)
-    if args.experiment == 2:
+    elif args.experiment == 2:
         run_ffnn_hpar_opt(args)
     else:
         main(args)

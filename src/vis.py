@@ -16,6 +16,7 @@ import pred
 import read
 from matplotlib.colors import LogNorm, Normalize
 import colorama as C
+import datetime
 
 
 class StdOutHandler(common.AbstractHandler):
@@ -35,6 +36,8 @@ class StdOutHandler(common.AbstractHandler):
         )
 
         def colour_map(low, high):
+            """Given a lower bound and an upper bound, return a colour-mapping
+            function for values in that range."""
             colours = [
                 C.Fore.YELLOW,
                 C.Fore.RED,
@@ -44,24 +47,39 @@ class StdOutHandler(common.AbstractHandler):
                 C.Fore.GREEN,
             ]
 
-            def f(x):
-                oob = ""
+            def colour_mapper(x: int):
+                # Clamp `x` to be in the range (low, high)
+                oob_str = ""
                 if x > high:
-                    oob = C.Style.DIM
+                    oob_str = C.Style.DIM
                     x = high
                 elif x < low:
-                    oob = C.Style.DIM
+                    oob_str = C.Style.DIM
                     x = low
+                # Normalise the provided value
                 normed = (x - low) / (high - low)
-                return oob + colours[int(normed * (len(colours) - 1))]
+                # Return the ASCII string required to colour the output
+                return oob_str + colours[int(normed * (len(colours) - 1))]
 
-            return f
+            return colour_mapper
 
-        coloured = [
-            f"{colour_map(300, 900)(int(e))}{e}{C.Style.RESET_ALL}"
-            for e in parse_line_handler.raw_values
+        bars = "▁▂▃▄▅▆▇█"
+        low = 400
+        high = 800
+        coloured_values = []
+        coloured_bars = []
+        for value in parse_line_handler.raw_values:
+            clamped = min(max(int(value), low), high)
+            bar = bars[int(((clamped - low) / (high - low)) * (len(bars)-1))]
+            colour = colour_map(low, high)(int(value))
+            coloured_bars.append(f"{colour}{bar}")
+            coloured_values.append(f"{colour}{value}")
+
+        now = str(datetime.datetime.now())[:-3]
+        chunked = [
+            ''.join(coloured_bars[i:i + 3]) for i in range(0, len(coloured_bars), 3)
         ]
-        print(f"Line: {' '.join(coloured)}")  # noqa: F821
+        print(f"[{now}] {' '.join(chunked)}{C.Style.RESET_ALL}")
         maybe_pred_handler: list[pred.PredictGestureHandler] = [
             h for h in past_handlers if type(h) is pred.PredictGestureHandler
         ]
