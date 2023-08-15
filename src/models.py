@@ -250,6 +250,16 @@ class TemplateClassifier(BaseEstimator, ClassifierMixin):
         raise NotImplementedError
 
     def write_as_jsonl(self, path):
+
+        # Create a directory for the supplementary data
+        assert self.config is not None
+        assert self.config['model_type'] is not None
+        now = datetime.datetime.now().isoformat(sep="T")
+        model_type = self.config['model_type'].lower()
+        model_dir = f"saved_models/{model_type}_{now}"
+        if not os.path.exists(model_dir):
+            os.makedirs(model_dir)
+
         # Calculate the columns that should be included in the CSV
         # Create some placeholder variables which will be used to construct the
         # columns list
@@ -272,7 +282,6 @@ class TemplateClassifier(BaseEstimator, ClassifierMixin):
 
         # Calculate the classification report for training and validation
         datasets = [(self.X_, self.y_, self.dt_), self.validation_data]
-        df = pd.DataFrame(columns=columns)
         row_of_data = pd.DataFrame()
         for prefix, (X, y, dt) in zip(prefixes, datasets):
             # Make predictions, attempting to mitigate the effect of a timeout
@@ -289,6 +298,12 @@ class TemplateClassifier(BaseEstimator, ClassifierMixin):
                     dt = dt[:len(dt)//2]
                     print(f"New shape: {X.shape}")
                     continue
+
+            np.savez(
+                f"{model_dir}/y_{prefix}_true_y_{prefix}_pred.npz",
+                y_pred=y_pred.astype(int),
+                y_true=y.astype(int)
+            )
 
             # Get a classification_report formatted as a pandas DF
             report = classification_report(  # type: ignore
@@ -347,6 +362,9 @@ class TemplateClassifier(BaseEstimator, ClassifierMixin):
             orient='records',
             mode='a',
         )
+
+        with open(f"{model_dir}/config.yaml", "w") as f:
+            yaml.safe_dump(self.config, f)
 
     def write(
         self,
