@@ -8,6 +8,7 @@ from sklearn.metrics import classification_report
 import logging as l
 import os
 import pickle
+import dill
 import typing
 from typing import Optional, Literal, TypedDict
 import time
@@ -855,6 +856,72 @@ class TFClassifier(TemplateClassifier):
             return keras.optimizers.RMSprop(learning_rate=2.5e-5)
         else:
             return keras.optimizers.Adam(learning_rate=2.5e-5)
+
+    def dump(self, directory: str):
+        assert self.config is not None
+        # Check that the model is a FFNN
+        if self.config['model_type'] != "FFNN":
+            assert False, "TemplateClassifier.dump is not implemented for non-FFNN models yet"
+
+        # Create the directory if it doesn't exist
+        if not os.path.exists(directory):
+            print(f"Dump[{directory}]: Creating directory")
+            os.makedirs(directory)
+
+        # Dump the actual model
+        print(f"Dump[{directory}]: Saving model")
+        self.model.save(f'{directory}/model.keras')  # type: ignore
+        # Dump the training data
+        print(f"Dump[{directory}]: Saving training data")
+        np.savez(
+            f"{directory}/trn.npz",
+            X_trn=self.X_,
+            y_trn=self.y_,
+            dt_trn=self.dt_
+        )
+        # Dump the validation data
+        print(f"Dump[{directory}]: Saving validation data")
+        np.savez(
+            f"{directory}/val.npz",
+            X_val=self.validation_data[0],
+            y_val=self.validation_data[1],
+            dt_val=self.validation_data[2],
+        )
+        # Dump the config
+        print(f"Dump[{directory}]: Saving config")
+        with open(f"{directory}/config.yaml", 'w') as f:
+            yaml.safe_dump(self.config, f)
+        # Dump the i2g and g2i vectorized functions using dill
+        print(f"Dump[{directory}]: Saving i2g and g2i")
+        with open(f"{directory}/i2g.dill", 'wb') as f:
+            dill.dump(self.i2g, f)
+        with open(f"{directory}/g2i.dill", 'wb') as f:
+            dill.dump(self.g2i, f)
+
+
+def load_tf(directory: str):
+    clf = TFClassifier(None, None)
+    # Load the model
+    print(f"Load[{directory}]: loading the model")
+    clf.model = keras.models.load_model(f'{directory}/model.keras')
+    # Load the training data
+    print(f"Load[{directory}]: loading training data")
+    clf.X_, clf.y_, clf.dt_ = np.load(f"{directory}/trn.npz").values()
+    # load the validation data
+    print(f"Load[{directory}]: loading validation data")
+    X_val, y_val, dt_val = np.load(f"{directory}/val.npz").values()
+    clf.validation_data = (X_val, y_val, dt_val)
+    # Load the config
+    print(f"Load[{directory}]: Loading config")
+    with open(f"{directory}/config.yaml", 'r') as f:
+        clf.config = yaml.safe_load(f)
+    # Load the i2g and g2i vectorized functions using dill
+    print(f"Load[{directory}]: Loading i2g and g2i")
+    with open(f"{directory}/i2g.dill", 'rb') as f:
+        clf.i2g = dill.load(f)
+    with open(f"{directory}/g2i.dill", 'rb') as f:
+        clf.g2i = dill.load(f)
+    return clf
 
 
 class DisplayConfMat(keras.callbacks.Callback):

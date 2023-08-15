@@ -79,15 +79,20 @@ class StdOutHandler(common.AbstractHandler):
         chunked = [
             ''.join(coloured_bars[i:i + 3]) for i in range(0, len(coloured_bars), 3)
         ]
-        print(f"[{now}] {' '.join(chunked)}{C.Style.RESET_ALL}")
+        print(f"[{now}] {' '.join(chunked)}{C.Style.RESET_ALL}", end='')
         maybe_pred_handler: list[pred.PredictGestureHandler] = [
             h for h in past_handlers if type(h) is pred.PredictGestureHandler
         ]
         if len(maybe_pred_handler) == 1:
             pred_handler = maybe_pred_handler[0]
+            prediction = str(pred_handler.prediction)
+            truth = "unknown" if truth is None else truth
+            color = "" if truth is None else C.Fore.GREEN if truth == prediction else C.Fore.RED
             print(
-                f"Prediction: {str(pred_handler.prediction): <20} Truth: {truth: <20}"
+                f" Prediction: {color}{prediction}{C.Style.RESET_ALL} Truth: {truth}"
             )
+        else:
+            print()
 
 
 def plot_conf_mats(model, Xs, ys, titles):

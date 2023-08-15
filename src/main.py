@@ -312,6 +312,30 @@ def make_ffnn(preprocessing_config: models.PreprocessingConfig):
     return ffnn_clf
 
 
+def predict_from_serial(args):
+    now = datetime.datetime.now().isoformat(sep="T")[:-7]
+    print(f"Predicting from serial with model '{args.predict_with}'")
+    clf = models.load_tf(args.predict_with)
+    reading = read.find_port()
+    if reading is None:
+        print("Could not infer serial port number")
+        sys.exit(1)
+    port_name, baud_rate = reading
+
+    handlers = [
+        read.ReadLineHandler(port_name=port_name, baud_rate=baud_rate),
+        read.ParseLineHandler(),
+        pred.PredictGestureHandler(clf),
+        # pred.SpellCheckHandler(),
+        vis.StdOutHandler(),
+        save.SaveHandler(f"tmp_{now}.csv"),
+    ]
+    print("Executing handlers")
+    read.execute_handlers(handlers)
+
+    sys.exit(0)
+
+
 def save_from_serial(args):
     print("saving from serial")
     reading = read.find_port()
@@ -340,18 +364,29 @@ if __name__ == "__main__":
         description="The main entrypoint for Ergo")
     # Optional positional argument
     parser.add_argument(
+        "-p",
+        "--predict-with",
+        action='store',
+        help="The directory containing the model",
+    )
+    parser.add_argument(
+        "-s",
         "--save",
         action='store_true',
         help="Whether or not to save the data from the serial port",
     )
+
     parser.add_argument(
+        "-e",
         "--experiment",
         type=int,
         help="The experiment number to run",
     )
 
     args = parser.parse_args()
-    if args.save:
+    if args.predict_with:
+        predict_from_serial(args)
+    elif args.save:
         save_from_serial(args)
     elif args.experiment == 1:
         run_experiment_01(args)
