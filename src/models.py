@@ -128,40 +128,43 @@ class TemplateClassifier(BaseEstimator, ClassifierMixin):
             with open(self.config_path, "r") as f:
                 self.config: Optional[ConfigDict] = yaml.safe_load(f)
 
+        assert self.config is not None
         delay = self.config["preprocessing"]["delay"]
-        # First sort all the arrays with the datetime as the key
-        argsort = np.argsort(dt)
-        X = X[argsort]
-        y = y[argsort]
-        dt = dt[argsort]
-        # Then chop off either the front or the end of the arrays by amount `delay`
-        # https://stackoverflow.com/a/76252774/14555505
-        # ------Original--------
-        # X: [0 1 2 3 4 5 6]
-        # y: [0 1 2 3 4 5 6]
-        # ------Delayed by 2------
-        # X[+2:None] =>  [    2 3 4 5 6]
-        # y[None:-2] =>      [0 1 2 3 4    ]
-        # ------Delayed by -2------
-        # X[None:-2] =>     [0 1 2 3 4    ]
-        # y[+2:None] => [    2 3 4 5 6]
-        start_index = delay if delay > 0 else None
-        finsh_index = delay if delay < 0 else None
-        X = X[start_index:finsh_index]
-        X_val = X_val[start_index:finsh_index]
-        dt = dt[start_index:finsh_index]
-        dt_val = dt_val[start_index:finsh_index]
-        # We need to shift the labels in the opposite direction so that they
-        # line up correctly. So trimming the last element of X should also mean
-        # we trim the first element of y, and vice versa. This is equivalent to
-        # negating the delay
-        start_index = -delay if delay < 0 else None
-        finsh_index = -delay if delay > 0 else None
-        y = y[start_index:finsh_index]
-        y_val = y_val[start_index:finsh_index]
-        print(
-            f"Shapes after {delay=}: {X.shape=} {y.shape=} {X_val.shape=} {y_val.shape=}"  # noqa: E501
-        )
+        assert delay == 0, "Delay is not implemented yet"
+        if delay != 0:
+            # First sort all the arrays with the datetime as the key
+            argsort = np.argsort(dt)
+            X = X[argsort]
+            y = y[argsort]
+            dt = dt[argsort]
+            # Then chop off either the front or the end of the arrays by amount `delay`
+            # https://stackoverflow.com/a/76252774/14555505
+            # ------Original--------
+            # X: [0 1 2 3 4 5 6]
+            # y: [0 1 2 3 4 5 6]
+            # ------Delayed by 2------
+            # X[+2:None] =>  [    2 3 4 5 6]
+            # y[None:-2] =>      [0 1 2 3 4    ]
+            # ------Delayed by -2------
+            # X[None:-2] =>     [0 1 2 3 4    ]
+            # y[+2:None] => [    2 3 4 5 6]
+            start_index = delay if delay > 0 else None
+            finsh_index = delay if delay < 0 else None
+            X = X[start_index:finsh_index]
+            X_val = X_val[start_index:finsh_index]
+            dt = dt[start_index:finsh_index]
+            dt_val = dt_val[start_index:finsh_index]
+            # We need to shift the labels in the opposite direction so that they
+            # line up correctly. So trimming the last element of X should also mean
+            # we trim the first element of y, and vice versa. This is equivalent to
+            # negating the delay
+            start_index = -delay if delay < 0 else None
+            finsh_index = -delay if delay > 0 else None
+            y = y[start_index:finsh_index]
+            y_val = y_val[start_index:finsh_index]
+            print(
+                f"Shapes after {delay=}: {X.shape=} {y.shape=} {X_val.shape=} {y_val.shape=}"  # noqa: E501
+            )
 
         # Remove any gestures which aren't on the allowlist
         allowlist = self.config["preprocessing"]["gesture_allowlist"]
