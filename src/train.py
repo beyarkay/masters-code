@@ -153,7 +153,10 @@ def objective_nn(trial, X_trn, y_trn, X_val, y_val):
             "learning_rate": trial.suggest_float("learning_rate", 1e-6, 1e-1, log=True),
             "optimizer": "adam",
         },
-        "ffnn": {"nodes_per_layer": nodes_per_layer},
+        "ffnn": {
+            "nodes_per_layer": nodes_per_layer,
+            "l2_coefficient": 0.0,
+        },
     }
     pprint(config)
     model = models.FFNNClassifier(config=config)

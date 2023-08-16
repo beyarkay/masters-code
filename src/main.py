@@ -144,6 +144,7 @@ lr: {learning_rate:#7.2g}"""
             },
             "ffnn": {
                 "nodes_per_layer": [nodes_in_layer_1, nodes_in_layer_2],
+                "l2_coefficient": 0.0,
             },
             "cusum": None,
             "lstm": None,
@@ -301,6 +302,7 @@ def make_ffnn(preprocessing_config: models.PreprocessingConfig):
         },
         "ffnn": {
             "nodes_per_layer": [36, 84, 271],
+            "l2_coefficient": 0.0,
         },
         "cusum": None,
         "lstm": None,

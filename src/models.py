@@ -62,6 +62,7 @@ class LSTMConfig(TypedDict):
 
 class FFNNConfig(TypedDict):
     nodes_per_layer: list[int]
+    l2_coefficient: float
 
 
 class PreprocessingConfig(TypedDict):
@@ -1012,6 +1013,8 @@ class FFNNClassifier(TFClassifier):
     def fit(self, X, y, dt, validation_data=None, **kwargs) -> None:
         self.fit_start_time = time.time()
         assert hasattr(self, 'config') and self.config is not None
+        assert self.config['nn'] is not None
+        assert self.config['ffnn'] is not None
 
         # -----------------
         # Set up everything
@@ -1037,6 +1040,8 @@ class FFNNClassifier(TFClassifier):
             keras.layers.Dense(
                 units=npl,
                 activation="relu",
+                kernel_regularizer=keras.regularizers.l2(
+                    self.config['ffnn']['l2_coefficient']),
             )
             for npl in self.config["ffnn"]["nodes_per_layer"]
         ]
