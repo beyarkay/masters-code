@@ -345,6 +345,18 @@ class TemplateClassifier(BaseEstimator, ClassifierMixin):
         # Get a DF of the model's config
         cfg = pd.json_normalize(self.config)  # type: ignore
 
+        # If the model is a NN, store it's loss
+        trn_loss: float = (
+            np.nan
+            if self.config['model_type'] != 'FFNN' else
+            self.model.history.history['loss'][-1]
+        )
+        val_loss: float = (
+            np.nan
+            if self.config['model_type'] != 'FFNN' else
+            self.model.history.history['val_loss'][-1]
+        )
+
         # Keep track of how long it took to fit the model
         fit_time = None
         if self.fit_finsh_time is not None and self.fit_start_time is not None:
@@ -352,6 +364,8 @@ class TemplateClassifier(BaseEstimator, ClassifierMixin):
         extra_data = pd.DataFrame({
             'fit_time': [fit_time],
             'saved_at': [datetime.datetime.now().isoformat(sep="T")],
+            'val.loss': [val_loss],
+            'trn.loss': [trn_loss],
         })
 
         to_save = pd.concat(
