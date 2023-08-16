@@ -3,7 +3,6 @@
 This module should also take care of pre-processing the given data into a
 format that's appropriate for the model.
 """
-import models
 import read
 import common
 import logging as l
@@ -15,9 +14,9 @@ import yaml
 class PredictGestureHandler(common.AbstractHandler):
     """Use a model to predict the gesture from the latest observation."""
 
-    def __init__(self, clf: models.TemplateClassifier):
+    def __init__(self, clf):
         common.AbstractHandler.__init__(self)
-        self.clf: models.TemplateClassifier = clf
+        self.clf = clf
 
     def execute(
         self,
