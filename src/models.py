@@ -751,6 +751,8 @@ class CuSUMClassifier(TemplateClassifier):
 
     @timeout(600)
     def fit(self, X, y, dt, validation_data, **kwargs) -> None:
+        assert self.config is not None
+        assert self.config["cusum"] is not None
         self.fit_start_time = time.time()
         self.set_random_seed(self.config["preprocessing"]["seed"])
         self._check_model_params(X, y, dt, validation_data)
@@ -805,6 +807,8 @@ class CuSUMClassifier(TemplateClassifier):
 
     @timeout(600)
     def predict(self, X):
+        assert self.config is not None
+        assert self.config["cusum"] is not None
         self.predict_start_time = time.time()
         preds = np.empty(X.shape[0])
         threshold = self.config["cusum"]["thresh"]
@@ -847,8 +851,11 @@ class TFClassifier(TemplateClassifier):
         """Returns the Keras Optimizer object given a config dict defining
         learning rate, optimiser type, and other optimiser related
         shenanigans"""
-        optimizer_string = self.config.get("nn", {}).get("optimizer", "adam")
-        learning_rate = self.config.get("nn", {}).get("learning_rate", 2.5e-5)
+        assert self.config is not None
+        nn_config = self.config.get("nn", {})
+        assert nn_config is not None
+        optimizer_string = nn_config.get("optimizer", "adam")
+        learning_rate = nn_config.get("learning_rate", 2.5e-5)
         if optimizer_string == "adam":
             # if self.uses_validation_weights:
             #     print("Using legacy adam")
