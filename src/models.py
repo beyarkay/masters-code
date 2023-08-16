@@ -63,6 +63,7 @@ class LSTMConfig(TypedDict):
 class FFNNConfig(TypedDict):
     nodes_per_layer: list[int]
     l2_coefficient: float
+    dropout_rate: float
 
 
 class PreprocessingConfig(TypedDict):
@@ -1051,12 +1052,15 @@ class FFNNClassifier(TFClassifier):
 
         # Construct the fully connected layers from the model config
         dense_layers = [
-            keras.layers.Dense(
-                units=npl,
-                activation="relu",
-                kernel_regularizer=keras.regularizers.l2(
-                    self.config['ffnn']['l2_coefficient']),
-            )
+            [
+                keras.layers.Dense(
+                    units=npl,
+                    activation="relu",
+                    kernel_regularizer=keras.regularizers.l2(
+                        self.config['ffnn']['l2_coefficient']),
+                ),
+                keras.layers.Dropout(self.config["ffnn"]["dropout_rate"])
+            ]
             for npl in self.config["ffnn"]["nodes_per_layer"]
         ]
 
@@ -1066,7 +1070,9 @@ class FFNNClassifier(TFClassifier):
                 keras.layers.Input(shape=self.X_.shape[1:]),
                 self.normalizer,
                 keras.layers.Flatten(),
-                *dense_layers,
+                # Flatten the list of (dense, dropout) tuples
+                # https://stackoverflow.com/a/952952/14555505
+                *[item for sublist in dense_layers for item in sublist],
                 # NOTE: Last layer isn't softmax because it's impossible to get
                 # a stable loss calculation using softmax output
                 keras.layers.Dense(len(np.unique(self.y_))),

@@ -132,24 +132,27 @@ lr: {learning_rate:#7.2g}"""
         )
         if cont:
             continue
-
-        clf = models.FFNNClassifier(config={
+        nn_config: models.NNConfig = {
+            "epochs": epochs,
+            "batch_size": 256,
+            "learning_rate": learning_rate,
+            "optimizer": "adam",
+        }
+        ffnn_config: models.FFNNConfig = {
+            "nodes_per_layer": [nodes_in_layer_1, nodes_in_layer_2],
+            "l2_coefficient": 0.0,
+            "dropout_rate": 0.0,
+        }
+        config: models.ConfigDict = {
             "model_type": "FFNN",
             "preprocessing": preprocessing_config,
-            "nn": {
-                "epochs": epochs,
-                "batch_size": 256,
-                "learning_rate": learning_rate,
-                "optimizer": "adam",
-            },
-            "ffnn": {
-                "nodes_per_layer": [nodes_in_layer_1, nodes_in_layer_2],
-                "l2_coefficient": 0.0,
-            },
+            "nn": nn_config,
+            "ffnn": ffnn_config,
             "cusum": None,
             "lstm": None,
             "hmm": None,
-        })
+        }
+        clf = models.FFNNClassifier(config=config)
 
         tf.keras.backend.clear_session()
         try:
@@ -303,6 +306,7 @@ def make_ffnn(preprocessing_config: models.PreprocessingConfig):
         "ffnn": {
             "nodes_per_layer": [36, 84, 271],
             "l2_coefficient": 0.0,
+            "dropout_rate": 0.0,
         },
         "cusum": None,
         "lstm": None,

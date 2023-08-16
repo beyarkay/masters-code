@@ -156,6 +156,7 @@ def objective_nn(trial, X_trn, y_trn, X_val, y_val):
         "ffnn": {
             "nodes_per_layer": nodes_per_layer,
             "l2_coefficient": 0.0,
+            "dropout_rate": 0.0,
         },
     }
     pprint(config)
