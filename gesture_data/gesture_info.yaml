@@ -1,58 +1,57 @@
 gestures:
+  gesture0000: { description: 000 l 5, key: "control" }
+  gesture0001: { description: 000 l 4, key: "=" }
+  gesture0002: { description: 000 l 3, key: "'" }
+  gesture0003: { description: 000 l 2, key: "-" }
+  gesture0004: { description: 000 l 1, key: "[" }
+  gesture0005: { description: 000 r 1, key: "]" }
+  gesture0006: { description: 000 r 2, key: "space" }
+  gesture0007: { description: 000 r 3, key: "\\" }
+  gesture0008: { description: 000 r 4, key: "`" }
+  gesture0009: { description: 000 r 5, key: "shift" }
 
-  gesture0000: { description: 000 l 5, key: "control"}
-  gesture0001: { description: 000 l 4, key: "="}
-  gesture0002: { description: 000 l 3, key: "'"}
-  gesture0003: { description: 000 l 2, key: "-"}
-  gesture0004: { description: 000 l 1, key: "["}
-  gesture0005: { description: 000 r 1, key: "]"}
-  gesture0006: { description: 000 r 2, key: "space"}
-  gesture0007: { description: 000 r 3, key: "\\"}
-  gesture0008: { description: 000 r 4, key: "`"}
-  gesture0009: { description: 000 r 5, key: "shift"}
-                                                       
-  gesture0010: { description: 045 l 5, key:  z }
-  gesture0011: { description: 045 l 4, key:  x }
-  gesture0012: { description: 045 l 3, key:  c }
-  gesture0013: { description: 045 l 2, key:  v }
-  gesture0014: { description: 045 l 1, key:  b }
-  gesture0015: { description: 045 r 1, key:  n }
-  gesture0016: { description: 045 r 2, key:  m }
-  gesture0017: { description: 045 r 3, key: ","}
-  gesture0018: { description: 045 r 4, key:  . }
-  gesture0019: { description: 045 r 5, key:  / }
-                                                       
-  gesture0020: { description: 090 l 5, key:  a }
-  gesture0021: { description: 090 l 4, key:  s }
-  gesture0022: { description: 090 l 3, key:  d }
-  gesture0023: { description: 090 l 2, key:  f }
-  gesture0024: { description: 090 l 1, key:  g }
-  gesture0025: { description: 090 r 1, key:  h }
-  gesture0026: { description: 090 r 2, key:  j }
-  gesture0027: { description: 090 r 3, key:  k }
-  gesture0028: { description: 090 r 4, key:  l }
-  gesture0029: { description: 090 r 5, key:  ; }
-                                                       
-  gesture0030: { description: 135 l 5, key:  q }
-  gesture0031: { description: 135 l 4, key:  w }
-  gesture0032: { description: 135 l 3, key:  e }
-  gesture0033: { description: 135 l 2, key:  r }
-  gesture0034: { description: 135 l 1, key:  t }
-  gesture0035: { description: 135 r 1, key:  y }
-  gesture0036: { description: 135 r 2, key:  u }
-  gesture0037: { description: 135 r 3, key:  i }
-  gesture0038: { description: 135 r 4, key:  o }
-  gesture0039: { description: 135 r 5, key:  p }
-                                                       
-  gesture0040: { description: 180 l 5, key: "1"}
-  gesture0041: { description: 180 l 4, key: "2"}
-  gesture0042: { description: 180 l 3, key: "3"}
-  gesture0043: { description: 180 l 2, key: "4"}
-  gesture0044: { description: 180 l 1, key: "5"}
-  gesture0045: { description: 180 r 1, key: "6"}
-  gesture0046: { description: 180 r 2, key: "7"}
-  gesture0047: { description: 180 r 3, key: "8"}
-  gesture0048: { description: 180 r 4, key: "9"}
-  gesture0049: { description: 180 r 5, key: "0"}
+  gesture0010: { description: 045 l 5, key: z }
+  gesture0011: { description: 045 l 4, key: x }
+  gesture0012: { description: 045 l 3, key: c }
+  gesture0013: { description: 045 l 2, key: v }
+  gesture0014: { description: 045 l 1, key: b }
+  gesture0015: { description: 045 r 1, key: n }
+  gesture0016: { description: 045 r 2, key: m }
+  gesture0017: { description: 045 r 3, key: "," }
+  gesture0018: { description: 045 r 4, key: . }
+  gesture0019: { description: 045 r 5, key: / }
 
-  gesture0255: { description: "no movement", key: ""}
+  gesture0020: { description: 090 l 5, key: a }
+  gesture0021: { description: 090 l 4, key: s }
+  gesture0022: { description: 090 l 3, key: d }
+  gesture0023: { description: 090 l 2, key: f }
+  gesture0024: { description: 090 l 1, key: g }
+  gesture0025: { description: 090 r 1, key: h }
+  gesture0026: { description: 090 r 2, key: j }
+  gesture0027: { description: 090 r 3, key: k }
+  gesture0028: { description: 090 r 4, key: l }
+  gesture0029: { description: 090 r 5, key: ; }
+
+  gesture0030: { description: 135 l 5, key: q }
+  gesture0031: { description: 135 l 4, key: w }
+  gesture0032: { description: 135 l 3, key: e }
+  gesture0033: { description: 135 l 2, key: r }
+  gesture0034: { description: 135 l 1, key: t }
+  gesture0035: { description: 135 r 1, key: y }
+  gesture0036: { description: 135 r 2, key: u }
+  gesture0037: { description: 135 r 3, key: i }
+  gesture0038: { description: 135 r 4, key: o }
+  gesture0039: { description: 135 r 5, key: p }
+
+  gesture0040: { description: 180 l 5, key: "1" }
+  gesture0041: { description: 180 l 4, key: "2" }
+  gesture0042: { description: 180 l 3, key: "3" }
+  gesture0043: { description: 180 l 2, key: "4" }
+  gesture0044: { description: 180 l 1, key: "5" }
+  gesture0045: { description: 180 r 1, key: "6" }
+  gesture0046: { description: 180 r 2, key: "7" }
+  gesture0047: { description: 180 r 3, key: "8" }
+  gesture0048: { description: 180 r 4, key: "9" }
+  gesture0049: { description: 180 r 5, key: "0" }
+
+  gesture0255: { description: "no movement", key: "" }
