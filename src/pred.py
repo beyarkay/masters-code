@@ -42,6 +42,7 @@ class PredictGestureHandler(common.AbstractHandler):
             np.float32).reshape((1, *sample.shape))
 
         self.prediction = self.clf.predict(processed_sample)[0]
+        self.stdout = f" Prediction: {self.prediction}"
 
 
 class MapToKeystrokeHandler(common.AbstractHandler):

@@ -73,10 +73,25 @@ def run_ffnn_hpar_opt(args):
     y = trn["y_trn"]
     dt = trn["dt_trn"]
 
-    REP_DOMAIN = range(30)
-    LEARNING_RATE_DOMAIN = np.power(10, -np.linspace(2.0, 6.0, 3))
-    NODES_IN_LAYER_1_DOMAIN = np.linspace(20, 200, 3)
-    NODES_IN_LAYER_2_DOMAIN = np.linspace(20, 200, 3)
+    """
+    - for `rep_num` in 0..10:
+    - for `num_gesture_classes` in (5, 50, 51):
+    - for `nodes_per_layer.1` in (20, 40, 60, 80, 100)
+    - for `nodes_per_layer.2` in (20, 40, 60, 80, 100)
+    - for `learning_rate` in (1e-2, 1e-3, 1e-4, 1e-5)
+    - for `dropout_rate` in (0.0, 0.5, 1.0)
+    - for `l2_coefficient` in (1e-2, 1e-3, 1e-4, 1e-5)
+    """
+
+    REP_DOMAIN = range(10)
+    NUM_GESTURE_CLASSES_DOMAIN = (5, 50, 51)
+
+    NODES_IN_LAYER_1_DOMAIN = (20, 50, 80, 110)
+    NODES_IN_LAYER_2_DOMAIN = (20, 50, 80, 110)
+    LEARNING_RATE_DOMAIN = (1e-2, 5e-3, 1e-3, 5e-4, 1e-4, 5e-5)
+    DROPOUT_RATE_DOMAIN = (0.0, 0.2, 0.4, 0.6)
+    L2_COEFFICIENT_DOMAIN = (0, 1e-6, 1e-4, 1e-2)
+
     iterables = [
         REP_DOMAIN,
         NODES_IN_LAYER_1_DOMAIN,
@@ -181,8 +196,8 @@ def run_experiment_01(args):
     y = trn["y_trn"]
     dt = trn["dt_trn"]
 
-    REP_DOMAIN = range(30)
-    NUM_GESTURE_CLASSES_DOMAIN = (5, 20, 35, 50, 51)
+    REP_DOMAIN = range(10)
+    NUM_GESTURE_CLASSES_DOMAIN = (5, 50, 51)
     iterables = [
         REP_DOMAIN,
         NUM_GESTURE_CLASSES_DOMAIN,
@@ -345,19 +360,17 @@ def predict_from_serial(args):
 def save_from_serial(args):
     print("saving from serial")
     reading = read.find_port()
-    if reading is not None:
-        port_name, baud_rate = reading
-    else:
+    if reading is None:
         print("Could not infer serial port number")
         sys.exit(1)
-        print(port_name, baud_rate)
+    port_name, baud_rate = reading
+    now = datetime.datetime.now().isoformat(sep="T")[:-7]
     handlers = [
         read.ReadLineHandler(port_name=port_name, baud_rate=baud_rate),
         read.ParseLineHandler(),
-        # pred.PredictGestureHandler(model),
-        # pred.SpellCheckHandler(),
+        vis.InsertLabelHandler(labels=args.labels),
         vis.StdOutHandler(),
-        save.SaveHandler("tmp.csv"),
+        save.SaveHandler(f"gesture_data/tmp_{now}.csv"),
     ]
     print("Executing handlers")
     read.execute_handlers(handlers)
@@ -380,6 +393,13 @@ if __name__ == "__main__":
         "--save",
         action='store_true',
         help="Whether or not to save the data from the serial port",
+    )
+
+    parser.add_argument(
+        "-l",
+        "--labels",
+        action='append',
+        help="The labels of gestures to cycle through, like g0001, or g0045",
     )
 
     parser.add_argument(

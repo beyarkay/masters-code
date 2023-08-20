@@ -1,7 +1,9 @@
 """Takes care of saving numpy arrays of data to disk.
 """
 
+from typing import Optional
 import datetime
+import vis
 import os
 import read
 import common
@@ -26,7 +28,13 @@ class SaveHandler(common.AbstractHandler):
             [h for h in past_handlers if type(h) is read.ParseLineHandler]
         )
         now = datetime.datetime.now().isoformat(sep="T")
+        insert_label_handler: Optional[vis.InsertLabelHandler] = next(iter([
+            h for h in
+            past_handlers if
+            type(h) is vis.InsertLabelHandler
+        ]), None)
+        label = insert_label_handler.truth if insert_label_handler else None
 
-        line_to_save = f"{now},None,{','.join(parse_line_handler.raw_values[2:])}\n"
+        line_to_save = f"{now},{label},{','.join(parse_line_handler.raw_values[2:])}\n"
         with open(self.path, "a") as f:
             f.writelines([line_to_save])

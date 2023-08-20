@@ -72,11 +72,11 @@ def make_gestures_and_indices(
     - to_gesture: A function that takes an integer index and returns a gesture name.
     """
     if to_g is None:
-        to_g = lambda i: f"gesture{i:0>4}"  # noqa: E731
+        def to_g(i): return f"gesture{i:0>4}"  # noqa: E731
     if to_i is None:
-        to_i = lambda g: int(g[-4:])  # noqa: E731
+        def to_i(g): return int(g[-4:])  # noqa: E731
     if not_g255 is None:
-        not_g255 = lambda g: g != g255  # noqa: E731
+        def not_g255(g): return g != g255  # noqa: E731
 
     # Determine the maximum integer value, which is one less than the number of
     # unique gestures.
@@ -116,6 +116,7 @@ class AbstractHandler:
     def __init__(self):
         self.const: ConstantsDict = read_constants()
         self.control_flow = ControlFlow.CONTINUE
+        self.stdout: str = ""
 
     def execute(
         self,
@@ -187,7 +188,8 @@ def make_windows(
     """
 
     # Group data by file and apply rolling window of size window_size
-    rolling = data.groupby("file").rolling(window=window_size, min_periods=window_size)
+    rolling = data.groupby("file").rolling(
+        window=window_size, min_periods=window_size)
 
     # Calculate unique number of files
     uniq = len(data.value_counts("file"))

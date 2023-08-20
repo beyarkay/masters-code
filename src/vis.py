@@ -19,6 +19,54 @@ import colorama as C
 import datetime
 
 
+class InsertLabelHandler(common.AbstractHandler):
+    """Output various information to stdout for debugging purposes."""
+
+    def __init__(self, labels=None):
+        super().__init__()
+        self.labels = [] if labels is None else labels
+        self.labels_index = 0
+        self.can_increment = True
+
+    def execute(
+        self,
+        past_handlers: list[common.AbstractHandler],
+    ):
+        read_line_handler: read.ReadLineHandler = common.first_or_fail(
+            [h for h in past_handlers if type(h) is read.ReadLineHandler]
+        )
+        # Check that we're not reading data in from anywhere but serial input
+        assert not read_line_handler.should_mock
+
+        # Get the current time
+        ms = datetime.datetime.now().microsecond / 1000
+        s = datetime.datetime.now().second
+        # We want to repeat the label printing every `period_ms`
+        period_ms = 1000
+        div, mod = divmod(s * 1000 + ms, period_ms)
+        remaining_ms = int(period_ms - mod)
+        # If it's time to repeat
+        if remaining_ms < 35:
+            # Only actually take any action on the first iteration of each cycle
+            if self.can_increment:
+                self.can_increment = False
+                # Print out a special message
+                label = self.labels[self.labels_index]
+                self.stdout = f"{C.Fore.BLACK}{C.Back.RED}Label: {label}"
+                self.truth = label.replace("g0", "gesture0")
+                self.labels_index = (self.labels_index + 1) % len(self.labels)
+        else:
+            if remaining_ms < period_ms // 8:
+                color = C.Fore.GREEN
+            elif remaining_ms < period_ms // 3:
+                color = C.Fore.BLUE
+            else:
+                color = ""
+            self.can_increment = True
+            self.truth = "gesture0255"
+            self.stdout = f"{color}{remaining_ms: >3} {C.Style.DIM}({self.labels[self.labels_index]})"
+
+
 class StdOutHandler(common.AbstractHandler):
     """Output various information to stdout for debugging purposes."""
 
@@ -34,6 +82,9 @@ class StdOutHandler(common.AbstractHandler):
         parse_line_handler: read.ParseLineHandler = common.first_or_fail(
             [h for h in past_handlers if type(h) is read.ParseLineHandler]
         )
+
+        stdouts = ';'.join(
+            str(h.stdout) + C.Style.RESET_ALL for h in past_handlers if h.stdout)
 
         def colour_map(low, high):
             """Given a lower bound and an upper bound, return a colour-mapping
@@ -76,23 +127,13 @@ class StdOutHandler(common.AbstractHandler):
             coloured_values.append(f"{colour}{value}")
 
         now = str(datetime.datetime.now())[:-3]
-        chunked = [
+        chunked = ' '.join(
             ''.join(coloured_bars[i:i + 3]) for i in range(0, len(coloured_bars), 3)
-        ]
-        print(f"[{now}] {' '.join(chunked)}{C.Style.RESET_ALL}", end='')
-        maybe_pred_handler: list[pred.PredictGestureHandler] = [
-            h for h in past_handlers if type(h) is pred.PredictGestureHandler
-        ]
-        if len(maybe_pred_handler) == 1:
-            pred_handler = maybe_pred_handler[0]
-            prediction = str(pred_handler.prediction)
-            truth = "unknown" if truth is None else truth
-            color = "" if truth is None else C.Fore.GREEN if truth == prediction else C.Fore.RED
-            print(
-                f" Prediction: {color}{prediction}{C.Style.RESET_ALL} Truth: {truth}"
-            )
-        else:
-            print()
+        )
+
+        print(
+            f"[{now}] {chunked}{C.Style.RESET_ALL} | {stdouts}{C.Style.RESET_ALL}"
+        )
 
 
 def plot_conf_mats(model, Xs, ys, titles):
