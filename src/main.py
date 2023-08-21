@@ -100,8 +100,7 @@ def run_ffnn_hpar_opt(args):
     for hpars_tuple in pbar:
         hpars = {k: v for k, v in zip(hyperparameters.keys(), hpars_tuple)}
 
-        # TODO Don't use the full 6 decimal places for time
-        now = datetime.datetime.now()
+        now = datetime.datetime.now().isoformat(sep="T")[:-7]
         pbar.set_description(
             f"""{C.Style.BRIGHT}{now}  \
 rep:{hpars['rep_num']: >2}  \
