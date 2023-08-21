@@ -66,12 +66,17 @@ def main(args):
     read.execute_handlers(handlers)
 
 
-def run_ffnn_hpar_opt(args):
-    print("Executing 'FFNN Hyperparameter Optimisation'")
-    trn = np.load("./gesture_data/trn_40.npz")
+def load_dataset(path="./gesture_data/trn_40.npz"):
+    trn = np.load(path)
     X = trn["X_trn"]
     y = trn["y_trn"]
     dt = trn["dt_trn"]
+    return (X, y, dt)
+
+
+def run_ffnn_hpar_opt(args):
+    print("Executing 'FFNN Hyperparameter Optimisation'")
+    X, y, dt = load_dataset()
 
     """
     - for `rep_num` in 0..10:
@@ -203,10 +208,7 @@ l2: {l2_coefficient:#7.2g} \
 
 def run_experiment_01(args):
     print("Executing experiment 01")
-    trn = np.load("./gesture_data/trn_40.npz")
-    X = trn["X_trn"]
-    y = trn["y_trn"]
-    dt = trn["dt_trn"]
+    X, y, dt = load_dataset()
 
     REP_DOMAIN = range(10)
     NUM_GESTURE_CLASSES_DOMAIN = (5, 50, 51)
