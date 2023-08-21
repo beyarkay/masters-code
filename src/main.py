@@ -247,82 +247,6 @@ rep:{hpars['rep_num']: >2}  \
         hpars_df.to_csv(hpars_path, index=False)
 
 
-def run_experiment_01(args):
-    print("Executing experiment 01")
-    X, y, dt = load_dataset()
-
-    REP_DOMAIN = range(10)
-    NUM_GESTURE_CLASSES_DOMAIN = (5, 50, 51)
-    iterables = [
-        REP_DOMAIN,
-        NUM_GESTURE_CLASSES_DOMAIN,
-    ]
-    items = itertools.product(*iterables)
-    num_tests = int(np.prod([len(iterable) for iterable in iterables]))
-    pbar = tqdm.tqdm(items, total=num_tests)
-    for item in pbar:
-        (
-            rep_num,
-            num_gesture_classes,
-        ) = item
-        n_timesteps = 40
-        max_obs_per_class = None
-        delay = 0
-
-        now = datetime.datetime.now()
-        pbar.set_description(
-            f"{C.Style.BRIGHT}{now} rep:{rep_num: >2} nClasses:{num_gesture_classes: >2}"  # noqa: E501
-        )
-        print(f"{C.Style.DIM}")
-        preprocessing_config["n_timesteps"] = n_timesteps
-        preprocessing_config["max_obs_per_class"] = max_obs_per_class
-        preprocessing_config["delay"] = delay
-        preprocessing_config["gesture_allowlist"] = list(
-            range(num_gesture_classes))
-        preprocessing_config["num_gesture_classes"] = num_gesture_classes
-        preprocessing_config["rep_num"] = rep_num
-        preprocessing_config["seed"] = 42 + rep_num
-        print(f"Making classifiers with preprocessing: {preprocessing_config}")
-        model_types = {"HMM": make_hmm, "CuSUM": make_cusum, "FFNN": make_ffnn}
-        (X_trn, X_val, y_trn, y_val, dt_trn, dt_val,) = train_test_split(
-            X, y, dt, stratify=y, random_state=preprocessing_config["seed"]
-        )
-        for model_type, make_model_fn in model_types.items():
-            hpars_path = "saved_models/hpars.csv"
-            cont, hpars = should_continue(
-                hpars_path,
-                rep_num=rep_num,
-                n_timesteps=n_timesteps,
-                num_gesture_classes=num_gesture_classes,
-                max_obs_per_class=max_obs_per_class,
-                delay=delay,
-                model_type=model_type,
-            )
-            if cont:
-                continue
-            clf = make_model_fn(preprocessing_config)
-            print(
-                f"{C.Style.BRIGHT}{C.Fore.BLUE}Training model {clf.config['model_type']}{C.Fore.RESET}{C.Style.DIM}"
-            )
-            tf.keras.backend.clear_session()
-            try:
-                clf.fit(
-                    X_trn,
-                    y_trn,
-                    dt_trn,
-                    validation_data=(X_val, y_val, dt_val),
-                    verbose=False,
-                )
-                print(f"{clf.X_.shape=}, {clf.validation_data[0].shape=}")
-            except TimeoutError as e:
-                print(f"Timed out while fitting: {e}")
-            print("Saving model")
-            clf.write_as_jsonl("saved_models/results.jsonl")
-            # NOTE: This save MUST come last, so that we don't accidentally
-            # record us having trained a model when we have not.
-            hpars.to_csv(hpars_path, index=False)
-
-
 def should_continue(
     hpars_path, **kwargs
 ) -> tuple[bool, pd.DataFrame]:
@@ -341,23 +265,6 @@ def should_continue(
         hpars = cast(pd.DataFrame, hpars.drop_duplicates())
         return (True, hpars)
     return (False, hpars)
-
-
-def make_cusum(preprocessing_config: models.PreprocessingConfig):
-    cusum_clf = models.CuSUMClassifier(
-        config={"preprocessing": preprocessing_config, "cusum": {"thresh": 100}}
-    )
-    return cusum_clf
-
-
-def make_hmm(preprocessing_config: models.PreprocessingConfig):
-    hmm_clf = models.HMMClassifier(
-        config={
-            "preprocessing": preprocessing_config,
-            "hmm": {"n_iter": 20},
-        }
-    )
-    return hmm_clf
 
 
 def make_ffnn(preprocessing_config: models.PreprocessingConfig):
@@ -468,8 +375,6 @@ if __name__ == "__main__":
         predict_from_serial(args)
     elif args.save:
         save_from_serial(args)
-    elif args.experiment == 'all':
-        run_experiment_01(args)
     elif args.experiment == 'ffnn':
         run_ffnn_hpar_opt(args)
     elif args.experiment == 'hmm':
