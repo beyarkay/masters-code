@@ -100,6 +100,11 @@ def run_ffnn_hpar_opt(args):
     for hpars_tuple in pbar:
         hpars = {k: v for k, v in zip(hyperparameters.keys(), hpars_tuple)}
 
+        hpars_path = "saved_models/hpars_ffnn_opt.csv"
+        cont, hpars_df = should_continue(hpars_path, **hpars)
+        if cont:
+            continue
+
         now = datetime.datetime.now().isoformat(sep="T")[:-7]
         pbar.set_description(
             f"""{C.Style.BRIGHT}{now}  \
@@ -124,12 +129,6 @@ l2: {hpars['l2_coefficient']:#7.2g} \
         (X_trn, X_val, y_trn, y_val, dt_trn, dt_val,) = train_test_split(
             X, y, dt, stratify=y, random_state=preprocessing_config["seed"]
         )
-        # TODO check `should_continue` earlier on in the for-loop
-        hpars_path = "saved_models/hpars_ffnn_opt.csv"
-        cont, hpars_df = should_continue(hpars_path, **hpars)
-        if cont:
-            continue
-
         nn_config: models.NNConfig = {
             "epochs": epochs,
             "batch_size": 256,
