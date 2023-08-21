@@ -42,7 +42,7 @@ class InsertLabelHandler(common.AbstractHandler):
         ms = datetime.datetime.now().microsecond / 1000
         s = datetime.datetime.now().second
         # We want to repeat the label printing every `period_ms`
-        period_ms = 1000
+        period_ms = 500
         div, mod = divmod(s * 1000 + ms, period_ms)
         remaining_ms = int(period_ms - mod)
         # If it's time to repeat
@@ -52,19 +52,14 @@ class InsertLabelHandler(common.AbstractHandler):
                 self.can_increment = False
                 # Print out a special message
                 label = self.labels[self.labels_index]
-                self.stdout = f"{C.Fore.BLACK}{C.Back.RED}Label: {label}"
                 self.truth = label.replace("g0", "gesture0")
+                self.stdout = f"{C.Fore.BLACK}{C.Back.RED}Label: {label}"
                 self.labels_index = (self.labels_index + 1) % len(self.labels)
         else:
-            if remaining_ms < period_ms // 8:
-                color = C.Fore.GREEN
-            elif remaining_ms < period_ms // 3:
-                color = C.Fore.BLUE
-            else:
-                color = ""
             self.can_increment = True
             self.truth = "gesture0255"
-            self.stdout = f"{color}{remaining_ms: >3} {C.Style.DIM}({self.labels[self.labels_index]})"
+            pbar = "#" * (remaining_ms//50)
+            self.stdout = f"{C.Style.BRIGHT}{self.labels[self.labels_index]} {C.Style.RESET_ALL}{C.Style.DIM}{remaining_ms}{C.Style.RESET_ALL}: {pbar: <20}"
 
 
 class StdOutHandler(common.AbstractHandler):
