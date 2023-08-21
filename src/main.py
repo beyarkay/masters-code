@@ -78,63 +78,38 @@ def run_ffnn_hpar_opt(args):
     print("Executing 'FFNN Hyperparameter Optimisation'")
     X, y, dt = load_dataset()
 
-    """
-    - for `rep_num` in 0..10:
-    - for `num_gesture_classes` in (5, 50, 51):
-    - for `nodes_per_layer.1` in (20, 40, 60, 80, 100)
-    - for `nodes_per_layer.2` in (20, 40, 60, 80, 100)
-    - for `learning_rate` in (1e-2, 1e-3, 1e-4, 1e-5)
-    - for `dropout_rate` in (0.0, 0.5, 1.0)
-    - for `l2_coefficient` in (1e-2, 1e-3, 1e-4, 1e-5)
-    """
-
-    REP_DOMAIN = range(1)
-    NUM_GESTURE_CLASSES_DOMAIN = (5, 50, 51)
-    NODES_IN_LAYER_1_DOMAIN = (20, 100)
-    NODES_IN_LAYER_2_DOMAIN = (20, 100)
-    LEARNING_RATE_DOMAIN = (1e-2, 1e-3, 1e-4)
-    DROPOUT_RATE_DOMAIN = (0.0, 0.3, 0.6)
-    L2_COEFFICIENT_DOMAIN = (0, 1e-5, 1e-2)
-
-    iterables = [
-        REP_DOMAIN,
-        NUM_GESTURE_CLASSES_DOMAIN,
-        NODES_IN_LAYER_1_DOMAIN,
-        NODES_IN_LAYER_2_DOMAIN,
-        LEARNING_RATE_DOMAIN,
-        DROPOUT_RATE_DOMAIN,
-        L2_COEFFICIENT_DOMAIN,
-    ]
+    hyperparameters = {
+        "rep_num": range(1),
+        "num_gesture_classes": (5, 50, 51),
+        "nodes_in_layer_1": (20, 100),
+        "nodes_in_layer_2": (20, 100),
+        "learning_rate": (1e-2, 1e-3, 1e-4),
+        "dropout_rate": (0.0, 0.3, 0.6),
+        "l2_coefficient": (0, 1e-5, 1e-2),
+    }
+    iterables = list(hyperparameters.values())
 
     n_timesteps = 40
     epochs = 10
     max_obs_per_class = None
     delay = 0
-    # num_gesture_classes = 51
 
     items = itertools.product(*iterables)
     num_tests = int(np.prod([len(iterable) for iterable in iterables]))
     pbar = tqdm.tqdm(items, total=num_tests)
-    for item in pbar:
-        (
-            rep_num,
-            num_gesture_classes,
-            nodes_in_layer_1,
-            nodes_in_layer_2,
-            learning_rate,
-            dropout_rate,
-            l2_coefficient,
-        ) = item
+    for hpars_tuple in pbar:
+        hpars = {k: v for k, v in zip(hyperparameters.keys(), hpars_tuple)}
 
+        # TODO Don't use the full 6 decimal places for time
         now = datetime.datetime.now()
         pbar.set_description(
             f"""{C.Style.BRIGHT}{now}  \
-rep:{rep_num: >2}  \
-#classes:{num_gesture_classes: >2}  \
-nodes: [{nodes_in_layer_1}, {nodes_in_layer_2}] \
-lr: {learning_rate:#7.2g} \
-dropout: {dropout_rate:.2f} \
-l2: {l2_coefficient:#7.2g} \
+rep:{hpars['rep_num']: >2}  \
+#classes:{hpars['num_gesture_classes']: >2}  \
+nodes: [{hpars['nodes_in_layer_1']}, {hpars['nodes_in_layer_2']}] \
+lr: {hpars['learning_rate']:#7.2g} \
+dropout: {hpars['dropout_rate']:.2f} \
+l2: {hpars['l2_coefficient']:#7.2g} \
 """
         )
         print(f"{C.Style.DIM}")
@@ -142,38 +117,30 @@ l2: {l2_coefficient:#7.2g} \
         preprocessing_config["max_obs_per_class"] = max_obs_per_class
         preprocessing_config["delay"] = delay
         preprocessing_config["gesture_allowlist"] = list(
-            range(num_gesture_classes))
-        preprocessing_config["num_gesture_classes"] = num_gesture_classes
-        preprocessing_config["rep_num"] = rep_num
-        preprocessing_config["seed"] = 42 + rep_num
+            range(hpars['num_gesture_classes']))
+        preprocessing_config["num_gesture_classes"] = hpars['num_gesture_classes']
+        preprocessing_config["rep_num"] = hpars['rep_num']
+        preprocessing_config["seed"] = 42 + hpars['rep_num']
         print(f"Making classifiers with preprocessing: {preprocessing_config}")
         (X_trn, X_val, y_trn, y_val, dt_trn, dt_val,) = train_test_split(
             X, y, dt, stratify=y, random_state=preprocessing_config["seed"]
         )
+        # TODO check `should_continue` earlier on in the for-loop
         hpars_path = "saved_models/hpars_ffnn_opt.csv"
-        print(rep_num, nodes_in_layer_1, nodes_in_layer_2, learning_rate)
-        cont, hpars = should_continue(
-            hpars_path,
-            rep_num=rep_num,
-            num_gesture_classes=num_gesture_classes,
-            nodes_in_layer_1=nodes_in_layer_1,
-            nodes_in_layer_2=nodes_in_layer_2,
-            learning_rate=learning_rate,
-            dropout_rate=dropout_rate,
-            l2_coefficient=l2_coefficient,
-        )
+        cont, hpars_df = should_continue(hpars_path, **hpars)
         if cont:
             continue
+
         nn_config: models.NNConfig = {
             "epochs": epochs,
             "batch_size": 256,
-            "learning_rate": learning_rate,
+            "learning_rate": hpars['learning_rate'],
             "optimizer": "adam",
         }
         ffnn_config: models.FFNNConfig = {
-            "nodes_per_layer": [nodes_in_layer_1, nodes_in_layer_2],
-            "l2_coefficient": l2_coefficient,
-            "dropout_rate": dropout_rate,
+            "nodes_per_layer": [hpars['nodes_in_layer_1'], hpars['nodes_in_layer_2']],
+            "l2_coefficient": hpars['l2_coefficient'],
+            "dropout_rate": hpars['dropout_rate'],
         }
         config: models.ConfigDict = {
             "model_type": "FFNN",
@@ -203,7 +170,11 @@ l2: {l2_coefficient:#7.2g} \
         clf.write_as_jsonl("saved_models/results_ffnn_opt.jsonl")
         # NOTE: This save MUST come last, so that we don't accidentally
         # record us having trained a model when we have not.
-        hpars.to_csv(hpars_path, index=False)
+        hpars_df.to_csv(hpars_path, index=False)
+
+
+def run_experiment_hmm(args):
+    pass
 
 
 def run_experiment_01(args):
