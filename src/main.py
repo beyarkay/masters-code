@@ -75,6 +75,8 @@ def load_dataset(path="./gesture_data/trn_40.npz"):
 
 
 def run_ffnn_hpar_opt(args):
+    hpars_path = "saved_models/hpars_ffnn_opt.csv"
+    jsonl_path = "saved_models/results_ffnn_opt_bigger.jsonl"
     print("Executing 'FFNN Hyperparameter Optimisation'")
     X, y, dt = load_dataset()
 
@@ -100,7 +102,6 @@ def run_ffnn_hpar_opt(args):
     for hpars_tuple in pbar:
         hpars = {k: v for k, v in zip(hyperparameters.keys(), hpars_tuple)}
 
-        hpars_path = "saved_models/hpars_ffnn_opt.csv"
         cont, hpars_df = should_continue(hpars_path, **hpars)
         if cont:
             continue
@@ -165,7 +166,7 @@ l2: {hpars['l2_coefficient']:#7.2g} \
             print(f"Timed out while fitting: {e}")
         now = datetime.datetime.now().isoformat(sep="T")[:-7]
         print("Saving model")
-        clf.write_as_jsonl("saved_models/results_ffnn_opt.jsonl")
+        clf.write_as_jsonl(jsonl_path)
         # NOTE: This save MUST come last, so that we don't accidentally
         # record us having trained a model when we have not.
         hpars_df.to_csv(hpars_path, index=False)
@@ -315,7 +316,6 @@ def run_experiment_01(args):
                 print(f"{clf.X_.shape=}, {clf.validation_data[0].shape=}")
             except TimeoutError as e:
                 print(f"Timed out while fitting: {e}")
-            now = datetime.datetime.now().isoformat(sep="T")[:-7]
             print("Saving model")
             clf.write_as_jsonl("saved_models/results.jsonl")
             # NOTE: This save MUST come last, so that we don't accidentally
