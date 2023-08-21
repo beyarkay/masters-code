@@ -83,27 +83,29 @@ def run_ffnn_hpar_opt(args):
     - for `l2_coefficient` in (1e-2, 1e-3, 1e-4, 1e-5)
     """
 
-    REP_DOMAIN = range(10)
+    REP_DOMAIN = range(1)
     NUM_GESTURE_CLASSES_DOMAIN = (5, 50, 51)
-
-    NODES_IN_LAYER_1_DOMAIN = (20, 50, 80, 110)
-    NODES_IN_LAYER_2_DOMAIN = (20, 50, 80, 110)
-    LEARNING_RATE_DOMAIN = (1e-2, 5e-3, 1e-3, 5e-4, 1e-4, 5e-5)
-    DROPOUT_RATE_DOMAIN = (0.0, 0.2, 0.4, 0.6)
-    L2_COEFFICIENT_DOMAIN = (0, 1e-6, 1e-4, 1e-2)
+    NODES_IN_LAYER_1_DOMAIN = (20, 100)
+    NODES_IN_LAYER_2_DOMAIN = (20, 100)
+    LEARNING_RATE_DOMAIN = (1e-2, 1e-3, 1e-4)
+    DROPOUT_RATE_DOMAIN = (0.0, 0.3, 0.6)
+    L2_COEFFICIENT_DOMAIN = (0, 1e-5, 1e-2)
 
     iterables = [
         REP_DOMAIN,
+        NUM_GESTURE_CLASSES_DOMAIN,
         NODES_IN_LAYER_1_DOMAIN,
         NODES_IN_LAYER_2_DOMAIN,
         LEARNING_RATE_DOMAIN,
+        DROPOUT_RATE_DOMAIN,
+        L2_COEFFICIENT_DOMAIN,
     ]
 
     n_timesteps = 40
-    epochs = 20
+    epochs = 10
     max_obs_per_class = None
     delay = 0
-    num_gesture_classes = 51
+    # num_gesture_classes = 51
 
     items = itertools.product(*iterables)
     num_tests = int(np.prod([len(iterable) for iterable in iterables]))
@@ -111,17 +113,24 @@ def run_ffnn_hpar_opt(args):
     for item in pbar:
         (
             rep_num,
+            num_gesture_classes,
             nodes_in_layer_1,
             nodes_in_layer_2,
             learning_rate,
+            dropout_rate,
+            l2_coefficient,
         ) = item
 
         now = datetime.datetime.now()
         pbar.set_description(
             f"""{C.Style.BRIGHT}{now}  \
 rep:{rep_num: >2}  \
+#classes:{num_gesture_classes: >2}  \
 nodes: [{nodes_in_layer_1}, {nodes_in_layer_2}] \
-lr: {learning_rate:#7.2g}"""
+lr: {learning_rate:#7.2g} \
+dropout: {dropout_rate:.2f} \
+l2: {l2_coefficient:#7.2g} \
+"""
         )
         print(f"{C.Style.DIM}")
         preprocessing_config["n_timesteps"] = n_timesteps
@@ -141,9 +150,12 @@ lr: {learning_rate:#7.2g}"""
         cont, hpars = should_continue(
             hpars_path,
             rep_num=rep_num,
+            num_gesture_classes=num_gesture_classes,
             nodes_in_layer_1=nodes_in_layer_1,
             nodes_in_layer_2=nodes_in_layer_2,
             learning_rate=learning_rate,
+            dropout_rate=dropout_rate,
+            l2_coefficient=l2_coefficient,
         )
         if cont:
             continue
@@ -155,8 +167,8 @@ lr: {learning_rate:#7.2g}"""
         }
         ffnn_config: models.FFNNConfig = {
             "nodes_per_layer": [nodes_in_layer_1, nodes_in_layer_2],
-            "l2_coefficient": 0.0,
-            "dropout_rate": 0.0,
+            "l2_coefficient": l2_coefficient,
+            "dropout_rate": dropout_rate,
         }
         config: models.ConfigDict = {
             "model_type": "FFNN",
@@ -278,8 +290,6 @@ def should_continue(
         else pd.DataFrame(columns=list(kwargs.keys()))
     )
     new_hpar_line = {k: [v] for k, v in kwargs.items()}
-    print("new_hpar_line", new_hpar_line)
-    print("kwargs", kwargs)
     hpars = pd.concat([pd.DataFrame(new_hpar_line), hpars], ignore_index=True)
     duplicated = hpars.duplicated()
     if duplicated.any():
