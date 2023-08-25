@@ -19,13 +19,14 @@ import argparse
 import sys
 
 
+# init terminal colours
 C.init()
 const = common.read_constants()
 
 # This defines the default config for preprocessing the data
 preprocessing_config: models.PreprocessingConfig = {
     "seed": 42,
-    "n_timesteps": 40,
+    "n_timesteps": 20,
     "num_gesture_classes": None,
     "rep_num": None,
     "delay": 0,
@@ -91,7 +92,7 @@ def run_ffnn_hpar_opt(args):
     }
     iterables = list(hyperparameters.values())
 
-    n_timesteps = 40
+    n_timesteps = 20
     epochs = 10
     max_obs_per_class = None
     delay = 0
@@ -184,7 +185,7 @@ def run_experiment_hmm(args):
     }
     iterables = list(hyperparameters.values())
 
-    n_timesteps = 40
+    n_timesteps = 20
     max_obs_per_class = 200
     delay = 0
 
@@ -260,7 +261,7 @@ def run_experiment_cusum(args):
     }
     iterables = list(hyperparameters.values())
 
-    n_timesteps = 40
+    n_timesteps = 20
     max_obs_per_class = 200
     delay = 0
 
