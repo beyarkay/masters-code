@@ -52,3 +52,6 @@ logs
 
 # Saved models
 saved_models
+
+# Archives
+*.zip
