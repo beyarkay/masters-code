@@ -173,7 +173,10 @@ def init_logs():
 
 
 def make_windows(
-    data: pd.DataFrame, window_size: int, pbar=None
+    data: pd.DataFrame,
+    window_size: int,
+    pbar=None,
+    constants_path="./src/constants.yaml"
 ) -> Tuple[np.ndarray, np.ndarray, np.ndarray]:
     """Process data into a windowed format for machine learning.
 
@@ -198,7 +201,7 @@ def make_windows(
     size = len(data) - uniq * (window_size - 1) + 1
 
     # Read finger constants from a file
-    const: ConstantsDict = read_constants()
+    const: ConstantsDict = read_constants(constants_path)
     sensors = const["sensors"].values()
 
     # Loop over the windows and populate X and y
@@ -216,6 +219,16 @@ def make_windows(
 
     # Return X and y as a tuple
     return (np.stack(Xs), np.array(ys), np.array(dts))
+
+
+def read_and_split_from_npz(path) -> Tuple[np.ndarray, np.ndarray, np.ndarray, np.ndarray,  np.ndarray, np.ndarray]:
+    trn: np.ndarray = np.load(path)
+    X: np.ndarray = trn["X_trn"]
+    y: np.ndarray = trn["y_trn"]
+    dt: np.ndarray = trn["dt_trn"]
+    return sklearn.model_selection.train_test_split(
+        X, y, dt, stratify=y, test_size=.2
+    )
 
 
 def save_as_windowed_npz(df, n_timesteps=25):
