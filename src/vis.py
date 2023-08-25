@@ -4,17 +4,14 @@ This should include functions for visualising results via a live GUI, as well
 as for visualising results via the CLI.
 """
 
-import sys
-from typing import Iterable, Generic, List, TypeVar, Optional
+from typing import Optional
 import tensorflow as tf
 import numpy as np
 import matplotlib.pyplot as plt
 import seaborn as sns
-import logging as l
 import common
-import pred
 import read
-from matplotlib.colors import LogNorm, Normalize
+from matplotlib.colors import LogNorm
 import colorama as C
 import datetime
 

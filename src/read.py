@@ -22,7 +22,9 @@ def read_model(directory: str):
 
 
 def read_data(
-    directory: str = "./gesture_data/train/", offsets: Optional[str] = None
+    directory: str = "./gesture_data/train/",
+    offsets_path: Optional[str] = None,
+    constants_path: str = "src/constants.yaml"
 ) -> pd.DataFrame:
     """Reads in CSV files from a directory and returns a concatenated Pandas DataFrame.
 
@@ -35,10 +37,9 @@ def read_data(
         "gesture", "file", "finger", "orientation" and additional columns
         representing finger data.
     """
-    if offsets is not None:
-        offsets = pd.read_csv(offsets)
     # Load finger data constants
-    sensors: list[str] = list(common.read_constants()["sensors"].values())
+    sensors: list[str] = list(common.read_constants(
+        constants_path)["sensors"].values())
     # Initialize empty list to store DataFrames
     dfs = []
     # Get list of paths to CSV files in directory and sort them
@@ -61,7 +62,7 @@ def read_data(
 
     # If offsets have been specified, then read in the offsets and apply them
     # to the DF
-    if offsets is not None:
+    if offsets_path is not None:
         offsets = pd.read_csv("offsets.csv")
         # Set the new index to be old index + offset
         offsets["new_idx"] = offsets["idx"] + offsets["offset"]

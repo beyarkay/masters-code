@@ -6,7 +6,7 @@ import logging as l
 import numpy as np
 import os
 import sys
-from typing import List, Optional, TypedDict, TypeVar
+from typing import List, Optional, Tuple, TypedDict, TypeVar
 import datetime
 import pandas as pd
 
@@ -174,7 +174,7 @@ def init_logs():
 
 def make_windows(
     data: pd.DataFrame, window_size: int, pbar=None
-) -> (np.ndarray, np.ndarray):
+) -> Tuple[np.ndarray, np.ndarray, np.ndarray]:
     """Process data into a windowed format for machine learning.
 
     Args:
@@ -223,7 +223,7 @@ def save_as_windowed_npz(df, n_timesteps=25):
     long and then save that windowed data as .npz files.
 
     There will be one file `./gesture_data/trn_40.npz` which contains the training &
-    validation data, and one file `./gesture_data/tst.npz` which contains the
+    validation data, and one file `./gesture_data/tst_40.npz` which contains the
     testing data."""
     X, y_str, dt = make_windows(
         df,
