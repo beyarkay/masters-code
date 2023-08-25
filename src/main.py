@@ -81,10 +81,10 @@ def run_ffnn_hpar_opt(args):
     X, y, dt = load_dataset()
 
     hyperparameters = {
-        "rep_num": range(1),
+        "rep_num": range(5),
         "num_gesture_classes": (5, 50, 51),
-        "nodes_in_layer_1": (20, 100),
-        "nodes_in_layer_2": (20, 100),
+        "nodes_in_layer_1": (20, 60, 100),
+        "nodes_in_layer_2": (20, 60, 100),
         "learning_rate": (1e-2, 1e-3, 1e-4),
         "dropout_rate": (0.0, 0.3, 0.6),
         "l2_coefficient": (0, 1e-5, 1e-2),
@@ -179,7 +179,7 @@ def run_experiment_hmm(args):
     X, y, dt = load_dataset()
 
     hyperparameters = {
-        "rep_num": range(1),
+        "rep_num": range(30),
         "num_gesture_classes": (5, 50, 51),
     }
     iterables = list(hyperparameters.values())
@@ -230,6 +230,82 @@ rep:{hpars['rep_num']: >2}  \
             "lstm": None,
         }
         clf = models.HMMClassifier(config=config)
+        try:
+            clf.fit(
+                X_trn,
+                y_trn,
+                dt_trn,
+                validation_data=(X_val, y_val, dt_val),
+                verbose=False,
+            )
+        except TimeoutError as e:
+            print(f"Timed out while fitting: {e}")
+        print("Saving model")
+        clf.write_as_jsonl(jsonl_path)
+        # NOTE: This save MUST come last, so that we don't accidentally
+        # record us having trained a model when we have not.
+        hpars_df.to_csv(hpars_path, index=False)
+
+
+def run_experiment_cusum(args):
+    hpars_path = "saved_models/hpars_cusum_opt.csv"
+    jsonl_path = "saved_models/results_cusum_opt_bigger.jsonl"
+    print("Executing 'cusum Hyperparameter Optimisation'")
+    X, y, dt = load_dataset()
+
+    hyperparameters = {
+        "rep_num": range(5),
+        "num_gesture_classes": (5, 50, 51),
+        "thresh": (5, 10, 20, 40, 60, 80, 100),
+    }
+    iterables = list(hyperparameters.values())
+
+    n_timesteps = 40
+    max_obs_per_class = 200
+    delay = 0
+
+    items = itertools.product(*iterables)
+    num_tests = int(np.prod([len(iterable) for iterable in iterables]))
+    pbar = tqdm.tqdm(items, total=num_tests)
+    for hpars_tuple in pbar:
+        hpars = {k: v for k, v in zip(hyperparameters.keys(), hpars_tuple)}
+
+        cont, hpars_df = should_continue(hpars_path, **hpars)
+        if cont:
+            continue
+
+        now = datetime.datetime.now().isoformat(sep="T")[:-7]
+        pbar.set_description(
+            f"""{C.Style.BRIGHT}{now}  \
+rep:{hpars['rep_num']: >2}  \
+#classes:{hpars['num_gesture_classes']: >2}  \
+"""
+        )
+        print(f"{C.Style.DIM}")
+        preprocessing_config["n_timesteps"] = n_timesteps
+        preprocessing_config["max_obs_per_class"] = max_obs_per_class
+        preprocessing_config["delay"] = delay
+        preprocessing_config["gesture_allowlist"] = list(
+            range(hpars['num_gesture_classes']))
+        preprocessing_config["num_gesture_classes"] = hpars['num_gesture_classes']
+        preprocessing_config["rep_num"] = hpars['rep_num']
+        preprocessing_config["seed"] = 42 + hpars['rep_num']
+        print(f"Making classifier with preprocessing: {preprocessing_config}")
+        (X_trn, X_val, y_trn, y_val, dt_trn, dt_val,) = train_test_split(
+            X, y, dt, stratify=y, random_state=preprocessing_config["seed"]
+        )
+        config: models.ConfigDict = {
+            "model_type": "CuSUM",
+            "preprocessing": preprocessing_config,
+            "cusum": {
+                "thresh": hpars['thresh'],
+            },
+            "nn": None,
+            "ffnn": None,
+            "hmm": None,
+            "lstm": None,
+        }
+        clf = models.CuSUMClassifier(config=config)
         try:
             clf.fit(
                 X_trn,
@@ -375,6 +451,8 @@ if __name__ == "__main__":
         predict_from_serial(args)
     elif args.save:
         save_from_serial(args)
+    elif args.experiment == 'cusum':
+        run_experiment_cusum(args)
     elif args.experiment == 'ffnn':
         run_ffnn_hpar_opt(args)
     elif args.experiment == 'hmm':

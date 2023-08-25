@@ -720,7 +720,8 @@ class CuSUMClassifier(TemplateClassifier):
         super().__init__()
         self.config_path = config_path
         self.config = config
-        self.config["model_type"] = self.config.get("model_type", "CuSUM")
+        if self.config is not None:
+            self.config["model_type"] = self.config.get("model_type", "CuSUM")
 
     def _cusum(self, x, target=None, std_dev=None, allowed_std_devs=4):
         """Calculate the Cumulative Sum of some data.
@@ -786,7 +787,8 @@ class CuSUMClassifier(TemplateClassifier):
         )
         # Loop over all gestures
         for gesture_idx in pbar:
-            pbar.set_description(f"CuSUM gesture: {self.i2g(gesture_idx)}")
+            if isinstance(pbar, tqdm.tqdm):
+                pbar.set_description(f"CuSUM gesture: {self.i2g(gesture_idx)}")
             data = self.X_[self.y_ == gesture_idx]
             record = np.zeros((data.shape[0], self.const["n_sensors"]))
 
