@@ -316,7 +316,7 @@ class TemplateClassifier(BaseEstimator, ClassifierMixin):
                 y_pred.astype(int),
                 y.astype(int),
                 output_dict=True,
-                zero_division=np.nan,  # type: ignore
+                zero_division=0,  # type: ignore
             )
             clf_report = pd.json_normalize(report)  # type: ignore
 
@@ -429,7 +429,7 @@ class TemplateClassifier(BaseEstimator, ClassifierMixin):
             self.y_,
             y_trn_pred,
             output_dict=True,
-            zero_division=np.nan,
+            zero_division=0,
         ))
         clf_report_trn.columns = [f'trn.{c}' for c in clf_report_trn.columns]
 
@@ -476,7 +476,7 @@ class TemplateClassifier(BaseEstimator, ClassifierMixin):
                 y_pred,
                 y,
                 output_dict=True,
-                zero_division=np.nan,
+                zero_division=0,
             ))
             # Rename the columns to start with the correct prefix
             clf_report.columns = [f'{prefix}.{c}' for c in clf_report.columns]
