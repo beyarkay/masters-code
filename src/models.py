@@ -364,7 +364,7 @@ class TemplateClassifier(BaseEstimator, ClassifierMixin):
             fit_time = self.fit_finsh_time - self.fit_start_time
         extra_data = pd.DataFrame({
             'fit_time': [fit_time],
-            'saved_at': [datetime.datetime.now().isoformat(sep="T")],
+            'saved_at': [now],
             'val.loss': [val_loss],
             'trn.loss': [trn_loss],
         })
