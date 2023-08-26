@@ -365,6 +365,7 @@ class TemplateClassifier(BaseEstimator, ClassifierMixin):
         extra_data = pd.DataFrame({
             'fit_time': [fit_time],
             'saved_at': [now],
+            'model_dir': [model_dir],
             'val.loss': [val_loss],
             'trn.loss': [trn_loss],
         })
