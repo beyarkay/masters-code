@@ -23,6 +23,7 @@ import sys
 
 from numpy.lib.npyio import NpzFile
 
+import tensorflow as tf
 import pandas as pd
 import common
 import models
@@ -176,11 +177,11 @@ def objective_nn(trial, X_trn, y_trn, dt_trn, X_val, y_val, dt_val):
         "hmm": None,
     }
     pprint(config)
-    model = models.FFNNClassifier(config=config)
+    clf = models.FFNNClassifier(config=config)
     print("Fitting model")
     start = datetime.datetime.now()
 
-    model.fit(
+    clf.fit(
         X_trn,
         y_trn,
         dt_trn,
@@ -210,10 +211,10 @@ def objective_nn(trial, X_trn, y_trn, dt_trn, X_val, y_val, dt_val):
     duration_ms = duration.seconds * 1000 + duration.microseconds / 1000
     trial.set_user_attr("duration_ms", duration_ms)
 
-    trial.set_user_attr("val_loss", model.history.history["val_loss"][-1])
-    trial.set_user_attr("trn_loss", model.history.history["loss"][-1])
+    trial.set_user_attr("val_loss", clf.history.history["val_loss"][-1])
+    trial.set_user_attr("trn_loss", clf.history.history["loss"][-1])
 
-    y_pred = model.predict(X_val)
+    y_pred = clf.predict(X_val)
     report = sklearn.metrics.classification_report(
         y_pred.astype(int),
         y_val.astype(int),
@@ -256,13 +257,17 @@ class OptunaPruningCallback(keras.callbacks.Callback):
         self.history['loss'].append(logs.get('loss', None))
         self.history['val_loss'].append(logs.get('val_loss', None))
 
-        y_pred = self.model.predict(self.X_val)
-        clf_report = pd.json_normalize(sklearn.metrics.classification_report(
+        y_pred = np.argmax(tf.nn.softmax(
+            (self.model(self.X_val))).numpy(), axis=1)
+
+        report = sklearn.metrics.classification_report(
             y_pred.astype(int),
             self.y_val.astype(int),
             output_dict=True,
             zero_division=0,
-        ))
+        )
+        clf_report = pd.json_normalize(report)
+
         intermediate_value = clf_report['macro avg.f1-score'].values[0]
         self.trial.report(intermediate_value, len(self.history['loss']) - 1)
         if self.trial.should_prune():
