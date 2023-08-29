@@ -67,7 +67,7 @@ def main(args):
     read.execute_handlers(handlers)
 
 
-def load_dataset(path="./gesture_data/trn_40.npz"):
+def load_dataset(path="./gesture_data/trn_20.npz"):
     trn = np.load(path)
     X = trn["X_trn"]
     y = trn["y_trn"]
@@ -160,7 +160,7 @@ l2: {hpars['l2_coefficient']:#7.2g} \
                 y_trn,
                 dt_trn,
                 validation_data=(X_val, y_val, dt_val),
-                verbose=True,
+                verbose=False,
             )
             print(f"{clf.X_.shape=}, {clf.validation_data[0].shape=}")
         except TimeoutError as e:
