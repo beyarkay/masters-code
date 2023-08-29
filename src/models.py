@@ -853,8 +853,7 @@ class TFClassifier(TemplateClassifier):
     def dump(self, directory: str):
         assert self.config is not None
         # Check that the model is a FFNN
-        if self.config['model_type'] != "FFNN":
-            assert False, "TemplateClassifier.dump is not implemented for non-FFNN models yet"
+        assert self.config['model_type'] == "FFNN", "TemplateClassifier.dump is not implemented for non-FFNN models yet"
 
         # Create the directory if it doesn't exist
         if not os.path.exists(directory):
@@ -918,13 +917,13 @@ def load_tf(directory: str):
 
 
 class DisplayConfMat(keras.callbacks.Callback):
-    def __init__(self, validation_data, fig_path, conf_mat=False):
+    def __init__(self, validation_data, fig_path=None, conf_mat=False):
         self.validation_data = validation_data
         self.X_val = validation_data[0]
         self.y_val = validation_data[1]
         self.history = {'loss': [], 'val_loss': []}
         self.conf_mat = conf_mat
-        self.fig_path = fig_path
+        self.fig_path: Optional[str] = fig_path
 
     def on_epoch_end(self, _epoch, logs=None):
         assert hasattr(self, 'history')
@@ -975,7 +974,10 @@ class DisplayConfMat(keras.callbacks.Callback):
         max_val_loss: float = max(self.history['val_loss'])
         axs[1].set_ylim((0, max_val_loss * 1.1))
         axs[1].set_title(f'Val. loss ({self.history["val_loss"][-1]:.6f})')
-        plt.savefig(self.fig_path, bbox_inches='tight')
+        if self.fig_path is not None:
+            plt.savefig(self.fig_path, bbox_inches='tight')
+        else:
+            plt.show()
         plt.close()
 
 
