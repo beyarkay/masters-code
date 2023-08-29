@@ -194,12 +194,6 @@ def make_windows(
     rolling = data.groupby("file").rolling(
         window=window_size, min_periods=window_size)
 
-    # Calculate unique number of files
-    uniq = len(data.value_counts("file"))
-
-    # Calculate number of windows
-    size = len(data) - uniq * (window_size - 1) + 1
-
     # Read finger constants from a file
     const: ConstantsDict = read_constants(constants_path)
     sensors = const["sensors"].values()
@@ -208,7 +202,7 @@ def make_windows(
     Xs = []
     ys = []
     dts = []
-    for i, window in enumerate(rolling):
+    for window in rolling:
         if pbar is not None:
             pbar.update(1)
         if len(window) < window_size:
@@ -227,7 +221,7 @@ def read_and_split_from_npz(path) -> Tuple[np.ndarray, np.ndarray, np.ndarray, n
     y: np.ndarray = trn["y_trn"]
     dt: np.ndarray = trn["dt_trn"]
     return sklearn.model_selection.train_test_split(
-        X, y, dt, stratify=y, test_size=.2
+        X, y, dt, stratify=y, test_size=.2, random_state=42
     )
 
 
