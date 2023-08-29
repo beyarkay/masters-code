@@ -63,7 +63,7 @@ def read_data(
     # If offsets have been specified, then read in the offsets and apply them
     # to the DF
     if offsets_path is not None:
-        offsets = pd.read_csv("offsets.csv")
+        offsets = pd.read_csv(offsets_path)
         # Set the new index to be old index + offset
         offsets["new_idx"] = offsets["idx"] + offsets["offset"]
         # Set the new gesture to be the re-indexed old gestures
