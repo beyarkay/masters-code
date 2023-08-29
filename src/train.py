@@ -162,14 +162,14 @@ def objective_nn(trial, X_trn, y_trn, dt_trn, X_val, y_val, dt_val):
         },
         "nn": {
             "epochs": 20,
-            "batch_size": trial.suggest_int("batch_size", 64, 256, log=True),
-            "learning_rate": trial.suggest_float("learning_rate", 1e-6, 1e-1, log=True),
+            "batch_size": trial.suggest_int("batch_size", 128, 256, log=True),
+            "learning_rate": trial.suggest_float("learning_rate", 1e-4, 1e-2, log=True),
             "optimizer": "adam",
         },
         "ffnn": {
             "nodes_per_layer": nodes_per_layer,
-            "l2_coefficient": trial.suggest_float("l2_coefficient", 1e-6, 1e-1, log=True),
-            "dropout_rate": trial.suggest_float("dropout_rate", 0.0, 0.6),
+            "l2_coefficient": trial.suggest_float("l2_coefficient", 1e-7, 1e-4, log=True),
+            "dropout_rate": trial.suggest_float("dropout_rate", 0.0, 0.25),
         },
         "cusum": None,
         "lstm": None,
@@ -212,6 +212,9 @@ def objective_nn(trial, X_trn, y_trn, dt_trn, X_val, y_val, dt_val):
 
     trial.set_user_attr("val_loss", clf.history.history["val_loss"][-1])
     trial.set_user_attr("trn_loss", clf.history.history["loss"][-1])
+
+    jsonl_path = "saved_models/results_ffnn_optuna.jsonl"
+    clf.write_as_jsonl(jsonl_path)
 
     y_pred = clf.predict(X_val)
     report = sklearn.metrics.classification_report(

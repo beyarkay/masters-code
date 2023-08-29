@@ -120,6 +120,10 @@ class TemplateClassifier(BaseEstimator, ClassifierMixin):
             f"Checking model params: {X.shape=} {y.shape=} {X_val.shape=} {y_val.shape=}"
         )
 
+        print(
+            f"Numbers of classes:\ny: {pd.Series(y).value_counts().unique()},\ny_val: {pd.Series(y_val).value_counts().unique()}"  # noqa: E501
+        )
+
         # Assert that exactly one of (config_path, config) is not None
         if bool(self.config_path is None) == bool(self.config is None):
             raise ValueError(
