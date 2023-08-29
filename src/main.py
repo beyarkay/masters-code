@@ -29,7 +29,6 @@ preprocessing_config: models.PreprocessingConfig = {
     "n_timesteps": 20,
     "num_gesture_classes": None,
     "rep_num": None,
-    "delay": 0,
     "max_obs_per_class": None,
     "gesture_allowlist": [
         # fmt: off
@@ -95,7 +94,6 @@ def run_ffnn_hpar_opt(args):
     n_timesteps = 20
     epochs = 10
     max_obs_per_class = None
-    delay = 0
 
     items = itertools.product(*iterables)
     num_tests = int(np.prod([len(iterable) for iterable in iterables]))
@@ -121,7 +119,6 @@ l2: {hpars['l2_coefficient']:#7.2g} \
         print(f"{C.Style.DIM}")
         preprocessing_config["n_timesteps"] = n_timesteps
         preprocessing_config["max_obs_per_class"] = max_obs_per_class
-        preprocessing_config["delay"] = delay
         preprocessing_config["gesture_allowlist"] = list(
             range(hpars['num_gesture_classes']))
         preprocessing_config["num_gesture_classes"] = hpars['num_gesture_classes']
@@ -187,7 +184,6 @@ def run_experiment_hmm(args):
 
     n_timesteps = 20
     max_obs_per_class = 200
-    delay = 0
 
     items = itertools.product(*iterables)
     num_tests = int(np.prod([len(iterable) for iterable in iterables]))
@@ -209,7 +205,6 @@ rep:{hpars['rep_num']: >2}  \
         print(f"{C.Style.DIM}")
         preprocessing_config["n_timesteps"] = n_timesteps
         preprocessing_config["max_obs_per_class"] = max_obs_per_class
-        preprocessing_config["delay"] = delay
         preprocessing_config["gesture_allowlist"] = list(
             range(hpars['num_gesture_classes']))
         preprocessing_config["num_gesture_classes"] = hpars['num_gesture_classes']
@@ -263,7 +258,6 @@ def run_experiment_cusum(args):
 
     n_timesteps = 20
     max_obs_per_class = 200
-    delay = 0
 
     items = itertools.product(*iterables)
     num_tests = int(np.prod([len(iterable) for iterable in iterables]))
@@ -285,7 +279,6 @@ rep:{hpars['rep_num']: >2}  \
         print(f"{C.Style.DIM}")
         preprocessing_config["n_timesteps"] = n_timesteps
         preprocessing_config["max_obs_per_class"] = max_obs_per_class
-        preprocessing_config["delay"] = delay
         preprocessing_config["gesture_allowlist"] = list(
             range(hpars['num_gesture_classes']))
         preprocessing_config["num_gesture_classes"] = hpars['num_gesture_classes']

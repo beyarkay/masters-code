@@ -155,7 +155,6 @@ def objective_nn(trial, X_trn, y_trn, dt_trn, X_val, y_val, dt_val):
         "preprocessing": {
             'seed': 42,
             'n_timesteps': 20,
-            'delay': 0,
             'max_obs_per_class': None,
             'gesture_allowlist': list(range(51)),
             'num_gesture_classes': None,
