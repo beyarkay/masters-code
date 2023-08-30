@@ -113,10 +113,10 @@ def objective_hmm(trial, X_trn, y_trn, dt_trn, X_val, y_val, dt_val, study_name)
         "ffnn": None,
         "nn": None,
     }
-    model = models.HMMClassifier(config=config)
+    clf = models.HMMClassifier(config=config)
     start = datetime.datetime.now()
     # FIXME model.fit should also take in dt
-    model.fit(X_trn, y_trn, validation_data=(X_val, y_val), verbose=True)
+    clf.fit(X_trn, y_trn, validation_data=(X_val, y_val), verbose=True)
     finsh = datetime.datetime.now()
 
     duration = finsh - start
@@ -125,15 +125,15 @@ def objective_hmm(trial, X_trn, y_trn, dt_trn, X_val, y_val, dt_val, study_name)
 
     print("Calculating training loss")
     print(y_trn[:10].shape)
-    print(model.predict_score(X_trn[:10]))
+    print(clf.predict_score(X_trn[:10]))
     trn_loss = keras.losses.sparse_categorical_crossentropy(
-        y_trn[:100], model.predict(X_trn[:100]), from_logits=False
+        y_trn[:100], clf.predict(X_trn[:100]), from_logits=False
     )
     trial.set_user_attr("trn_loss", trn_loss)
 
     print("Calculating validation loss")
     val_loss = keras.losses.sparse_categorical_crossentropy(
-        y_val[:100], model.predict(X_val[:100]), from_logits=False
+        y_val[:100], clf.predict(X_val[:100]), from_logits=False
     )
     trial.set_user_attr("val_loss", val_loss)
 
@@ -159,11 +159,12 @@ def objective_cusum(trial, X_trn, y_trn, dt_trn, X_val, y_val, dt_val, study_nam
         "ffnn": None,
         "nn": None,
     }
-    model = models.CuSUMClassifier(config=config)
+    clf = models.CuSUMClassifier(config=config)
     l.info("Fitting model")
     start = datetime.datetime.now()
-    model.fit(X_trn, y_trn, validation_data=(X_val, y_val))
+    clf.fit(X_trn, y_trn, validation_data=(X_val, y_val))
     finsh = datetime.datetime.now()
+    # TODO track same metrics as for the FFNN
 
     duration = finsh - start
     duration_ms = duration.seconds * 1000 + duration.microseconds / 1000
