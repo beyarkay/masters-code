@@ -121,17 +121,6 @@ def objective_hmm(trial, X_trn, y_trn, dt_trn, X_val, y_val, dt_val, study_name)
         dt_trn,
         validation_data=(X_val, y_val, dt_val),
         verbose=True,
-        callbacks=[
-            models.DisplayConfMat(
-                validation_data=(X_val, y_val, dt_val),
-                conf_mat=False,
-                fig_path=f'saved_models/{study_name}/trial_{trial.number}.png',
-            ),
-            OptunaPruningCallback(
-                validation_data=(X_val, y_val, dt_val),
-                trial=trial,
-            ),
-        ]
     )
     finsh = datetime.datetime.now()
     score = calc_metrics(trial, start, finsh, clf, X_val, y_val, "HMM")
@@ -166,17 +155,6 @@ def objective_cusum(trial, X_trn, y_trn, dt_trn, X_val, y_val, dt_val, study_nam
         dt_trn,
         validation_data=(X_val, y_val, dt_val),
         verbose=True,
-        callbacks=[
-            models.DisplayConfMat(
-                validation_data=(X_val, y_val, dt_val),
-                conf_mat=False,
-                fig_path=f'saved_models/{study_name}/trial_{trial.number}.png',
-            ),
-            OptunaPruningCallback(
-                validation_data=(X_val, y_val, dt_val),
-                trial=trial,
-            ),
-        ]
     )
 
     finsh = datetime.datetime.now()
