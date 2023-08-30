@@ -231,15 +231,20 @@ def objective_nn(trial, X_trn, y_trn, dt_trn, X_val, y_val, dt_val, study_name):
         ]
     )
     finsh = datetime.datetime.now()
+    score = calc_metrics(trial, start, finsh, clf, X_val, y_val, "FFNN")
+    return score
 
+
+def calc_metrics(trial, start, finsh, clf, X_val, y_val, model_type):
     duration = finsh - start
     duration_ms = duration.seconds * 1000 + duration.microseconds / 1000
     trial.set_user_attr("duration_ms", duration_ms)
 
-    trial.set_user_attr("val_loss", clf.history.history["val_loss"][-1])
-    trial.set_user_attr("trn_loss", clf.history.history["loss"][-1])
+    if model_type == "FFNN":
+        trial.set_user_attr("val_loss", clf.history.history["val_loss"][-1])
+        trial.set_user_attr("trn_loss", clf.history.history["loss"][-1])
 
-    jsonl_path = "saved_models/results_ffnn_optuna.jsonl"
+    jsonl_path = f"saved_models/results_{model_type.lower()}_optuna.jsonl"
     clf.write_as_jsonl(jsonl_path)
 
     y_pred = clf.predict(X_val)
@@ -257,7 +262,6 @@ def objective_nn(trial, X_trn, y_trn, dt_trn, X_val, y_val, dt_val, study_name):
                         clf_report['macro avg.precision'].values[0])
     trial.set_user_attr("val.macro avg.recall",
                         clf_report['macro avg.recall'].values[0])
-
     return clf_report['macro avg.f1-score'].values[0]
 
 
