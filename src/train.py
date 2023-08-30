@@ -115,29 +115,27 @@ def objective_hmm(trial, X_trn, y_trn, dt_trn, X_val, y_val, dt_val, study_name)
     }
     clf = models.HMMClassifier(config=config)
     start = datetime.datetime.now()
-    # FIXME model.fit should also take in dt
-    clf.fit(X_trn, y_trn, validation_data=(X_val, y_val), verbose=True)
+    clf.fit(
+        X_trn,
+        y_trn,
+        dt_trn,
+        validation_data=(X_val, y_val, dt_val),
+        verbose=True,
+        callbacks=[
+            models.DisplayConfMat(
+                validation_data=(X_val, y_val, dt_val),
+                conf_mat=False,
+                fig_path=f'saved_models/{study_name}/trial_{trial.number}.png',
+            ),
+            OptunaPruningCallback(
+                validation_data=(X_val, y_val, dt_val),
+                trial=trial,
+            ),
+        ]
+    )
     finsh = datetime.datetime.now()
-
-    duration = finsh - start
-    duration_ms = duration.seconds * 1000 + duration.microseconds / 1000
-    trial.set_user_attr("duration_ms", duration_ms)
-
-    print("Calculating training loss")
-    print(y_trn[:10].shape)
-    print(clf.predict_score(X_trn[:10]))
-    trn_loss = keras.losses.sparse_categorical_crossentropy(
-        y_trn[:100], clf.predict(X_trn[:100]), from_logits=False
-    )
-    trial.set_user_attr("trn_loss", trn_loss)
-
-    print("Calculating validation loss")
-    val_loss = keras.losses.sparse_categorical_crossentropy(
-        y_val[:100], clf.predict(X_val[:100]), from_logits=False
-    )
-    trial.set_user_attr("val_loss", val_loss)
-
-    return val_loss
+    score = calc_metrics(trial, start, finsh, clf, X_val, y_val, "HMM")
+    return score
 
 
 def objective_cusum(trial, X_trn, y_trn, dt_trn, X_val, y_val, dt_val, study_name):
@@ -162,16 +160,28 @@ def objective_cusum(trial, X_trn, y_trn, dt_trn, X_val, y_val, dt_val, study_nam
     clf = models.CuSUMClassifier(config=config)
     l.info("Fitting model")
     start = datetime.datetime.now()
-    clf.fit(X_trn, y_trn, validation_data=(X_val, y_val))
+    clf.fit(
+        X_trn,
+        y_trn,
+        dt_trn,
+        validation_data=(X_val, y_val, dt_val),
+        verbose=True,
+        callbacks=[
+            models.DisplayConfMat(
+                validation_data=(X_val, y_val, dt_val),
+                conf_mat=False,
+                fig_path=f'saved_models/{study_name}/trial_{trial.number}.png',
+            ),
+            OptunaPruningCallback(
+                validation_data=(X_val, y_val, dt_val),
+                trial=trial,
+            ),
+        ]
+    )
+
     finsh = datetime.datetime.now()
-    # TODO track same metrics as for the FFNN
-
-    duration = finsh - start
-    duration_ms = duration.seconds * 1000 + duration.microseconds / 1000
-    trial.set_user_attr("duration_ms", duration_ms)
-
-    final_loss = 0  # TODO
-    return final_loss
+    score = calc_metrics(trial, start, finsh, clf, X_val, y_val, "CuSUM")
+    return score
 
 
 def objective_nn(trial, X_trn, y_trn, dt_trn, X_val, y_val, dt_val, study_name):
