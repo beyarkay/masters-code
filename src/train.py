@@ -20,6 +20,7 @@ from pprint import pprint
 import datetime
 import logging as l
 import sys
+import os
 
 from numpy.lib.npyio import NpzFile
 
@@ -36,7 +37,7 @@ import sys
 
 def main():
     l.info("Reading data")
-    trn: NpzFile = np.load("./gesture_data/trn_20.npz")
+    trn: NpzFile = np.load("./gesture_data/trn_20_10.npz")
     X: np.ndarray = trn["X_trn"]
     y: np.ndarray = trn["y_trn"]
     dt: np.ndarray = trn["dt_trn"]
@@ -53,6 +54,8 @@ def main():
 
     now = datetime.datetime.now().isoformat(sep="T")[:-10]
     study_name = f"optimizers-{now}" if len(sys.argv) != 2 else sys.argv[1]
+    if not os.path.exists(f'saved_models/{study_name}'):
+        os.makedirs(f'saved_models/{study_name}')
 
     optuna.logging.get_logger("optuna").addHandler(l.StreamHandler(sys.stdout))
     study = optuna.create_study(
@@ -65,14 +68,14 @@ def main():
         ),
     )
     study.optimize(
-        lambda trial: objective_nn(
-            trial, X_trn, y_trn, dt_trn, X_val, y_val, dt_val),
+        lambda trial: objective_wrapper(
+            trial, X_trn, y_trn, dt_trn, X_val, y_val, dt_val, study_name),
         n_trials=1000,
         gc_after_trial=True,
     )
 
 
-def objective_wrapper(trial, X_trn, y_trn, dt_trn, X_val, y_val, dt_val):
+def objective_wrapper(trial, X_trn, y_trn, dt_trn, X_val, y_val, dt_val, study_name):
     architecture = trial.suggest_categorical(
         "architecture",
         [
@@ -82,16 +85,16 @@ def objective_wrapper(trial, X_trn, y_trn, dt_trn, X_val, y_val, dt_val):
         ],
     )
     if architecture == "ffnn":
-        return objective_nn(trial, X_trn, y_trn, dt_trn, X_val, y_val, dt_val)
+        return objective_nn(trial, X_trn, y_trn, dt_trn, X_val, y_val, dt_val, study_name)
     elif architecture == "hmm":
-        return objective_hmm(trial, X_trn, y_trn, dt_trn, X_val, y_val, dt_val)
+        return objective_hmm(trial, X_trn, y_trn, dt_trn, X_val, y_val, dt_val, study_name)
     elif architecture == "cusum":
-        return objective_cusum(trial, X_trn, y_trn, dt_trn, X_val, y_val, dt_val)
+        return objective_cusum(trial, X_trn, y_trn, dt_trn, X_val, y_val, dt_val, study_name)
     else:
         raise NotImplementedError
 
 
-def objective_hmm(trial, X_trn, y_trn, dt_trn, X_val, y_val, dt_val):
+def objective_hmm(trial, X_trn, y_trn, dt_trn, X_val, y_val, dt_val, study_name):
     config = {
         "hmm": {
             "n_iter": 1,
@@ -125,7 +128,7 @@ def objective_hmm(trial, X_trn, y_trn, dt_trn, X_val, y_val, dt_val):
     return val_loss
 
 
-def objective_cusum(trial, X_trn, y_trn, dt_trn, X_val, y_val, dt_val):
+def objective_cusum(trial, X_trn, y_trn, dt_trn, X_val, y_val, dt_val, study_name):
     config = {}
     model = models.CuSUMClassifier(config=config)
     l.info("Fitting model")
@@ -141,7 +144,7 @@ def objective_cusum(trial, X_trn, y_trn, dt_trn, X_val, y_val, dt_val):
     return final_loss
 
 
-def objective_nn(trial, X_trn, y_trn, dt_trn, X_val, y_val, dt_val):
+def objective_nn(trial, X_trn, y_trn, dt_trn, X_val, y_val, dt_val, study_name):
     # Keras has memory leak issues. `clear_session` reportedly fixes this
     # https://github.com/optuna/optuna/issues/4587#issuecomment-1511564031
     keras.backend.clear_session()
@@ -161,7 +164,7 @@ def objective_nn(trial, X_trn, y_trn, dt_trn, X_val, y_val, dt_val):
             'rep_num': 0
         },
         "nn": {
-            "epochs": 20,
+            "epochs": 40,
             "batch_size": trial.suggest_int("batch_size", 128, 256, log=True),
             "learning_rate": trial.suggest_float("learning_rate", 1e-4, 1e-2, log=True),
             "optimizer": "adam",
@@ -190,7 +193,7 @@ def objective_nn(trial, X_trn, y_trn, dt_trn, X_val, y_val, dt_val):
             models.DisplayConfMat(
                 validation_data=(X_val, y_val, dt_val),
                 conf_mat=False,
-                fig_path=f'fig_{trial.number}.png',
+                fig_path=f'saved_models/{study_name}/trial_{trial.number}.png',
             ),
             OptunaPruningCallback(
                 validation_data=(X_val, y_val, dt_val),
@@ -199,12 +202,6 @@ def objective_nn(trial, X_trn, y_trn, dt_trn, X_val, y_val, dt_val):
         ]
     )
     finsh = datetime.datetime.now()
-
-    # Save information about the model
-    # now = datetime.datetime.now().isoformat(sep="T")[:-7]
-    # model_dir = f"saved_models/ffnn/{now}"
-    # model.write(model_dir, dump_model=False)
-    # trial.set_user_attr("model_dir", model_dir)
 
     duration = finsh - start
     duration_ms = duration.seconds * 1000 + duration.microseconds / 1000
@@ -223,11 +220,6 @@ def objective_nn(trial, X_trn, y_trn, dt_trn, X_val, y_val, dt_val):
         output_dict=True,
         zero_division=0,
     )
-    print(sklearn.metrics.classification_report(
-        y_pred.astype(int),
-        y_val.astype(int),
-        zero_division=0,
-    ))
 
     clf_report = pd.json_normalize(report)
     trial.set_user_attr("val.macro avg.f1-score",
