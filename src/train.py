@@ -95,11 +95,23 @@ def objective_wrapper(trial, X_trn, y_trn, dt_trn, X_val, y_val, dt_val, study_n
 
 
 def objective_hmm(trial, X_trn, y_trn, dt_trn, X_val, y_val, dt_val, study_name):
-    config = {
-        "hmm": {
-            "n_iter": 1,
-            "limit": 100,
+    config: models.ConfigDict = {
+        "model_type": "HMM",
+        "preprocessing": {
+            'seed': 42,
+            'n_timesteps': 20,
+            'max_obs_per_class': 200,
+            'gesture_allowlist': list(range(51)),
+            'num_gesture_classes': None,
+            'rep_num': 0
         },
+        "hmm": {
+            "n_iter": 20,
+        },
+        "cusum": None,
+        "lstm": None,
+        "ffnn": None,
+        "nn": None,
     }
     model = models.HMMClassifier(config=config)
     start = datetime.datetime.now()
@@ -129,7 +141,24 @@ def objective_hmm(trial, X_trn, y_trn, dt_trn, X_val, y_val, dt_val, study_name)
 
 
 def objective_cusum(trial, X_trn, y_trn, dt_trn, X_val, y_val, dt_val, study_name):
-    config = {}
+    config: models.ConfigDict = {
+        "model_type": "CuSUM",
+        "preprocessing": {
+            'seed': 42,
+            'n_timesteps': 20,
+            'max_obs_per_class': None,
+            'gesture_allowlist': list(range(51)),
+            'num_gesture_classes': None,
+            'rep_num': 0
+        },
+        "cusum": {
+            "thresh": trial.suggest_categorical("thresh", [5, 10, 20, 40, 60, 80, 100]),
+        },
+        "hmm": None,
+        "lstm": None,
+        "ffnn": None,
+        "nn": None,
+    }
     model = models.CuSUMClassifier(config=config)
     l.info("Fitting model")
     start = datetime.datetime.now()
