@@ -41,15 +41,6 @@ def main():
     dt: np.ndarray = trn["dt_trn"]
     trn.close()
 
-    (
-        X_trn,
-        X_val,
-        y_trn,
-        y_val,
-        dt_trn,
-        dt_val,
-    ) = sklearn.model_selection.train_test_split(X, y, dt, stratify=y)
-
     now = datetime.datetime.now().isoformat(sep="T")[:-10]
     study_name = f"optimizers-{now}" if len(sys.argv) != 2 else sys.argv[1]
     if not os.path.exists(f'saved_models/{study_name}'):
@@ -66,43 +57,49 @@ def main():
         ),
     )
     study.optimize(
-        lambda trial: objective_wrapper(
-            trial, X_trn, y_trn, dt_trn, X_val, y_val, dt_val, study_name),
+        lambda trial: objective_wrapper(trial, X, y, dt, study_name),
         n_trials=1000,
         gc_after_trial=True,
     )
 
 
-def objective_wrapper(trial, X_trn, y_trn, dt_trn, X_val, y_val, dt_val, study_name):
-    architecture = trial.suggest_categorical(
-        "architecture",
-        [
-            "ffnn",
-            # "hmm",
-            # "cusum",
-        ],
+def objective_wrapper(trial, X, y, dt, study_name):
+    architecture = trial.suggest_categorical("architecture", [
+        "ffnn",
+        # "hmm",
+        # "cusum",
+    ])
+    preprocessing: models.PreprocessingConfig = {
+        'seed': 42 + trial.number,
+        'n_timesteps': 20,
+        'max_obs_per_class': 200 if architecture == "hmm" else None,
+        'gesture_allowlist': list(range(51)),
+        'num_gesture_classes': 51,
+        'rep_num': 0
+    }
+
+    (X_trn, X_val, y_trn, y_val, dt_trn, dt_val) = sklearn.model_selection.train_test_split(
+        X, y, dt, stratify=y, random_state=preprocessing["seed"]
     )
+
     if architecture == "ffnn":
-        return objective_nn(trial, X_trn, y_trn, dt_trn, X_val, y_val, dt_val, study_name)
+        return objective_nn(trial, X_trn, y_trn, dt_trn, X_val, y_val, dt_val,
+                            study_name, preprocessing)
     elif architecture == "hmm":
-        return objective_hmm(trial, X_trn, y_trn, dt_trn, X_val, y_val, dt_val, study_name)
+        return objective_hmm(trial, X_trn, y_trn, dt_trn, X_val, y_val, dt_val,
+                             study_name, preprocessing)
     elif architecture == "cusum":
-        return objective_cusum(trial, X_trn, y_trn, dt_trn, X_val, y_val, dt_val, study_name)
+        return objective_cusum(trial, X_trn, y_trn, dt_trn, X_val, y_val,
+                               dt_val, study_name, preprocessing)
     else:
         raise NotImplementedError
 
 
-def objective_hmm(trial, X_trn, y_trn, dt_trn, X_val, y_val, dt_val, study_name):
+def objective_hmm(trial, X_trn, y_trn, dt_trn, X_val, y_val, dt_val,
+                  study_name, preprocessing):
     config: models.ConfigDict = {
         "model_type": "HMM",
-        "preprocessing": {
-            'seed': 42,
-            'n_timesteps': 20,
-            'max_obs_per_class': 200,
-            'gesture_allowlist': list(range(50)),
-            'num_gesture_classes': 50,
-            'rep_num': 0
-        },
+        "preprocessing": preprocessing,
         "hmm": {
             "n_iter": 20,
         },
@@ -125,17 +122,11 @@ def objective_hmm(trial, X_trn, y_trn, dt_trn, X_val, y_val, dt_val, study_name)
     return score
 
 
-def objective_cusum(trial, X_trn, y_trn, dt_trn, X_val, y_val, dt_val, study_name):
+def objective_cusum(trial, X_trn, y_trn, dt_trn, X_val, y_val, dt_val,
+                    study_name, preprocessing):
     config: models.ConfigDict = {
         "model_type": "CuSUM",
-        "preprocessing": {
-            'seed': 42,
-            'n_timesteps': 20,
-            'max_obs_per_class': None,
-            'gesture_allowlist': list(range(50)),
-            'num_gesture_classes': 50,
-            'rep_num': 0
-        },
+        "preprocessing": preprocessing,
         "cusum": {
             "thresh": trial.suggest_categorical("thresh", [5, 10, 20, 40, 60, 80, 100]),
         },
@@ -160,7 +151,7 @@ def objective_cusum(trial, X_trn, y_trn, dt_trn, X_val, y_val, dt_val, study_nam
     return score
 
 
-def objective_nn(trial, X_trn, y_trn, dt_trn, X_val, y_val, dt_val, study_name):
+def objective_nn(trial, X_trn, y_trn, dt_trn, X_val, y_val, dt_val, study_name, preprocessing):
     # TODO train-validation split inside the objective
     # Keras has memory leak issues. `clear_session` reportedly fixes this
     # https://github.com/optuna/optuna/issues/4587#issuecomment-1511564031
@@ -172,24 +163,17 @@ def objective_nn(trial, X_trn, y_trn, dt_trn, X_val, y_val, dt_val, study_name):
     ]
     config: models.ConfigDict = {
         "model_type": "FFNN",
-        "preprocessing": {
-            'seed': 42,
-            'n_timesteps': 20,
-            'max_obs_per_class': None,
-            'gesture_allowlist': list(range(50)),
-            'num_gesture_classes': 50,
-            'rep_num': 0
-        },
+        "preprocessing": preprocessing,
         "nn": {
             "epochs": 40,
-            "batch_size": trial.suggest_int("batch_size", 128, 256, log=True),
-            "learning_rate": trial.suggest_float("learning_rate", 1e-4, 1e-2, log=True),
+            "batch_size": trial.suggest_int("batch_size", 64, 256, log=True),
+            "learning_rate": trial.suggest_float("learning_rate", 1e-6, 1e-1, log=True),
             "optimizer": "adam",
         },
         "ffnn": {
             "nodes_per_layer": nodes_per_layer,
             "l2_coefficient": trial.suggest_float("l2_coefficient", 1e-7, 1e-4, log=True),
-            "dropout_rate": trial.suggest_float("dropout_rate", 0.0, 0.25),
+            "dropout_rate": trial.suggest_float("dropout_rate", 0.0, 0.5),
         },
         "cusum": None,
         "lstm": None,
@@ -238,7 +222,8 @@ def calc_metrics(trial, start, finsh, clf):
         trial.set_user_attr("trn_loss", clf.history.history["loss"][-1])
 
     jsonl_path = f"saved_models/results_{model_type.lower()}_optuna.jsonl"
-    clf.write_as_jsonl(jsonl_path)
+    model_dir = clf.write_as_jsonl(jsonl_path)
+    trial.set_user_attr("model_dir", model_dir)
 
     y_pred = clf.predict(X_val)
     clf_report = pd.json_normalize(sklearn.metrics.classification_report(
