@@ -57,24 +57,21 @@ def main():
         ),
     )
     study.optimize(
-        lambda trial: objective_wrapper(trial, X, y, dt, study_name),
-        n_trials=1000,
+        lambda trial: objective_wrapper(
+            trial, X, y, dt, study_name, "FFNN", 51
+        ),
+        n_trials=200,
         gc_after_trial=True,
     )
 
 
-def objective_wrapper(trial, X, y, dt, study_name):
-    architecture = trial.suggest_categorical("architecture", [
-        "ffnn",
-        # "hmm",
-        # "cusum",
-    ])
+def objective_wrapper(trial, X, y, dt, study_name, model_type, num_gesture_classes):
     preprocessing: models.PreprocessingConfig = {
         'seed': 42 + trial.number,
         'n_timesteps': 20,
-        'max_obs_per_class': 200 if architecture == "hmm" else None,
-        'gesture_allowlist': list(range(51)),
-        'num_gesture_classes': 51,
+        'max_obs_per_class': 200 if model_type == "HMM" else None,
+        'gesture_allowlist': list(range(num_gesture_classes)),
+        'num_gesture_classes': num_gesture_classes,
         'rep_num': 0
     }
 
@@ -82,13 +79,13 @@ def objective_wrapper(trial, X, y, dt, study_name):
         X, y, dt, stratify=y, random_state=preprocessing["seed"]
     )
 
-    if architecture == "ffnn":
+    if model_type == "ffnn":
         return objective_nn(trial, X_trn, y_trn, dt_trn, X_val, y_val, dt_val,
                             study_name, preprocessing)
-    elif architecture == "hmm":
+    elif model_type == "hmm":
         return objective_hmm(trial, X_trn, y_trn, dt_trn, X_val, y_val, dt_val,
                              study_name, preprocessing)
-    elif architecture == "cusum":
+    elif model_type == "cusum":
         return objective_cusum(trial, X_trn, y_trn, dt_trn, X_val, y_val,
                                dt_val, study_name, preprocessing)
     else:
