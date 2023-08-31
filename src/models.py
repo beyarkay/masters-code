@@ -281,8 +281,8 @@ class TemplateClassifier(BaseEstimator, ClassifierMixin):
 
             # Get a classification_report formatted as a pandas DF
             report = classification_report(  # type: ignore
-                y_pred.astype(int),
                 y.astype(int),
+                y_pred.astype(int),
                 output_dict=True,
                 zero_division=0,  # type: ignore
             )
@@ -441,8 +441,8 @@ class TemplateClassifier(BaseEstimator, ClassifierMixin):
             y_pred = self.predict(X)
             # Get a classification_report formatted as a pandas DF
             clf_report = pd.json_normalize(classification_report(
-                y_pred,
                 y,
+                y_pred,
                 output_dict=True,
                 zero_division=0,
             ))

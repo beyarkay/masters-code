@@ -237,14 +237,19 @@ def calc_metrics(trial, start, finsh, clf, X_val, y_val, model_type):
     clf.write_as_jsonl(jsonl_path)
 
     y_pred = clf.predict(X_val)
-    report = sklearn.metrics.classification_report(
-        y_pred.astype(int),
+    clf_report = pd.json_normalize(sklearn.metrics.classification_report(
         y_val.astype(int),
+        y_pred.astype(int),
         output_dict=True,
         zero_division=0,
-    )
+    ))
+    print(sklearn.metrics.classification_report(
+        y_val.astype(int),
+        y_pred.astype(int),
+        output_dict=False,
+        zero_division=0,
+    ))
 
-    clf_report = pd.json_normalize(report)
     trial.set_user_attr("val.macro avg.f1-score",
                         clf_report['macro avg.f1-score'].values[0])
     trial.set_user_attr("val.macro avg.precision",
@@ -277,8 +282,8 @@ class OptunaPruningCallback(keras.callbacks.Callback):
             (self.model(self.X_val))).numpy(), axis=1)
 
         report = sklearn.metrics.classification_report(
-            y_pred.astype(int),
             self.y_val.astype(int),
+            y_pred.astype(int),
             output_dict=True,
             zero_division=0,
         )
