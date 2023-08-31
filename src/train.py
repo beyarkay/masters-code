@@ -26,13 +26,11 @@ from numpy.lib.npyio import NpzFile
 
 import tensorflow as tf
 import pandas as pd
-import common
 import models
 import numpy as np
 import optuna
 import sklearn
 import sklearn.model_selection
-import sys
 
 
 def main():
@@ -101,8 +99,8 @@ def objective_hmm(trial, X_trn, y_trn, dt_trn, X_val, y_val, dt_val, study_name)
             'seed': 42,
             'n_timesteps': 20,
             'max_obs_per_class': 200,
-            'gesture_allowlist': list(range(51)),
-            'num_gesture_classes': None,
+            'gesture_allowlist': list(range(50)),
+            'num_gesture_classes': 50,
             'rep_num': 0
         },
         "hmm": {
@@ -123,7 +121,7 @@ def objective_hmm(trial, X_trn, y_trn, dt_trn, X_val, y_val, dt_val, study_name)
         verbose=True,
     )
     finsh = datetime.datetime.now()
-    score = calc_metrics(trial, start, finsh, clf, X_val, y_val, "HMM")
+    score = calc_metrics(trial, start, finsh, clf)
     return score
 
 
@@ -134,8 +132,8 @@ def objective_cusum(trial, X_trn, y_trn, dt_trn, X_val, y_val, dt_val, study_nam
             'seed': 42,
             'n_timesteps': 20,
             'max_obs_per_class': None,
-            'gesture_allowlist': list(range(51)),
-            'num_gesture_classes': None,
+            'gesture_allowlist': list(range(50)),
+            'num_gesture_classes': 50,
             'rep_num': 0
         },
         "cusum": {
@@ -158,11 +156,12 @@ def objective_cusum(trial, X_trn, y_trn, dt_trn, X_val, y_val, dt_val, study_nam
     )
 
     finsh = datetime.datetime.now()
-    score = calc_metrics(trial, start, finsh, clf, X_val, y_val, "CuSUM")
+    score = calc_metrics(trial, start, finsh, clf)
     return score
 
 
 def objective_nn(trial, X_trn, y_trn, dt_trn, X_val, y_val, dt_val, study_name):
+    # TODO train-validation split inside the objective
     # Keras has memory leak issues. `clear_session` reportedly fixes this
     # https://github.com/optuna/optuna/issues/4587#issuecomment-1511564031
     keras.backend.clear_session()
@@ -177,8 +176,8 @@ def objective_nn(trial, X_trn, y_trn, dt_trn, X_val, y_val, dt_val, study_name):
             'seed': 42,
             'n_timesteps': 20,
             'max_obs_per_class': None,
-            'gesture_allowlist': list(range(51)),
-            'num_gesture_classes': None,
+            'gesture_allowlist': list(range(50)),
+            'num_gesture_classes': 50,
             'rep_num': 0
         },
         "nn": {
@@ -208,23 +207,28 @@ def objective_nn(trial, X_trn, y_trn, dt_trn, X_val, y_val, dt_val, study_name):
         validation_data=(X_val, y_val, dt_val),
         verbose=True,
         callbacks=[
-            models.DisplayConfMat(
-                validation_data=(X_val, y_val, dt_val),
-                conf_mat=False,
-                fig_path=f'saved_models/{study_name}/trial_{trial.number}.png',
-            ),
+            # NOTE: This uses the wrong validation data if num_gesture_classes < 51
+            # models.DisplayConfMat(
+            #     validation_data=(X_val, y_val, dt_val),
+            #     conf_mat=False,
+            #     fig_path=f'saved_models/{study_name}/trial_{trial.number}.png',
+            # ),
             OptunaPruningCallback(
-                validation_data=(X_val, y_val, dt_val),
+                clf=clf,
                 trial=trial,
             ),
         ]
     )
     finsh = datetime.datetime.now()
-    score = calc_metrics(trial, start, finsh, clf, X_val, y_val, "FFNN")
+    score = calc_metrics(trial, start, finsh, clf)
     return score
 
 
-def calc_metrics(trial, start, finsh, clf, X_val, y_val, model_type):
+def calc_metrics(trial, start, finsh, clf):
+    model_type = clf.config['model_type']
+    X_val = clf.validation_data[0]
+    y_val = clf.validation_data[1]
+    print("y_val unique: ", np.unique(y_val))
     duration = finsh - start
     duration_ms = duration.seconds * 1000 + duration.microseconds / 1000
     trial.set_user_attr("duration_ms", duration_ms)
@@ -260,15 +264,27 @@ def calc_metrics(trial, start, finsh, clf, X_val, y_val, model_type):
 
 
 class OptunaPruningCallback(keras.callbacks.Callback):
-    def __init__(self, validation_data, trial):
-        self.validation_data = validation_data
-        self.X_val = validation_data[0]
-        self.y_val = validation_data[1]
-        self.dt_val = validation_data[2]
+    def __init__(self, clf: models.TFClassifier, trial):
+        if hasattr(clf, 'X_'):
+            self.validation_data = clf.validation_data
+            self.X_val = self.validation_data[0]
+            self.y_val = self.validation_data[1]
+            self.dt_val = self.validation_data[2]
+        self.clf = clf
         self.trial = trial
         self.history = {'loss': [], 'val_loss': []}
 
     def on_epoch_end(self, _epoch, logs=None):
+        # Exit if we haven't got checked X, y, dt values yet
+        if not hasattr(self.clf, 'X_'):
+            print("WARN: Doesn't have X_")
+            return
+        # Ensure we've got checked validation data
+        if not hasattr(self, 'validation_data'):
+            self.validation_data = self.clf.validation_data
+        self.X_val = self.validation_data[0]
+        self.y_val = self.validation_data[1]
+        self.dt_val = self.validation_data[2]
         assert hasattr(self, 'history')
         assert hasattr(self, 'X_val')
         assert hasattr(self, 'y_val')
