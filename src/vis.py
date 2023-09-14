@@ -128,6 +128,27 @@ class StdOutHandler(common.AbstractHandler):
         )
 
 
+def conf_mat(cm, ax=None):
+    p = sns.heatmap(
+        cm / cm.sum(axis=0),
+        annot=False,
+        fmt='d',
+        square=True,
+        mask=(cm == 0),
+        cmap='viridis',
+        ax=ax,
+        vmax=1 if np.all(cm <= 1) else None,
+        vmin=0 if np.all(cm <= 1) else None,
+    )
+    if ax is not None:
+        ax.set_xlabel('Predicted')
+        ax.set_ylabel('Ground Truth')
+    else:
+        plt.xlabel('Predicted')
+        plt.ylabel('Ground Truth')
+    return p
+
+
 def plot_conf_mats(model, Xs, ys, titles):
     """Plots the confusion matrices for the given model with the given data.
 
@@ -267,4 +288,55 @@ def plot_cusum(dictionary, axs=None):
     axs[1].set_title("+'ve and -'ve CuSUM statistics")
     plt.tight_layout()
 
+    return axs
+
+
+def cmp_ts(time_series, span=None, axs=None, color='grey', lw=0.5, ylim=(None, None)):
+    """Compare a list of time series datasets.
+    Each of the time series in `time_series` must have the same shape,
+    and that shape must be (_, 30).
+    """
+    assert all(ts.shape == time_series[0].shape for ts in time_series)
+    assert all(len(ts.shape) == 2 for ts in time_series)
+    assert all(ts.shape[1] == 30 for ts in time_series)
+    const = common.read_constants('../src/constants.yaml')
+    if axs is None:
+        _fig, axs = plt.subplots(
+            5,
+            6,
+            figsize=(10, 9)
+        )
+    assert axs.shape == (5, 6)
+    ylim = (
+        ylim[0] if ylim[0] is not None else np.array(time_series).min() * 0.9,
+        ylim[1] if ylim[1] is not None else np.array(time_series).max() * 1.1
+    )
+
+    for i, ax in enumerate(axs.flatten()):
+        ax.set(
+            ylim=ylim,
+        )
+        ax.set_title(list(const['sensors'].values())[i], y=1.0, pad=-14)
+
+        if span is not None:
+            ax.fill_between(
+                range(*span),
+                ylim[0],
+                ylim[1],
+                alpha=0.1,
+                color='grey'
+            )
+        if i % 6 != 0:
+            ax.set_yticks([])
+        if i < 24:
+            ax.set_xticks([])
+
+        for ts in time_series:
+            ax.plot(
+                ts[:, i],
+                lw=lw,
+                c=color,
+                alpha=.5,
+            )
+    plt.subplots_adjust(wspace=0, hspace=0)
     return axs
