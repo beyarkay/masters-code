@@ -50,6 +50,7 @@ def read_data(
             directory + path,
             names=["datetime", "gesture"] + sensors,
             parse_dates=["datetime"],
+            date_format='ISO8601',
         )
         # Add a column with the filename for reference
         df["file"] = path
