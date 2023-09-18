@@ -137,8 +137,8 @@ def conf_mat(cm, ax=None):
         mask=(cm == 0),
         cmap='viridis',
         ax=ax,
-        vmax=1 if np.all(cm <= 1) else None,
-        vmin=0 if np.all(cm <= 1) else None,
+        vmax=1 if np.all(cm / cm.sum(axis=0) <= 1) else None,
+        vmin=0 if np.all(cm / cm.sum(axis=0) <= 1) else None,
     )
     if ax is not None:
         ax.set_xlabel('Predicted')
