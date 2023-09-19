@@ -146,12 +146,13 @@ class TemplateClassifier(BaseEstimator, ClassifierMixin):
         X_val = X_val[allowed_val_gestures]
         y_val = y_val[allowed_val_gestures]
         dt_val = dt_val[allowed_val_gestures]
+        g255 = 50 if len(allowlist) == 51 else None
+        print(f"{allowlist=}, {g255=}")
         self.g2i, self.i2g = common.make_gestures_and_indices(
             y,
-            not_g255=lambda g: g != 50,
             to_i=lambda g: g,
             to_g=lambda i: i,
-            g255=50,
+            g255=g255,
         )
         print(
             f"Shapes after allowlist: {X.shape=} {y.shape=} {X_val.shape=} {y_val.shape=}"  # noqa: E501

@@ -84,8 +84,12 @@ def make_gestures_and_indices(
 
     # Define two vectorized functions to convert gestures to indices and vice
     # versa.
-    to_index = np.vectorize(lambda g: to_i(g) if not_g255(g) else maximum)
-    to_gesture = np.vectorize(lambda i: to_g(i) if i != maximum else g255)
+    to_index = np.vectorize(
+        lambda g: to_i(g) if g255 is not None or not_g255(g) else maximum
+    )
+    to_gesture = np.vectorize(
+        lambda i: to_g(i) if not (g255 is not None and i == maximum) else g255
+    )
     return (to_index, to_gesture)
 
 
