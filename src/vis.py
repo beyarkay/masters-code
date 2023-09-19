@@ -294,32 +294,49 @@ def plot_cusum(dictionary, axs=None):
     return axs
 
 
-def cmp_ts(time_series, span=None, axs=None, color='grey', lw=0.5, ylim=(None, None)):
+def cmp_ts(
+    time_series,
+    span=None,
+    axs=None,
+    color='grey',
+    lw=0.5,
+    ylim=(None, None),
+    titles=None,
+    constants=None
+):
     """Compare a list of time series datasets.
     Each of the time series in `time_series` must have the same shape,
     and that shape must be (_, 30).
     """
-    assert all(ts.shape == time_series[0].shape for ts in time_series)
-    assert all(len(ts.shape) == 2 for ts in time_series)
-    assert all(ts.shape[1] == 30 for ts in time_series)
-    const = common.read_constants('../src/constants.yaml')
+    assert all(ts.shape == time_series[0].shape for ts in time_series), \
+        "All time series must be the same shape"
+    assert all(len(ts.shape) == 2 for ts in time_series), \
+        "All time series must have len(shape) == 2"
+    # assert all(ts.shape[1] == 30 for ts in time_series)
+    const = constants if constants is not None else common.read_constants(
+        '../src/constants.yaml')
+    if len(time_series) == 0:
+        return
+    nrows = np.ceil(np.sqrt(time_series[0].shape[1])).astype(int)
+    ncols = nrows
+    titles = titles if titles is not None else list(const['sensors'].values())
     if axs is None:
         _fig, axs = plt.subplots(
-            5,
-            6,
-            figsize=(10, 9)
+            nrows,
+            ncols,
+            figsize=(ncols*3, nrows*3),
+            squeeze=False,
         )
-    assert axs.shape == (5, 6)
+    # assert axs.shape == (5, 6)
     ylim = (
         ylim[0] if ylim[0] is not None else np.array(time_series).min() * 0.9,
         ylim[1] if ylim[1] is not None else np.array(time_series).max() * 1.1
     )
 
-    for i, ax in enumerate(axs.flatten()):
-        ax.set(
-            ylim=ylim,
-        )
-        ax.set_title(list(const['sensors'].values())[i], y=1.0, pad=-14)
+    for i in range(time_series[0].shape[1]):
+        ax = axs.flatten()[i]
+        ax.set(ylim=ylim)
+        ax.set_title(titles[i], y=1.0, pad=-14)
 
         if span is not None:
             ax.fill_between(
@@ -341,5 +358,8 @@ def cmp_ts(time_series, span=None, axs=None, color='grey', lw=0.5, ylim=(None, N
                 c=color,
                 alpha=.5,
             )
+    for i in range(time_series[0].shape[1], ncols * nrows):
+        axs.flatten()[i].axis('off')
+
     plt.subplots_adjust(wspace=0, hspace=0)
     return axs
