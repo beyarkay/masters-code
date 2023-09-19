@@ -128,17 +128,20 @@ class StdOutHandler(common.AbstractHandler):
         )
 
 
-def conf_mat(cm, ax=None):
+def conf_mat(cm, ax=None, norm=0):
+    cm_normed = cm if norm is None else cm / cm.sum(axis=norm)
     p = sns.heatmap(
-        cm / cm.sum(axis=0),
-        annot=False,
+        cm_normed,
+        annot=cm if cm.shape[0] <= 5 else False,
         fmt='d',
         square=True,
         mask=(cm == 0),
         cmap='viridis',
         ax=ax,
-        vmax=1 if np.all(cm / cm.sum(axis=0) <= 1) else None,
-        vmin=0 if np.all(cm / cm.sum(axis=0) <= 1) else None,
+        vmax=1 if np.all(cm_normed <= 1) else None,
+        vmin=0 if np.all(cm_normed <= 1) else None,
+        xticklabels=1 if cm.shape[0] <= 10 else 5,
+        yticklabels=1 if cm.shape[0] <= 10 else 5,
     )
     if ax is not None:
         ax.set_xlabel('Predicted')
