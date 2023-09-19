@@ -35,6 +35,7 @@ def calc_class_weights(y):
 class HMMConfig(TypedDict):
     # The number of iterations for which *each* HMM will be trained
     n_iter: int
+    covariance_type: Optional[Literal["spherical", "diag", "full", "tied"]]
 
 
 class CusumConfig(TypedDict):
@@ -594,6 +595,7 @@ class HMMClassifier(TemplateClassifier):
             if kwargs.get("verbose", False)
             else np.unique(self.y_)
         )
+        assert self.config['hmm'] is not None
         for yi in iterator:
             # if verbose:
             print(
@@ -606,7 +608,7 @@ class HMMClassifier(TemplateClassifier):
                 )
             self.models_[yi] = hmm.GaussianHMM(
                 n_components=self.X_.shape[1] + 2,
-                covariance_type="diag",
+                covariance_type=self.config["hmm"]["covariance_type"],
                 n_iter=self.config["hmm"]["n_iter"],
                 verbose=verbose,
                 random_state=self.config["preprocessing"]["seed"],
@@ -623,7 +625,6 @@ class HMMClassifier(TemplateClassifier):
 
         self.is_fitted_ = True
         self.fit_finsh_time = time.time()
-        return self
 
     @timeout(3600)
     def predict(self, X, verbose=False):
