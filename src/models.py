@@ -941,34 +941,18 @@ class DisplayConfMat(keras.callbacks.Callback):
         assert logs is not None
         self.history['loss'].append(logs.get('loss', None))
         self.history['val_loss'].append(logs.get('val_loss', None))
-        if self.conf_mat:
-            y_val_pred = np.argmax(tf.nn.softmax(
-                self.model(self.X_val)).numpy(), axis=1)
-            cm_val = tf.math.confusion_matrix(
-                self.y_val,
-                y_val_pred
-            ).numpy()
-        else:
-            y_val_pred = np.argmax(tf.nn.softmax(
-                self.model(self.X_val)).numpy(), axis=-1)
-            cm_val = tf.math.confusion_matrix(
-                self.y_val.flatten(),
-                y_val_pred.flatten()
-            ).numpy()
-            cm_val[-1, -1] = 0
+        y_val_pred = np.argmax(tf.nn.softmax(
+            self.model(self.X_val)).numpy(), axis=-1)
+        cm_val = tf.math.confusion_matrix(
+            self.y_val.flatten(),
+            y_val_pred.flatten()
+        ).numpy()
+        # print(cm_val)
+        # print("max predicted: ", y_val_pred.max())
 
         fig, axs = plt.subplots(1, 3, figsize=(20, 5))
 
-        if len(np.unique(y_val_pred)) == 2:
-            sns.heatmap(cm_val, annot=True, fmt='d', ax=axs[2], square=True)
-        else:
-            sns.heatmap(
-                cm_val,
-                ax=axs[2],
-                square=True,
-                #                 norm=LogNorm(),
-                mask=(cm_val == 0)
-            )
+        vis.conf_mat(cm_val, ax=axs[2])
         axs[2].set_title('Validation Confusion Matrix')
 
         axs[0].plot(self.history['loss'])
@@ -1078,13 +1062,6 @@ class FFNNClassifier(TFClassifier):
                 batch_size=self.config["nn"]["batch_size"],
                 epochs=self.config["nn"]["epochs"],
                 class_weight=calc_class_weights(self.g2i(self.y_)),
-                # callbacks=[
-                #     DisplayConfMat(
-                #         validation_data=self.validation_data,
-                #         conf_mat=False,
-                #         fig_path="saved_models/ffnn_plot.png"
-                #     ),
-                # ],
                 **kwargs,
             )
         else:
