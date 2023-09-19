@@ -15,6 +15,7 @@ Similarly, the choice of model architecture will likely constrain which
 hyperparameters are valid.
 """
 
+import typing
 import keras
 from pprint import pprint
 import datetime
@@ -39,7 +40,7 @@ def main():
     dt: np.ndarray = trn["dt_trn"]
     trn.close()
 
-    model_type = "FFNN"
+    model_type = "HFFNN"
     num_gesture_classes = 51
     study_name = f"optimizers-{model_type}-{num_gesture_classes:0>2}" if len(
         sys.argv) != 2 else sys.argv[1]
@@ -84,6 +85,9 @@ def objective_wrapper(trial, X, y, dt, study_name, model_type, num_gesture_class
     elif model_type == "CuSUM":
         return objective_cusum(trial, X_trn, y_trn, dt_trn, X_val, y_val,
                                dt_val, study_name, preprocessing)
+    if model_type == "HFFNN":
+        return objective_hffnn(trial, X_trn, y_trn, dt_trn, X_val, y_val, dt_val,
+                               study_name, preprocessing)
     else:
         raise NotImplementedError
 
@@ -197,6 +201,70 @@ def objective_nn(trial, X_trn, y_trn, dt_trn, X_val, y_val, dt_val, study_name, 
     )
     finsh = datetime.datetime.now()
     score = calc_metrics(trial, start, finsh, clf)
+    return score
+
+
+def objective_hffnn(trial, X_trn, y_trn, dt_trn, X_val, y_val, dt_val, study_name, preprocessing):
+    # TODO train-validation split inside the objective
+    # Keras has memory leak issues. `clear_session` reportedly fixes this
+    # https://github.com/optuna/optuna/issues/4587#issuecomment-1511564031
+    keras.backend.clear_session()
+
+    majority_config = None
+    minority_config = None
+
+    for clf_type in ('majority', 'minority'):
+        num_layers = trial.suggest_int(f"{clf_type}.num_layers", 1, 3)
+        nodes_per_layer = [
+            trial.suggest_int(
+                f"{clf_type}.nodes_per_layer.{layer_idx+1}", 4, 512, log=True)
+            for layer_idx in range(num_layers)
+        ]
+        config: models.ConfigDict = {
+            "model_type": "FFNN",
+            "preprocessing": preprocessing,
+            "nn": {
+                "epochs": trial.suggest_int(f"{clf_type}.epochs", 5, 40),
+                "batch_size": trial.suggest_int(f"{clf_type}.batch_size", 64, 256, log=True),
+                "learning_rate": trial.suggest_float(f"{clf_type}.learning_rate", 1e-6, 1e-1, log=True),
+                "optimizer": "adam",
+            },
+            "ffnn": {
+                "nodes_per_layer": nodes_per_layer,
+                "l2_coefficient": trial.suggest_float(f"{clf_type}.l2_coefficient", 1e-7, 1e-4, log=True),
+                "dropout_rate": trial.suggest_float(f"{clf_type}.dropout_rate", 0.0, 0.5),
+            },
+            "cusum": None,
+            "lstm": None,
+            "hmm": None,
+        }
+        if clf_type == "majority":
+            majority_config = config
+        elif clf_type == "minority":
+            minority_config = config
+        else:
+            raise NotImplementedError(f"{clf_type=} not implemented")
+
+    assert majority_config is not None
+    assert minority_config is not None
+
+    meta_clf = models.MetaClassifier(
+        majority_config=majority_config,
+        minority_config=minority_config,
+    )
+
+    print("Fitting Meta model")
+    start = datetime.datetime.now()
+
+    meta_clf.fit(
+        X_trn,
+        y_trn,
+        dt_trn,
+        validation_data=(X_val, y_val, dt_val),
+        verbose=True,
+    )
+    finsh = datetime.datetime.now()
+    score = calc_metrics(trial, start, finsh, meta_clf)
     return score
 
 
