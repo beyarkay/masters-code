@@ -355,6 +355,7 @@ class TemplateClassifier(BaseEstimator, ClassifierMixin):
 
         with open(f"{model_dir}/config.yaml", "w") as f:
             yaml.safe_dump(self.config, f)
+        return model_dir
 
     def write(
         self,
