@@ -18,7 +18,6 @@ hyperparameters are valid.
 import keras
 from pprint import pprint
 import datetime
-import logging as l
 import sys
 import os
 
@@ -34,32 +33,29 @@ import sklearn.model_selection
 
 
 def main():
-    l.info("Reading data")
     trn: NpzFile = np.load("./gesture_data/trn_20_10.npz")
     X: np.ndarray = trn["X_trn"]
     y: np.ndarray = trn["y_trn"]
     dt: np.ndarray = trn["dt_trn"]
     trn.close()
 
-    now = datetime.datetime.now().isoformat(sep="T")[:-10]
-    study_name = f"optimizers-{now}" if len(sys.argv) != 2 else sys.argv[1]
+    model_type = "FFNN"
+    num_gesture_classes = 51
+    study_name = f"optimizers-{model_type}-{num_gesture_classes:0>2}" if len(
+        sys.argv) != 2 else sys.argv[1]
     if not os.path.exists(f'saved_models/{study_name}'):
         os.makedirs(f'saved_models/{study_name}')
 
-    optuna.logging.get_logger("optuna").addHandler(l.StreamHandler(sys.stdout))
     study = optuna.create_study(
         study_name=study_name,
         direction="maximize",
         storage="sqlite:///db.sqlite3",
         load_if_exists=True,
-        pruner=optuna.pruners.MedianPruner(
-            n_startup_trials=5, n_warmup_steps=5, interval_steps=5
-        ),
+        sampler=optuna.samplers.RandomSampler(seed=42),
     )
     study.optimize(
         lambda trial: objective_wrapper(
-            trial, X, y, dt, study_name, "FFNN", 51
-        ),
+            trial, X, y, dt, study_name, model_type, num_gesture_classes),
         n_trials=200,
         gc_after_trial=True,
     )
@@ -79,13 +75,13 @@ def objective_wrapper(trial, X, y, dt, study_name, model_type, num_gesture_class
         X, y, dt, stratify=y, random_state=preprocessing["seed"]
     )
 
-    if model_type == "ffnn":
+    if model_type == "FFNN":
         return objective_nn(trial, X_trn, y_trn, dt_trn, X_val, y_val, dt_val,
                             study_name, preprocessing)
-    elif model_type == "hmm":
+    elif model_type == "HMM":
         return objective_hmm(trial, X_trn, y_trn, dt_trn, X_val, y_val, dt_val,
                              study_name, preprocessing)
-    elif model_type == "cusum":
+    elif model_type == "CuSUM":
         return objective_cusum(trial, X_trn, y_trn, dt_trn, X_val, y_val,
                                dt_val, study_name, preprocessing)
     else:
@@ -133,7 +129,6 @@ def objective_cusum(trial, X_trn, y_trn, dt_trn, X_val, y_val, dt_val,
         "nn": None,
     }
     clf = models.CuSUMClassifier(config=config)
-    l.info("Fitting model")
     start = datetime.datetime.now()
     clf.fit(
         X_trn,
@@ -194,10 +189,10 @@ def objective_nn(trial, X_trn, y_trn, dt_trn, X_val, y_val, dt_val, study_name, 
             #     conf_mat=False,
             #     fig_path=f'saved_models/{study_name}/trial_{trial.number}.png',
             # ),
-            OptunaPruningCallback(
-                clf=clf,
-                trial=trial,
-            ),
+            # OptunaPruningCallback(
+            #     clf=clf,
+            #     trial=trial,
+            # ),
         ]
     )
     finsh = datetime.datetime.now()
