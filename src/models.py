@@ -1,15 +1,12 @@
 """Defines the models which are used for prediction/classification."""
-import seaborn as sns
 import datetime
 from wrapt_timeout_decorator import timeout
 
 import pandas as pd
 from sklearn.metrics import classification_report
-import logging as l
 import os
 import pickle
 import dill
-import typing
 from typing import Optional, Literal, TypedDict
 import time
 
@@ -17,7 +14,6 @@ import common
 import matplotlib.pyplot as plt
 import numpy as np
 import sklearn
-import sklearn.utils.validation as sk_validation
 import tensorflow as tf
 import tqdm
 import vis
@@ -1070,6 +1066,94 @@ class FFNNClassifier(TFClassifier):
         # Sklearn expects is_fitted_ to be True after fitting
         self.is_fitted_ = True
         self.fit_finsh_time = time.time()
+
+
+class MetaClassifier(TemplateClassifier):
+    def __init__(
+        self,
+        majority_config: ConfigDict,
+        minority_config: ConfigDict
+    ):
+        super().__init__()
+        self.majority_config = majority_config
+        self.minority_config = minority_config
+
+    @timeout(7200)
+    def fit(self, X, y, dt, validation_data=None, **kwargs) -> None:
+        self.fit_start_time = time.time()
+
+        # Figure out the majority config
+        self.majority_clf = None
+        if self.majority_config['model_type'] == "FFNN":
+            self.majority_clf = FFNNClassifier(config=self.majority_config)
+        elif self.majority_config['model_type'] == "HMM":
+            self.majority_clf = HMMClassifier(config=self.majority_config)
+        elif self.majority_config['model_type'] == "CuSUM":
+            self.majority_clf = CuSUMClassifier(config=self.majority_config)
+        else:
+            raise NotImplementedError(
+                f"Model type of {self.majority_config['model_type']} is not supported")
+        assert self.majority_clf is not None
+
+        # Figure out the minority config
+        self.minority_clf = None
+        if self.minority_config['model_type'] == "FFNN":
+            self.minority_clf = FFNNClassifier(config=self.minority_config)
+        elif self.minority_config['model_type'] == "HMM":
+            self.minority_clf = HMMClassifier(config=self.minority_config)
+        elif self.minority_config['model_type'] == "CuSUM":
+            self.minority_clf = CuSUMClassifier(config=self.minority_config)
+        else:
+            raise NotImplementedError(
+                f"Model type of {self.minority_config['model_type']} is not supported")
+        assert self.minority_clf is not None
+
+        print("Fitting majority classifier")
+        self.majority_clf.fit(
+            X,
+            np.where(y == 50, 1, 0),
+            dt,
+            validation_data=None if validation_data is None else (
+                validation_data[0],
+                np.where(validation_data[1] == 50, 1, 0),
+                validation_data[2]
+            ),
+            **kwargs
+        )
+        print("Fitting minority classifier")
+        mask_trn = y != 50
+        mask_val = None if validation_data is None else (
+            validation_data[1] != 50)
+        self.minority_clf.fit(
+            X[mask_trn],
+            y[mask_trn],
+            dt[mask_trn],
+            validation_data=None if validation_data is None else (
+                validation_data[0][mask_val],
+                validation_data[1][mask_val],
+                validation_data[2][mask_val]
+            ),
+            **kwargs
+        )
+
+        # Sklearn expects is_fitted_ to be True after fitting
+        self.is_fitted_ = True
+        self.fit_finsh_time = time.time()
+
+    @timeout(3600)
+    def predict(self, X):
+        assert self.majority_clf is not None
+        assert self.minority_clf is not None
+        print(f"Predicting {len(X)} observations with minority classifier")
+        majority_pred = self.majority_clf.predict(X)
+        print(f"Predicting {len(X)} observations with minority classifier")
+        minority_pred = self.minority_clf.predict(X)
+
+        return np.where(
+            majority_pred == 0,
+            minority_pred,
+            50,
+        )
 
 
 class RNNClassifier(TFClassifier):
