@@ -168,7 +168,8 @@ class TemplateClassifier(BaseEstimator, ClassifierMixin):
         max_obs_per_class = self.config["preprocessing"]["max_obs_per_class"]
         if max_obs_per_class is not None:
             indexes_trn = []
-            indexes_val = []
+            print("Not limiting number of validation observations")
+            # indexes_val = []
             for cls in np.unique(y):
                 num_trn_observations = (y == cls).sum()
                 indexes_trn.extend(
@@ -178,20 +179,20 @@ class TemplateClassifier(BaseEstimator, ClassifierMixin):
                         replace=False,
                     )
                 )
-                num_val_observations = (y_val == cls).sum()
-                indexes_val.extend(
-                    np.random.choice(
-                        np.nonzero(y_val == cls)[0],
-                        min(num_val_observations, max_obs_per_class),
-                        replace=False,
-                    )
-                )
+                # num_val_observations = (y_val == cls).sum()
+                # indexes_val.extend(
+                #     np.random.choice(
+                #         np.nonzero(y_val == cls)[0],
+                #         min(num_val_observations, max_obs_per_class),
+                #         replace=False,
+                #     )
+                # )
             X = X[indexes_trn]
             y = y[indexes_trn]
             dt = dt[indexes_trn]
-            X_val = X_val[indexes_val]
-            y_val = y_val[indexes_val]
-            dt_val = dt_val[indexes_val]
+            # X_val = X_val[indexes_val]
+            # y_val = y_val[indexes_val]
+            # dt_val = dt_val[indexes_val]
         print(
             f"Shapes after {max_obs_per_class=}: {X.shape=} {y.shape=} {X_val.shape=} {y_val.shape=}"  # noqa: E501
         )

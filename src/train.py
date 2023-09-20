@@ -155,7 +155,6 @@ def objective_cusum(trial, X_trn, y_trn, dt_trn, X_val, y_val, dt_val,
 
 
 def objective_nn(trial, X_trn, y_trn, dt_trn, X_val, y_val, dt_val, study_name, preprocessing):
-    # TODO train-validation split inside the objective
     # Keras has memory leak issues. `clear_session` reportedly fixes this
     # https://github.com/optuna/optuna/issues/4587#issuecomment-1511564031
     keras.backend.clear_session()
@@ -213,7 +212,6 @@ def objective_nn(trial, X_trn, y_trn, dt_trn, X_val, y_val, dt_val, study_name, 
 
 
 def objective_hffnn(trial, X_trn, y_trn, dt_trn, X_val, y_val, dt_val, study_name, preprocessing):
-    # TODO train-validation split inside the objective
     # Keras has memory leak issues. `clear_session` reportedly fixes this
     # https://github.com/optuna/optuna/issues/4587#issuecomment-1511564031
     keras.backend.clear_session()
@@ -245,6 +243,7 @@ def objective_hffnn(trial, X_trn, y_trn, dt_trn, X_val, y_val, dt_val, study_nam
             "cusum": None,
             "lstm": None,
             "hmm": None,
+            "svm": None,
         }
         if clf_type == "majority":
             majority_config = config
