@@ -1131,10 +1131,23 @@ class MetaClassifier(TemplateClassifier):
         super().__init__()
         self.majority_config = majority_config
         self.minority_config = minority_config
+        self.config: ConfigDict = {
+            "model_type": "HFFNN",
+            "cusum": None,
+            "hmm": None,
+            "nn": None,
+            "ffnn": None,
+            "lstm": None,
+            "preprocessing": None,
+        }
 
     @timeout(7200)
     def fit(self, X, y, dt, validation_data=None, **kwargs) -> None:
         self.fit_start_time = time.time()
+        self.validation_data = validation_data
+        self.X_ = X
+        self.y_ = y
+        self.dt_ = dt
 
         # Figure out the majority config
         self.majority_clf = None

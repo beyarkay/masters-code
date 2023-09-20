@@ -56,6 +56,7 @@ def main():
         load_if_exists=True,
         sampler=optuna.samplers.RandomSampler(seed=42),
     )
+    # print("WARN: Using TPE sampler")
     study.optimize(
         lambda trial: objective_wrapper(
             trial, X, y, dt, study_name, model_type, num_gesture_classes),
@@ -247,8 +248,10 @@ def objective_hffnn(trial, X_trn, y_trn, dt_trn, X_val, y_val, dt_val, study_nam
         }
         if clf_type == "majority":
             majority_config = config
+            print("Majority config: ", majority_config)
         elif clf_type == "minority":
             minority_config = config
+            print("Minority config: ", minority_config)
         else:
             raise NotImplementedError(f"{clf_type=} not implemented")
 
