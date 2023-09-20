@@ -42,10 +42,14 @@ def main():
     dt: np.ndarray = trn["dt_trn"]
     trn.close()
 
-    model_type = "HFFNN"
-    num_gesture_classes = 51
-    study_name = f"optimizers-{model_type}-{num_gesture_classes:0>2}" if len(
-        sys.argv) != 2 else sys.argv[1]
+    if len(sys.argv) == 2 and sys.argv[1].startswith("optimizers-"):
+        model_type = sys.argv[1].split("-")[1]
+        num_gesture_classes = int(sys.argv[1].split("-")[2])
+        study_name = sys.argv[1]
+    else:
+        model_type = "HFFNN"
+        num_gesture_classes = 51
+        study_name = f"optimizers-{model_type}-{num_gesture_classes:0>2}"
     if not os.path.exists(f'saved_models/{study_name}'):
         os.makedirs(f'saved_models/{study_name}')
 
