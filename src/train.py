@@ -21,6 +21,8 @@ from pprint import pprint
 import datetime
 import sys
 import os
+import time
+from sklearn import svm
 
 from numpy.lib.npyio import NpzFile
 
@@ -88,6 +90,9 @@ def objective_wrapper(trial, X, y, dt, study_name, model_type, num_gesture_class
     if model_type == "HFFNN":
         return objective_hffnn(trial, X_trn, y_trn, dt_trn, X_val, y_val, dt_val,
                                study_name, preprocessing)
+    if model_type == "SVM":
+        return objective_svm(trial, X_trn, y_trn, dt_trn, X_val, y_val, dt_val,
+                             study_name, preprocessing)
     else:
         raise NotImplementedError
 
@@ -104,6 +109,7 @@ def objective_hmm(trial, X_trn, y_trn, dt_trn, X_val, y_val, dt_val,
         "lstm": None,
         "ffnn": None,
         "nn": None,
+        "svm": None,
     }
     clf = models.HMMClassifier(config=config)
     start = datetime.datetime.now()
@@ -131,6 +137,7 @@ def objective_cusum(trial, X_trn, y_trn, dt_trn, X_val, y_val, dt_val,
         "lstm": None,
         "ffnn": None,
         "nn": None,
+        "svm": None,
     }
     clf = models.CuSUMClassifier(config=config)
     start = datetime.datetime.now()
@@ -174,6 +181,7 @@ def objective_nn(trial, X_trn, y_trn, dt_trn, X_val, y_val, dt_val, study_name, 
         "cusum": None,
         "lstm": None,
         "hmm": None,
+        "svm": None,
     }
     pprint(config)
     clf = models.FFNNClassifier(config=config)
@@ -265,6 +273,37 @@ def objective_hffnn(trial, X_trn, y_trn, dt_trn, X_val, y_val, dt_val, study_nam
     )
     finsh = datetime.datetime.now()
     score = calc_metrics(trial, start, finsh, meta_clf)
+    return score
+
+
+def objective_svm(trial, X_trn, y_trn, dt_trn, X_val, y_val, dt_val, study_name, preprocessing):
+    clf = models.SVMClassifier(config={
+        "model_type": "SVM",
+        "preprocessing": preprocessing,
+        "svm": {
+            "c": trial.suggest_float('svm.c', 1e-6, 1, log=True),
+            "class_weight": trial.suggest_categorical('svm.class_weight', ["balanced", None]),
+            "max_iter": 200,
+        },
+        "nn": None,
+        "ffnn": None,
+        "cusum": None,
+        "lstm": None,
+        "hmm": None,
+    })
+    print("Fitting")
+    start = datetime.datetime.now()
+    clf.fit(
+        X_trn,
+        y_trn,
+        dt_trn,
+        validation_data=(X_val, y_val, dt_val),
+        verbose=False,
+    )
+    finsh = datetime.datetime.now()
+    print(f"SVM fitting duration: {(datetime.datetime.now()-start)}")
+
+    score = calc_metrics(trial, start, finsh, clf)
     return score
 
 

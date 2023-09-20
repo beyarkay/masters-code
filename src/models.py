@@ -9,6 +9,7 @@ import pickle
 import dill
 from typing import Optional, Literal, TypedDict
 import time
+from sklearn import svm
 
 import common
 import matplotlib.pyplot as plt
@@ -57,6 +58,12 @@ class LSTMConfig(TypedDict):
     units: int
 
 
+class SVMConfig(TypedDict):
+    c: float
+    class_weight: Optional[Literal["balanced"]]
+    max_iter: int
+
+
 class FFNNConfig(TypedDict):
     nodes_per_layer: list[int]
     l2_coefficient: float
@@ -80,7 +87,8 @@ class ConfigDict(TypedDict):
     ffnn: Optional[FFNNConfig]
     lstm: Optional[LSTMConfig]
     hmm: Optional[HMMConfig]
-    model_type: Optional[Literal["FFNN", "HMM", "CuSUM"]]
+    svm: Optional[SVMConfig]
+    model_type: Optional[Literal["FFNN", "HMM", "CuSUM", "HFFNN", "SVM"]]
 
 
 class TemplateClassifier(BaseEstimator, ClassifierMixin):
@@ -671,6 +679,50 @@ class HMMClassifier(TemplateClassifier):
                 pbar.update(1)
         self.predict_score_finsh_time = time.time()
         return scores
+
+
+class SVMClassifier(TemplateClassifier):
+    def __init__(self, config: ConfigDict):
+        super().__init__()
+        self.config = config
+
+    @timeout(3600)
+    def fit(self, X, y, dt, validation_data, **kwargs) -> None:
+        assert self.config is not None
+        assert self.config["svm"] is not None
+        self.fit_start_time = time.time()
+        self.set_random_seed(self.config["preprocessing"]["seed"])
+        self._check_model_params(X, y, dt, validation_data)
+
+        self.model = svm.LinearSVC(
+            dual="auto",
+            C=self.config["svm"]["c"],
+            class_weight=self.config["svm"]["class_weight"],
+            random_state=self.config["preprocessing"]["seed"],
+            max_iter=self.config['svm']['max_iter'],
+            verbose=False,
+        )
+        print("Fitting SVM")
+        self.model.fit(
+            self.X_.reshape(self.X_.shape[0], -1),
+            self.y_
+        )
+
+        self.is_fitted_ = True
+        self.fit_finsh_time = time.time()
+        print(
+            f"SVM fit in {self.fit_finsh_time - self.fit_start_time} seconds")
+
+    @timeout(3600)
+    def predict(self, X):
+        assert self.config is not None
+        assert self.config["cusum"] is not None
+        self.predict_start_time = time.time()
+
+        y_pred = self.model.predict(X.reshape(X.shape[0], -1))
+
+        self.predict_finsh_time = time.time()
+        return y_pred
 
 
 class CuSUMClassifier(TemplateClassifier):
