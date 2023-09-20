@@ -14,6 +14,7 @@ import read
 from matplotlib.colors import LogNorm
 import colorama as C
 import datetime
+from matplotlib.patches import Rectangle
 
 
 class InsertLabelHandler(common.AbstractHandler):
@@ -129,11 +130,13 @@ class StdOutHandler(common.AbstractHandler):
 
 
 def conf_mat(cm, ax=None, norm=0):
+    if ax is None:
+        ax = plt.gca()
     cm_normed = cm if norm is None else cm / cm.sum(axis=norm)
     p = sns.heatmap(
         cm_normed,
         annot=cm if cm.shape[0] <= 5 else False,
-        fmt='d',
+        fmt='d' if norm is None else '.3f',
         square=True,
         mask=(cm == 0),
         cmap='viridis',
@@ -143,12 +146,44 @@ def conf_mat(cm, ax=None, norm=0):
         xticklabels=1 if cm.shape[0] <= 10 else 5,
         yticklabels=1 if cm.shape[0] <= 10 else 5,
     )
-    if ax is not None:
-        ax.set_xlabel('Predicted')
-        ax.set_ylabel('Ground Truth')
-    else:
-        plt.xlabel('Predicted')
-        plt.ylabel('Ground Truth')
+    ax.set_xlabel('Predicted')
+    ax.set_ylabel('Ground Truth')
+
+    # Draw a rect around the whole confusion matrix
+    ax.add_patch(Rectangle(
+        xy=(0, 0),
+        width=cm.shape[0],
+        height=cm.shape[1],
+        fill=False,
+        edgecolor='0.1',
+        alpha=0.1,
+    ))
+
+    if cm.shape[0] >= 50:
+        # Add outlines of rectangles to help with alignment
+        for i in range(0, 5):
+            for j in range(0, 5):
+                ax.add_patch(Rectangle(
+                    xy=(i*10, j*10),
+                    width=10,
+                    height=10,
+                    fill=False,
+                    edgecolor='0.1',
+                    alpha=0.1,
+                ))
+
+    if cm.shape[0] >= 50:
+        # Draw the number of degrees on the top
+        for i, degrees in enumerate(range(0, 181, 45)):
+            ax.text(
+                cm.shape[0], 5.5 + i*10,
+                f'{degrees}$^\\circ$',
+                alpha=0.5,
+                ha='left',
+                va='center',
+                fontsize=8,
+            )
+
     return p
 
 
@@ -363,3 +398,19 @@ def cmp_ts(
 
     plt.subplots_adjust(wspace=0, hspace=0)
     return axs
+
+
+def watermark(ax):
+    """Add a watermark onto the ax indicating that it's not final."""
+    ax.text(
+        0.5,
+        0.5,
+        'Visualisation not final',
+        transform=ax.transAxes,
+        fontsize=40,
+        color='gray',
+        alpha=0.5,
+        ha='center',
+        va='center',
+        rotation=30
+    )
