@@ -47,11 +47,13 @@ def main():
         num_gesture_classes = int(sys.argv[1].split("-")[2])
         study_name = sys.argv[1]
     else:
-        model_type = "HFFNN"
-        num_gesture_classes = 51
+        model_type = input("What model type?: ")
+        num_gesture_classes = int(input("How many gesture classes?: "))
         study_name = f"optimizers-{model_type}-{num_gesture_classes:0>2}"
     if not os.path.exists(f'saved_models/{study_name}'):
         os.makedirs(f'saved_models/{study_name}')
+
+    repetitions = 5
 
     study = optuna.create_study(
         study_name=study_name,
@@ -63,43 +65,69 @@ def main():
     # print("WARN: Using TPE sampler")
     study.optimize(
         lambda trial: objective_wrapper(
-            trial, X, y, dt, study_name, model_type, num_gesture_classes),
+            trial,
+            X,
+            y,
+            dt,
+            study_name,
+            model_type,
+            num_gesture_classes,
+            repetitions=repetitions
+        ),
         n_trials=200,
         gc_after_trial=True,
     )
 
 
-def objective_wrapper(trial, X, y, dt, study_name, model_type, num_gesture_classes):
-    preprocessing: models.PreprocessingConfig = {
-        'seed': 42 + trial.number,
-        'n_timesteps': 20,
-        'max_obs_per_class': 200 if model_type == "HMM" else None,
-        'gesture_allowlist': list(range(num_gesture_classes)),
-        'num_gesture_classes': num_gesture_classes,
-        'rep_num': 0
-    }
-
-    (X_trn, X_val, y_trn, y_val, dt_trn, dt_val) = sklearn.model_selection.train_test_split(
-        X, y, dt, stratify=y, random_state=preprocessing["seed"]
-    )
+def objective_wrapper(
+    trial,
+    X,
+    y,
+    dt,
+    study_name,
+    model_type,
+    num_gesture_classes,
+    repetitions=1
+) -> float:
 
     if model_type == "FFNN":
-        return objective_nn(trial, X_trn, y_trn, dt_trn, X_val, y_val, dt_val,
-                            study_name, preprocessing)
+        objective_func = objective_nn
     elif model_type == "HMM":
-        return objective_hmm(trial, X_trn, y_trn, dt_trn, X_val, y_val, dt_val,
-                             study_name, preprocessing)
+        objective_func = objective_hmm
     elif model_type == "CuSUM":
-        return objective_cusum(trial, X_trn, y_trn, dt_trn, X_val, y_val,
-                               dt_val, study_name, preprocessing)
-    if model_type == "HFFNN":
-        return objective_hffnn(trial, X_trn, y_trn, dt_trn, X_val, y_val, dt_val,
-                               study_name, preprocessing)
-    if model_type == "SVM":
-        return objective_svm(trial, X_trn, y_trn, dt_trn, X_val, y_val, dt_val,
-                             study_name, preprocessing)
+        objective_func = objective_cusum
+    elif model_type == "HFFNN":
+        objective_func = objective_hffnn
+    elif model_type == "SVM":
+        objective_func = objective_svm
     else:
-        raise NotImplementedError
+        raise NotImplementedError(f"Model type {model_type} is not known")
+
+    scores = []
+
+    for rep_num in range(repetitions):
+        print(f"[{rep_num}/{repetitions}] Repetition starting for model {model_type}")
+        preprocessing: models.PreprocessingConfig = {
+            'seed': 42 + rep_num,
+            'n_timesteps': 20,
+            'max_obs_per_class': 200 if model_type == "HMM" else None,
+            'gesture_allowlist': list(range(num_gesture_classes)),
+            'num_gesture_classes': num_gesture_classes,
+            'rep_num': rep_num,
+        }
+
+        (X_trn, X_val, y_trn, y_val, dt_trn, dt_val) = sklearn.model_selection.train_test_split(
+            X, y, dt, stratify=y, random_state=preprocessing["seed"]
+        )
+
+        scores.append(objective_func(
+            trial,
+            X_trn, y_trn, dt_trn,
+            X_val, y_val, dt_val,
+            study_name,
+            preprocessing
+        ))
+    return np.mean(scores).astype(float)
 
 
 def objective_hmm(trial, X_trn, y_trn, dt_trn, X_val, y_val, dt_val,
