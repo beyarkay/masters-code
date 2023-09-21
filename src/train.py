@@ -120,13 +120,21 @@ def objective_wrapper(
             X, y, dt, stratify=y, random_state=preprocessing["seed"]
         )
 
-        scores.append(objective_func(
+        score = objective_func(
             trial,
             X_trn, y_trn, dt_trn,
             X_val, y_val, dt_val,
             study_name,
             preprocessing
-        ))
+        )
+        trial.report(score, step=rep_num)
+        scores.append(score)
+
+    trial.set_user_attr("scores.all", scores)
+    trial.set_user_attr("scores.min", np.min(scores))
+    trial.set_user_attr("scores.max", np.max(scores))
+    trial.set_user_attr("scores.mean", np.mean(scores))
+    trial.set_user_attr("scores.std_dev", np.std(scores))
     return np.mean(scores).astype(float)
 
 
