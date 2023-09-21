@@ -688,7 +688,7 @@ class SVMClassifier(TemplateClassifier):
         self.config = config
 
     @timeout(3600)
-    def fit(self, X, y, dt, validation_data, **kwargs) -> None:
+    def fit(self, X, y, dt, validation_data, verbose=False, **kwargs) -> None:
         assert self.config is not None
         assert self.config["svm"] is not None
         self.fit_start_time = time.time()
@@ -701,7 +701,7 @@ class SVMClassifier(TemplateClassifier):
             class_weight=self.config["svm"]["class_weight"],
             random_state=self.config["preprocessing"]["seed"],
             max_iter=self.config['svm']['max_iter'],
-            verbose=False,
+            verbose=verbose,
         )
         print("Fitting SVM")
         self.model.fit(
@@ -717,7 +717,7 @@ class SVMClassifier(TemplateClassifier):
     @timeout(3600)
     def predict(self, X):
         assert self.config is not None
-        assert self.config["cusum"] is not None
+        assert self.config["svm"] is not None
         self.predict_start_time = time.time()
 
         y_pred = self.model.predict(X.reshape(X.shape[0], -1))
