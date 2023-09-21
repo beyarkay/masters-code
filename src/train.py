@@ -60,7 +60,7 @@ def main():
         direction="maximize",
         storage="sqlite:///db.sqlite3",
         load_if_exists=True,
-        sampler=optuna.samplers.RandomSampler(seed=42),
+        sampler=optuna.samplers.RandomSampler(),
     )
     # print("WARN: Using TPE sampler")
     study.optimize(
