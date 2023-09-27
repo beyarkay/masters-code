@@ -1211,16 +1211,20 @@ class MetaClassifier(TemplateClassifier):
     def predict(self, X):
         assert self.majority_clf is not None
         assert self.minority_clf is not None
+        self.predict_start_time = time.time()
         print(f"Predicting {len(X)} observations with minority classifier")
         majority_pred = self.majority_clf.predict(X)
         print(f"Predicting {len(X)} observations with minority classifier")
         minority_pred = self.minority_clf.predict(X)
 
-        return np.where(
+        y_pred = np.where(
             majority_pred == 0,
             minority_pred,
             50,
         )
+
+        self.predict_finsh_time = time.time()
+        return y_pred
 
 
 class RNNClassifier(TFClassifier):
