@@ -377,8 +377,10 @@ def predict_from_serial(args):
         read.ParseLineHandler(),
         pred.PredictGestureHandler(clf),
         # pred.SpellCheckHandler(),
-        vis.StdOutHandler(),
-        save.SaveHandler(f"tmp_{now}.csv"),
+        pred.MapToKeystrokeHandler(),
+        vis.StdOutHandler(
+            delim=f'{C.Style.DIM} | {C.Style.RESET_ALL}'),
+        save.SaveHandler(f"gesture_data/saved_from_cli_{now}.csv"),
     ]
     print("Executing handlers")
     read.execute_handlers(handlers)
@@ -387,21 +389,22 @@ def predict_from_serial(args):
 
 
 def save_from_serial(args):
-    print("saving from serial")
+    print("Saving from serial")
     reading = read.find_port()
     if reading is None:
         print("Could not infer serial port number")
         sys.exit(1)
     port_name, baud_rate = reading
-    labels = [[s.strip() for s in label.split(",")] for label in args.labels]
-    labels = [item for sublist in labels for item in sublist]
+    # if args.labels:
+    #     labels = [[s.strip() for s in label.split(",")] for label in args.labels]
+    #     labels = [item for sublist in labels for item in sublist]
     now = datetime.datetime.now().isoformat(sep="T")[:-7]
     handlers = [
         read.ReadLineHandler(port_name=port_name, baud_rate=baud_rate),
         read.ParseLineHandler(),
-        vis.InsertLabelHandler(labels=labels),
+        # vis.InsertLabelHandler(labels=labels),
         vis.StdOutHandler(),
-        save.SaveHandler(f"gesture_data/tmp_{now}.csv"),
+        save.SaveHandler(f"gesture_data/saved_from_cli_{now}.csv"),
     ]
     print("Executing handlers")
     read.execute_handlers(handlers)

@@ -63,6 +63,10 @@ class InsertLabelHandler(common.AbstractHandler):
 class StdOutHandler(common.AbstractHandler):
     """Output various information to stdout for debugging purposes."""
 
+    def __init__(self, delim='|'):
+        super().__init__()
+        self.delim = delim
+
     def execute(
         self,
         past_handlers: list[common.AbstractHandler],
@@ -76,7 +80,7 @@ class StdOutHandler(common.AbstractHandler):
             [h for h in past_handlers if type(h) is read.ParseLineHandler]
         )
 
-        stdouts = ';'.join(
+        stdouts = self.delim.join(
             str(h.stdout) + C.Style.RESET_ALL for h in past_handlers if h.stdout)
 
         def colour_map(low, high):
@@ -125,21 +129,22 @@ class StdOutHandler(common.AbstractHandler):
         )
 
         print(
-            f"[{now}] {chunked}{C.Style.RESET_ALL} | {stdouts}{C.Style.RESET_ALL}"
+            f"{C.Style.DIM}[{now}] {C.Style.RESET_ALL}{chunked}{C.Style.RESET_ALL}{C.Style.DIM} | {C.Style.RESET_ALL}{stdouts}{C.Style.RESET_ALL}"
         )
 
 
 def conf_mat(cm, ax=None, norm=0):
+    """Parameters: confusion matrix, ax, and normalization axis."""
     if ax is None:
         ax = plt.gca()
     cm_normed = cm if norm is None else cm / cm.sum(axis=norm)
     p = sns.heatmap(
         cm_normed,
         annot=cm if cm.shape[0] <= 5 else False,
-        fmt='d' if norm is None else '.3f',
+        fmt='d' if cm.dtype != 'float' else '.3f',
         square=True,
         mask=(cm == 0),
-        cmap='viridis',
+        cmap='turbo',
         ax=ax,
         vmax=1 if np.all(cm_normed <= 1) else None,
         vmin=0 if np.all(cm_normed <= 1) else None,

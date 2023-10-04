@@ -10,6 +10,8 @@ import numpy as np
 from autocorrect import Speller
 import yaml
 
+import colorama as C
+
 
 class PredictGestureHandler(common.AbstractHandler):
     """Use a model to predict the gesture from the latest observation."""
@@ -42,7 +44,12 @@ class PredictGestureHandler(common.AbstractHandler):
             np.float32).reshape((1, *sample.shape))
 
         self.prediction = self.clf.predict(processed_sample)[0]
-        self.stdout = f" Prediction: {self.prediction}"
+        if self.prediction != 50:
+            spaces_before = " " * self.prediction
+            spaces_after = " " * (50 - self.prediction)
+            self.stdout = f" Prediction: {spaces_before}{C.Fore.GREEN}{self.prediction}{C.Style.RESET_ALL}{spaces_after}"
+        else:
+            self.stdout = f" Prediction: {self.prediction}"
 
 
 class MapToKeystrokeHandler(common.AbstractHandler):
@@ -53,12 +60,13 @@ class MapToKeystrokeHandler(common.AbstractHandler):
         common.AbstractHandler.__init__(self)
         with open("gesture_data/gesture_info.yaml", 'r') as f:
             self.g2k = yaml.safe_load(f)['gestures']
+        print(self.g2k)
 
     def execute(
         self,
         past_handlers: list[common.AbstractHandler],
     ) -> None:
-        print("Executing MapToKeystrokeHandler")
+        # print("Executing MapToKeystrokeHandler")
         prediction_handler: PredictGestureHandler = next(
             h for h in past_handlers if type(h) is PredictGestureHandler
         )
@@ -66,13 +74,8 @@ class MapToKeystrokeHandler(common.AbstractHandler):
             print("WARN: prediction_handler doesn't have any predictions")
             return
 
-        gesture = 'unknown'
-        keystroke = 'unknown'
-        print(
-            f'prediction: {prediction_handler.prediction}, gesture: {gesture}, keystroke: {keystroke}')  # noqa: E501
-
-        raise NotImplementedError(
-            "MapToKeystrokeHandler has not been implemented yet")
+        gidx = 255 if prediction_handler.prediction == 50 else prediction_handler.prediction
+        self.stdout = self.g2k[f'gesture{gidx:0>4}']['key']
 
 
 class SpellCheckHandler(common.AbstractHandler):
