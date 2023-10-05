@@ -4,6 +4,7 @@ This should include functions for visualising results via a live GUI, as well
 as for visualising results via the CLI.
 """
 
+import pandas as pd
 from typing import Optional
 import tensorflow as tf
 import numpy as np
@@ -15,6 +16,7 @@ from matplotlib.colors import LogNorm
 import colorama as C
 import datetime
 from matplotlib.patches import Rectangle
+import matplotlib as mpl
 
 
 class InsertLabelHandler(common.AbstractHandler):
@@ -144,7 +146,7 @@ def conf_mat(cm, ax=None, norm=0):
         fmt='d' if cm.dtype != 'float' else '.3f',
         square=True,
         mask=(cm == 0),
-        cmap='turbo',
+        cmap="Spectral",
         ax=ax,
         vmax=1 if np.all(cm_normed <= 1) else None,
         vmin=0 if np.all(cm_normed <= 1) else None,
@@ -192,11 +194,43 @@ def conf_mat(cm, ax=None, norm=0):
     return p
 
 
+def precision_recall_f1(report, ax=None):
+    """Given an sklearn classificaiton report in dict format, plot the
+    precision, recall, and f1 score."""
+    df = pd.DataFrame()
+    df['Recall'] = {
+        int(k): d['recall']
+        for k, d in report.items()
+        if type(d) is dict and k.isdigit()
+    }
+    df['Precision'] = {
+        int(k): d['precision']
+        for k, d in report.items()
+        if type(d) is dict and k.isdigit()
+    }
+    df['F1-score'] = {
+        int(k): d['f1-score']
+        for k, d in report.items()
+        if type(d) is dict and k.isdigit()
+    }
+    sns.heatmap(
+        df.T,
+        square=True,
+        cbar=False,
+        cmap="Spectral",
+        vmin=0,
+        vmax=1,
+        ax=ax,
+        xticklabels=5,
+    )
+
+
 def plot_conf_mats(model, Xs, ys, titles):
     """Plots the confusion matrices for the given model with the given data.
 
     The confusion matrices are log10 transformed to highlight low-occuring
     misclassifications."""
+    raise NotImplementedError("This function is no longer supported")
     conf_mats = []
     for X, y in zip(Xs, ys):
         conf_mats.append(model.confusion_matrix(y, X_to_pred=X))
@@ -210,7 +244,7 @@ def plot_conf_mats(model, Xs, ys, titles):
             vmax=cm.max(),
             square=True,
             norm=LogNorm(),
-            cmap="turbo_r",
+            cmap="Spectral",
         )
         ax.set(
             xlabel="Predicted Gesture",
