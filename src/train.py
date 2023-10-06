@@ -272,9 +272,16 @@ def objective_hffnn(trial, X_trn, y_trn, dt_trn, X_val, y_val, dt_val, study_nam
                 f"{clf_type}.nodes_per_layer.{layer_idx+1}", 4, 512, log=True)
             for layer_idx in range(num_layers)
         ]
+        gesture_allowlist = (
+            [0, 1] if clf_type == "majority" else list(range(50))
+        )
         config: models.ConfigDict = {
             "model_type": "FFNN",
-            "preprocessing": preprocessing,
+            "preprocessing": preprocessing | {
+                'gesture_allowlist': gesture_allowlist,
+                'num_gesture_classes': len(gesture_allowlist),
+
+            },
             "nn": {
                 "epochs": trial.suggest_int(f"{clf_type}.epochs", 5, 40),
                 "batch_size": trial.suggest_int(f"{clf_type}.batch_size", 64, 256, log=True),
@@ -307,6 +314,7 @@ def objective_hffnn(trial, X_trn, y_trn, dt_trn, X_val, y_val, dt_val, study_nam
     meta_clf = models.MetaClassifier(
         majority_config=majority_config,
         minority_config=minority_config,
+        preprocessing=preprocessing,
     )
 
     print("Fitting Meta model")
@@ -375,7 +383,16 @@ def calc_metrics(trial, start, finsh, clf):
     model_dir = clf.write_as_jsonl(jsonl_path)
     trial.set_user_attr("model_dir", model_dir)
 
-    y_pred = clf.predict(X_val)
+    y_pred_path = f'{model_dir}/y_val_true_y_val_pred.npz'
+    print(f"[{datetime.datetime.now()}] Reading y_pred from {y_pred_path}")
+    try:
+        y_pred = np.load(y_pred_path)['y_pred']
+    except OSError as e:
+        print(
+            f"[{datetime.datetime.now()}] Failed to read {y_pred_path}: {e}, clf.predict'ing instead")
+        y_pred = clf.predict(X_val)
+
+    print(f"[{datetime.datetime.now()}] Calculating metrics")
     clf_report = pd.json_normalize(sklearn.metrics.classification_report(
         y_val.astype(int),
         y_pred.astype(int),
