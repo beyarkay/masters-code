@@ -143,16 +143,17 @@ def objective_hmm(trial, X_trn, y_trn, dt_trn, X_val, y_val, dt_val,
         "preprocessing": preprocessing,
         "hmm": {
             "n_iter": 20,
-            "covariance_type": trial.suggest_categorical([
+            "covariance_type": trial.suggest_categorical(
                 "hmm.covariance_type",
-                ["spherical", "diag", "full", "tied"]
-            ])
+                ["spherical", "diag", "full", "tied"],
+            )
         },
         "cusum": None,
         "lstm": None,
         "ffnn": None,
         "nn": None,
         "svm": None,
+        "hffnn": None,
     }
     clf = models.HMMClassifier(config=config)
     start = datetime.datetime.now()
