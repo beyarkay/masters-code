@@ -194,21 +194,29 @@ def conf_mat(cm, ax=None, norm=0):
     return p
 
 
-def precision_recall_f1(report, ax=None):
+def precision_recall_f1(report=None, recall=None, precision=None, f1=None, ax=None):
     """Given an sklearn classificaiton report in dict format, plot the
     precision, recall, and f1 score."""
+    assert bool(report is None) != bool(
+        recall is None and precision is None and f1 is None
+    ), "Either the report xor (precision & recall & f1) need to be not None"
+    if recall is not None and precision is not None and f1 is not None:
+        recall = {i: r for i, r in enumerate(recall)}
+        precision = {i: p for i, p in enumerate(precision)}
+        f1 = {i: f for i, f in enumerate(f1)}
+
     df = pd.DataFrame()
-    df['Recall'] = {
+    df['Recall'] = recall if report is None else {
         int(k): d['recall']
         for k, d in report.items()
         if type(d) is dict and k.isdigit()
     }
-    df['Precision'] = {
+    df['Precision'] = precision if report is None else {
         int(k): d['precision']
         for k, d in report.items()
         if type(d) is dict and k.isdigit()
     }
-    df['F1-score'] = {
+    df['F1-score'] = f1 if report is None else {
         int(k): d['f1-score']
         for k, d in report.items()
         if type(d) is dict and k.isdigit()
