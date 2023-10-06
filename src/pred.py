@@ -47,9 +47,9 @@ class PredictGestureHandler(common.AbstractHandler):
         if self.prediction != 50:
             spaces_before = " " * self.prediction
             spaces_after = " " * (50 - self.prediction)
-            self.stdout = f" Prediction: {spaces_before}{C.Fore.GREEN}{self.prediction}{C.Style.RESET_ALL}{spaces_after}"
+            self.stdout = f" {C.Style.DIM}Prediction: {C.Style.RESET_ALL}{spaces_before}{C.Fore.GREEN}{self.prediction}{C.Style.RESET_ALL}{spaces_after}"
         else:
-            self.stdout = f" Prediction: {self.prediction}"
+            self.stdout = f" {C.Style.DIM}Prediction: {C.Style.RESET_ALL}{self.prediction}"
 
 
 class MapToKeystrokeHandler(common.AbstractHandler):
