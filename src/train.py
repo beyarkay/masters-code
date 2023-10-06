@@ -21,8 +21,6 @@ from pprint import pprint
 import datetime
 import sys
 import os
-import time
-from sklearn import svm
 
 from numpy.lib.npyio import NpzFile
 
@@ -108,9 +106,9 @@ def objective_wrapper(
     for rep_num in range(repetitions):
         print(f"[{rep_num}/{repetitions}] Repetition starting for model {model_type}")
         preprocessing: models.PreprocessingConfig = {
-            'seed': 42 + rep_num,
+            'seed': 42 + rep_num + repetitions * trial.number,
             'n_timesteps': 20,
-            'max_obs_per_class': 200 if model_type == "HMM" else None,
+            'max_obs_per_class': 1000 if model_type == "HMM" else None,
             'gesture_allowlist': list(range(num_gesture_classes)),
             'num_gesture_classes': num_gesture_classes,
             'rep_num': rep_num,
