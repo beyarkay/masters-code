@@ -80,6 +80,18 @@ class PreprocessingConfig(TypedDict):
     rep_num: Optional[int]
 
 
+class MetaClassifierConfig(TypedDict):
+    preprocessing: PreprocessingConfig
+    nn: Optional[NNConfig]
+    ffnn: Optional[FFNNConfig]
+    model_type: Literal["FFNN"]
+
+
+class HFFNNConfig(TypedDict):
+    majority: MetaClassifierConfig
+    minority: MetaClassifierConfig
+
+
 class ConfigDict(TypedDict):
     preprocessing: PreprocessingConfig
     cusum: Optional[CusumConfig]
@@ -88,6 +100,7 @@ class ConfigDict(TypedDict):
     lstm: Optional[LSTMConfig]
     hmm: Optional[HMMConfig]
     svm: Optional[SVMConfig]
+    hffnn: Optional[HFFNNConfig]
     model_type: Optional[Literal["FFNN", "HMM", "CuSUM", "HFFNN", "SVM"]]
 
 
@@ -152,7 +165,7 @@ class TemplateClassifier(BaseEstimator, ClassifierMixin):
         y_val = y_val[allowed_val_gestures]
         dt_val = dt_val[allowed_val_gestures]
         g255 = 50 if len(allowlist) == 51 else None
-        print(f"{allowlist=}, {g255=}")
+        print(f"{g255=}, {allowlist=}")
         self.g2i, self.i2g = common.make_gestures_and_indices(
             y,
             to_i=lambda g: g,
@@ -160,7 +173,9 @@ class TemplateClassifier(BaseEstimator, ClassifierMixin):
             g255=g255,
         )
         print(
-            f"Shapes after allowlist: {X.shape=} {y.shape=} {X_val.shape=} {y_val.shape=}"  # noqa: E501
+            f"Shapes after allowlist: {X.shape=} {y.shape=} {X_val.shape=} {y_val.shape=}\n"  # noqa: E501
+            f"to_i is the identity, to_g is the identity, g255={g255}\n"  # noqa: E501
+            f"g2i: y {list(zip(self.g2i(np.unique(y)), np.unique(y)))}"  # noqa: E501
         )
 
         # Ensure that there are no more than `max_obs_per_class` observations
@@ -268,6 +283,8 @@ class TemplateClassifier(BaseEstimator, ClassifierMixin):
             # Make predictions, attempting to mitigate the effect of a timeout
             while True:
                 try:
+                    print(
+                        f"[{datetime.datetime.now()}] Predicting {prefix} with X.shape = {X.shape}")
                     y_pred = self.predict(X)
                     break
                 except TimeoutError as e:
@@ -280,12 +297,14 @@ class TemplateClassifier(BaseEstimator, ClassifierMixin):
                     print(f"New shape: {X.shape}")
                     continue
 
+            print(f"[{datetime.datetime.now()}] Saving y_pred and y_true")
             np.savez(
                 f"{model_dir}/y_{prefix}_true_y_{prefix}_pred.npz",
                 y_pred=y_pred.astype(int),
                 y_true=y.astype(int)
             )
 
+            print(f"[{datetime.datetime.now()}] Getting classification report")
             # Get a classification_report formatted as a pandas DF
             report = classification_report(  # type: ignore
                 y.astype(int),
@@ -327,6 +346,13 @@ class TemplateClassifier(BaseEstimator, ClassifierMixin):
             if self.config['model_type'] != 'FFNN' else
             self.model.history.history['loss'][-1]
         )
+        # FIXME: Training loss and validation loss aren't comparable because
+        # Keras uses the class weights for the training loss but *not* for the
+        # validation loss. Trying to use class weights for validation loss
+        # directly in Keras uses too much memory to be practical, for some
+        # reason.
+        # https://datascience.stackexchange.com/q/53012/139026
+        # They're also not directly comparable because of dropout
         val_loss: float = (
             np.nan
             if self.config['model_type'] != 'FFNN' else
@@ -351,7 +377,7 @@ class TemplateClassifier(BaseEstimator, ClassifierMixin):
             sort=True
         )
 
-        print(f"Saving data to jsonlines {path}")
+        print(f"[{datetime.datetime.now()}] Saving data to jsonlines {path}")
         to_save.to_json(
             path,
             lines=True,
@@ -359,6 +385,8 @@ class TemplateClassifier(BaseEstimator, ClassifierMixin):
             mode='a',
         )
 
+        print(
+            f"[{datetime.datetime.now()}] Dumping model config to {model_dir}/config.yaml")
         with open(f"{model_dir}/config.yaml", "w") as f:
             yaml.safe_dump(self.config, f)
         return model_dir
@@ -591,7 +619,6 @@ class HMMClassifier(TemplateClassifier):
         self.config: Optional[ConfigDict] = config
         self.config["model_type"] = self.config.get("model_type", "HMM")
 
-    @timeout(3600)
     def fit(self, X, y, dt, validation_data=None, verbose=False, **kwargs) -> None:
         assert hasattr(self, 'config') and self.config is not None
         self.fit_start_time = time.time()
@@ -635,8 +662,7 @@ class HMMClassifier(TemplateClassifier):
         self.is_fitted_ = True
         self.fit_finsh_time = time.time()
 
-    @timeout(3600)
-    def predict(self, X, verbose=False):
+    def predict(self, X, verbose=True):
         self.predict_start_time = time.time()
         predictions = np.empty(X.shape[0])
         if verbose:
@@ -666,7 +692,6 @@ class HMMClassifier(TemplateClassifier):
         self.predict_finsh_time = time.time()
         return predictions
 
-    @timeout(3600)
     def predict_score(self, X, verbose=False):
         self.predict_score_start_time = time.time()
         scores = np.empty((X.shape[0], len(self.models_)))
@@ -1126,19 +1151,30 @@ class MetaClassifier(TemplateClassifier):
     def __init__(
         self,
         majority_config: ConfigDict,
-        minority_config: ConfigDict
+        minority_config: ConfigDict,
+        preprocessing: PreprocessingConfig,
     ):
         super().__init__()
         self.majority_config = majority_config
         self.minority_config = minority_config
+        # This type error is okay. Technically, we'd want arbitrarily recursive
+        # config dicts, since a MetaClassifier could be made up of other
+        # MetaClassifiers. However, Python doesn't allow recursive
+        # datastructures, so we have to fudge the type system a bit.
+        hffnn_config: HFFNNConfig = {
+            'majority': self.majority_config,
+            'minority': self.minority_config,
+        }
         self.config: ConfigDict = {
             "model_type": "HFFNN",
+            "preprocessing": preprocessing,
             "cusum": None,
             "hmm": None,
             "nn": None,
             "ffnn": None,
             "lstm": None,
-            "preprocessing": None,
+            "svm": None,
+            "hffnn": hffnn_config,
         }
 
     @timeout(7200)

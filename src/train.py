@@ -182,6 +182,7 @@ def objective_cusum(trial, X_trn, y_trn, dt_trn, X_val, y_val, dt_val,
         "ffnn": None,
         "nn": None,
         "svm": None,
+        "hffnn": None,
     }
     clf = models.CuSUMClassifier(config=config)
     start = datetime.datetime.now()
@@ -225,6 +226,7 @@ def objective_nn(trial, X_trn, y_trn, dt_trn, X_val, y_val, dt_val, study_name, 
         "lstm": None,
         "hmm": None,
         "svm": None,
+        "hffnn": None,
     }
     pprint(config)
     clf = models.FFNNClassifier(config=config)
@@ -288,6 +290,7 @@ def objective_hffnn(trial, X_trn, y_trn, dt_trn, X_val, y_val, dt_val, study_nam
             "lstm": None,
             "hmm": None,
             "svm": None,
+            "hffnn": None,
         }
         if clf_type == "majority":
             majority_config = config
@@ -335,6 +338,7 @@ def objective_svm(trial, X_trn, y_trn, dt_trn, X_val, y_val, dt_val, study_name,
         "cusum": None,
         "lstm": None,
         "hmm": None,
+        "hffnn": None,
     })
     print("Fitting")
     start = datetime.datetime.now()
@@ -354,6 +358,7 @@ def objective_svm(trial, X_trn, y_trn, dt_trn, X_val, y_val, dt_val, study_name,
 
 def calc_metrics(trial, start, finsh, clf):
     model_type = clf.config['model_type']
+    print(f"[{datetime.datetime.now()}] Calculating metrics for {model_type}")
     X_val = clf.validation_data[0]
     y_val = clf.validation_data[1]
     print("y_val unique: ", np.unique(y_val))
@@ -365,6 +370,7 @@ def calc_metrics(trial, start, finsh, clf):
         trial.set_user_attr("val_loss", clf.history.history["val_loss"][-1])
         trial.set_user_attr("trn_loss", clf.history.history["loss"][-1])
 
+    print(f"[{datetime.datetime.now()}] Writing as jsonl")
     jsonl_path = f"saved_models/results_{model_type.lower()}_optuna.jsonl"
     model_dir = clf.write_as_jsonl(jsonl_path)
     trial.set_user_attr("model_dir", model_dir)
@@ -376,6 +382,7 @@ def calc_metrics(trial, start, finsh, clf):
         output_dict=True,
         zero_division=0,
     ))
+    print(f"[{datetime.datetime.now()}] Printing Metrics")
     print(sklearn.metrics.classification_report(
         y_val.astype(int),
         y_pred.astype(int),
