@@ -40,3 +40,73 @@ class SaveHandler(common.AbstractHandler):
         line_to_save = f"{now},{label},{','.join(parse_line_handler.raw_values[2:])}\n"
         with open(self.path, "a") as f:
             f.writelines([line_to_save])
+
+
+class TypeToKeyboardHandler(common.AbstractHandler):
+    def __init__(self):
+        super().__init__()
+        self.ctrled = {
+            "m": lambda: keyboard.send("\n"),
+            "j": lambda: keyboard.send("\n"),
+            "h": lambda: keyboard.send("\b"),
+            "[": lambda: keyboard.send("escape"),
+        }
+        self.shifed = {
+            "1": lambda: keyboard.write("!"),
+            "2": lambda: keyboard.write("@"),
+            "3": lambda: keyboard.write("#"),
+            "4": lambda: keyboard.write("$"),
+            "5": lambda: keyboard.write("%"),
+            "6": lambda: keyboard.write("^"),
+            "7": lambda: keyboard.write("&"),
+            "8": lambda: keyboard.write("*"),
+            "9": lambda: keyboard.write("("),
+            "0": lambda: keyboard.write(")"),
+            "-": lambda: keyboard.write("_"),
+            "=": lambda: keyboard.write("+"),
+            "[": lambda: keyboard.write("{"),
+            "]": lambda: keyboard.write("}"),
+            ";": lambda: keyboard.write(":"),
+            "'": lambda: keyboard.write('"'),
+            ",": lambda: keyboard.write("<"),
+            ".": lambda: keyboard.write(">"),
+            "/": lambda: keyboard.write("?"),
+            "\\": lambda: keyboard.write("|"),
+            "`": lambda: keyboard.write("~"),
+        }
+        self.meta_characters = {
+            'control': '⌤',
+            'shift': '⇧',
+        }
+
+    def execute(
+        self,
+        past_handlers: list[common.AbstractHandler],
+    ):
+        map_to_keystroke_handler: MapToKeystrokeHandler = common.first_or_fail(
+            [h for h in past_handlers if type(h) is MapToKeystrokeHandler]
+        )
+        typed_keys = map_to_keystroke_handler.typed
+        if len(typed_keys) > 1:
+            prev_key = typed_keys[-1]
+            if len(typed_keys) > 2:
+                penultimate_key = typed_keys[-2]
+                match penultimate_key['keystroke']:
+                    case 'control':
+                        # Delete the previous meta-key keystroke
+                        keyboard.write("\b")
+                        # Send the appropriate control-modified key
+                        self.ctrled[prev_key['keystroke']]()
+                    case 'shift':
+                        # Delete the previous meta-key keystroke
+                        keyboard.write("\b")
+                        # Send the appropriate shift-modified key
+                        self.shifed[prev_key['keystroke']]()
+
+            # If the keystroke is a metacharacter, send a symbol for that
+            # metacharacter. Otherwise just send the keystroke.
+            keyboard.send(
+                self.meta_characters.get(
+                    prev_key['keystroke'], prev_key['keystroke']
+                )
+            )
