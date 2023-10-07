@@ -375,12 +375,13 @@ def predict_from_serial(args):
     handlers = [
         read.ReadLineHandler(port_name=port_name, baud_rate=baud_rate),
         read.ParseLineHandler(),
-        pred.PredictGestureHandler(clf),
-        # pred.SpellCheckHandler(),
+        pred.PredictGestureHandler(clf, clf_dir=args.predict_with),
         pred.MapToKeystrokeHandler(),
+        # pred.SpellCheckHandler(),
         vis.StdOutHandler(
             delim=f'{C.Style.DIM} | {C.Style.RESET_ALL}'),
         save.SaveHandler(f"gesture_data/saved_from_cli_{now}.csv"),
+        # save.TypeToKeyboardHandler()
     ]
     print("Executing handlers")
     read.execute_handlers(handlers)

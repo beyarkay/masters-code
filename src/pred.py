@@ -3,22 +3,24 @@
 This module should also take care of pre-processing the given data into a
 format that's appropriate for the model.
 """
-import read
+from autocorrect import Speller
+from typing import Optional, Literal, TypedDict
+import colorama as C
 import common
 import logging as l
 import numpy as np
-from autocorrect import Speller
+import read
 import yaml
-
-import colorama as C
+import datetime
 
 
 class PredictGestureHandler(common.AbstractHandler):
     """Use a model to predict the gesture from the latest observation."""
 
-    def __init__(self, clf):
+    def __init__(self, clf, clf_dir=None):
         common.AbstractHandler.__init__(self)
         self.clf = clf
+        self.clf_dir: Optional[str] = clf_dir
 
     def execute(
         self,
@@ -43,13 +45,28 @@ class PredictGestureHandler(common.AbstractHandler):
         processed_sample = sample.astype(
             np.float32).reshape((1, *sample.shape))
 
-        self.prediction = self.clf.predict(processed_sample)[0]
+        if hasattr(self.clf, "predict_proba"):
+            predict_proba = self.clf.predict_proba(processed_sample)
+            self.probabilities = predict_proba[0]
+            self.prediction = self.clf.i2g(np.argmax(predict_proba, axis=1))[0]
+        else:
+            self.prediction = self.clf.predict(processed_sample)[0]
+
         if self.prediction != 50:
             spaces_before = " " * self.prediction
             spaces_after = " " * (50 - self.prediction)
             self.stdout = f" {C.Style.DIM}Prediction: {C.Style.RESET_ALL}{spaces_before}{C.Fore.GREEN}{self.prediction}{C.Style.RESET_ALL}{spaces_after}"
         else:
             self.stdout = f" {C.Style.DIM}Prediction: {C.Style.RESET_ALL}{self.prediction}"
+
+
+class KeystrokePrediction(TypedDict):
+    """A predicted keystroke and metadata."""
+    timestamp: datetime.datetime
+    keystroke: str
+    gesture_index: int
+    probabilities: list[float]
+    model_dir: Optional[str]
 
 
 class MapToKeystrokeHandler(common.AbstractHandler):
@@ -60,7 +77,7 @@ class MapToKeystrokeHandler(common.AbstractHandler):
         common.AbstractHandler.__init__(self)
         with open("gesture_data/gesture_info.yaml", 'r') as f:
             self.g2k = yaml.safe_load(f)['gestures']
-        print(self.g2k)
+        self.typed: list[KeystrokePrediction] = []
 
     def execute(
         self,
@@ -75,7 +92,15 @@ class MapToKeystrokeHandler(common.AbstractHandler):
             return
 
         gidx = 255 if prediction_handler.prediction == 50 else prediction_handler.prediction
-        self.stdout = self.g2k[f'gesture{gidx:0>4}']['key']
+        keystroke = self.g2k[f'gesture{gidx:0>4}']['key']
+        self.stdout = keystroke
+        self.typed.append(KeystrokePrediction(
+            timestamp=datetime.datetime.now(),
+            keystroke=keystroke,
+            gesture_index=prediction_handler.prediction,
+            probabilities=prediction_handler.probabilities,
+            model_dir=prediction_handler.clf_dir,
+        ))
 
 
 class SpellCheckHandler(common.AbstractHandler):
