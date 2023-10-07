@@ -108,14 +108,22 @@ class SpellCheckHandler(common.AbstractHandler):
 
     def __init__(self) -> None:
         common.AbstractHandler.__init__(self)
-        self.speller = Speller(fast=True)
+        self.spell = Speller(fast=True)
 
     def execute(
         self,
         past_handlers: list[common.AbstractHandler],
     ) -> None:
         print("Executing SpellCheckHandler")
-        # TODO: Keep a log of the words which have been emitted so that we can
-        # run the spell checker on them.
-        raise NotImplementedError(
-            "Spell Check handler has not been implemented yet")
+        keystroke_handler: MapToKeystrokeHandler = next(
+            h for h in past_handlers if type(h) is MapToKeystrokeHandler
+        )
+
+        lines = ''.join(
+            t['keystroke'] for t in keystroke_handler.typed
+        ).split('\n')
+        if lines:
+            # Respell the last line
+            respelt = self.spell(lines[-1])
+            if respelt != lines[-1]:
+                print(f"Respelt line:\n\t-{lines[-1]}\n\t+{respelt}")
