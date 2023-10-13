@@ -35,7 +35,6 @@ dill==0.3.6
 docutils==0.20.1
 exceptiongroup==1.1.2
 executing==1.2.0
-fanova==2.0.19
 fastjsonschema==2.18.0
 filelock==3.12.2
 flatbuffers==23.3.3
