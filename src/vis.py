@@ -476,3 +476,19 @@ def fmt_legend(ax=None, **kwargs):
         **kwargs,
     )
     return ax
+
+
+def add_grid(ax=None, **kwargs):
+    if ax is None:
+        ax = plt.gca()
+    ax.grid(
+        'both',
+        **(
+            dict(
+                alpha=0.25,
+                lw=1,
+            ) | kwargs
+        )
+    )
+    ax.set_axisbelow(True)
+    return ax
