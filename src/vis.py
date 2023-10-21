@@ -492,3 +492,24 @@ def add_grid(ax=None, **kwargs):
     )
     ax.set_axisbelow(True)
     return ax
+
+
+def add_jitter(df, cols_to_jitter, amount=0.025):
+    """Adds a small amount of random noise to the selected columns. useful for
+    visualising points that are all ontop of one another. The noise is
+    gaussian, with a standard deviation proportional to `amount` and the
+    previous standard deviation of the column. The result is clamped between
+    the minimum and maximim of the original data so that out-of-bounds values
+    cannot occur."""
+    return df.assign(**{
+        c: np.clip(
+            df[c] + np.random.normal(
+                loc=0,
+                scale=df[c].std() * amount,
+                size=df[c].shape
+            ),
+            df[c].min(),
+            df[c].max()
+        )
+        for c in cols_to_jitter
+    })
