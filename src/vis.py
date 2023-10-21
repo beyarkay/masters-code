@@ -461,3 +461,18 @@ def watermark(ax):
         va='center',
         rotation=30
     )
+
+
+def fmt_legend(ax=None, **kwargs):
+    if ax is None:
+        ax = plt.gca()
+    handles, labels = ax.get_legend_handles_labels()
+    ax.legend(
+        handles=handles,
+        labels=labels,
+        borderpad=0.5,
+        labelspacing=0.1,
+        handlelength=0.1,
+        **kwargs,
+    )
+    return ax
