@@ -17,6 +17,7 @@ import colorama as C
 import datetime
 from matplotlib.patches import Rectangle
 import matplotlib as mpl
+from mpl_toolkits.axes_grid1 import make_axes_locatable
 
 
 class InsertLabelHandler(common.AbstractHandler):
@@ -513,3 +514,27 @@ def add_jitter(df, cols_to_jitter, amount=0.025):
         )
         for c in cols_to_jitter
     })
+
+
+def add_cbar(
+    fig, ax, data,
+    label=None,
+    cmap='Spectral',
+    vmin=None,
+    vmax=None,
+) -> None:
+    divider = make_axes_locatable(ax)
+    cax = divider.append_axes('right', size='2.5%', pad=0.05)
+
+    norm = mpl.colors.Normalize(
+        vmin=vmin if vmin is not None else data.min(),
+        vmax=vmax if vmax is not None else data.max(),
+    )
+
+    cb = fig.colorbar(
+        mpl.cm.ScalarMappable(norm=norm, cmap=cmap),
+        cax=cax,
+        orientation='vertical',
+        label=label
+    )
+    cb.outline.set_visible(False)
