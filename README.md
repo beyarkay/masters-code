@@ -1,4 +1,4 @@
-# _Ergo_: A Gesture-Based Computer Interaction Device
+# _Ergo_: A Gesture-Based Computer Interaction Device (code)
 
 This repository contains the code for the Computer Science Master's Thesis:
 
