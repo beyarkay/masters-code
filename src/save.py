@@ -77,6 +77,7 @@ class TypeToKeyboardHandler(common.AbstractHandler):
         self.meta_characters = {
             'control': '⌤',
             'shift': '⇧',
+            'space': ' ',
         }
 
     def execute(
@@ -89,23 +90,31 @@ class TypeToKeyboardHandler(common.AbstractHandler):
         typed_keys = map_to_keystroke_handler.typed
         if len(typed_keys) > 1:
             prev_key = typed_keys[-1]
+            if prev_key['keystroke'] == '':
+                return
             if len(typed_keys) > 2:
                 penultimate_key = typed_keys[-2]
                 match penultimate_key['keystroke']:
                     case 'control':
                         # Delete the previous meta-key keystroke
-                        keyboard.write("\b")
+                        keyboard.send("del")
                         # Send the appropriate control-modified key
-                        self.ctrled[prev_key['keystroke']]()
+                        try:
+                            self.ctrled[prev_key['keystroke']]()
+                        except Exception as e:
+                            print(e)
                     case 'shift':
                         # Delete the previous meta-key keystroke
-                        keyboard.write("\b")
+                        keyboard.send("del")
                         # Send the appropriate shift-modified key
-                        self.shifed[prev_key['keystroke']]()
+                        try:
+                            self.shifed[prev_key['keystroke']]()
+                        except Exception as e:
+                            print(e)
 
             # If the keystroke is a metacharacter, send a symbol for that
             # metacharacter. Otherwise just send the keystroke.
-            keyboard.send(
+            keyboard.write(
                 self.meta_characters.get(
                     prev_key['keystroke'], prev_key['keystroke']
                 )

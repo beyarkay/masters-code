@@ -381,7 +381,7 @@ def predict_from_serial(args):
         vis.StdOutHandler(
             delim=f'{C.Style.DIM} | {C.Style.RESET_ALL}'),
         save.SaveHandler(f"gesture_data/saved_from_cli_{now}.csv"),
-        # save.TypeToKeyboardHandler()
+        save.TypeToKeyboardHandler(),
     ]
     print("Executing handlers")
     read.execute_handlers(handlers)

@@ -136,14 +136,33 @@ class StdOutHandler(common.AbstractHandler):
         )
 
 
-def conf_mat(cm, ax=None, norm=0):
+def add_cbar_to_ax(ax):
+    """Add a Spectral colour bar to the top of a given ax, from 0 to 1.
+    https://stackoverflow.com/a/39938019/14555505"""
+    divider = make_axes_locatable(ax)
+    cax = divider.append_axes('top', size='5%', pad=0.05)
+
+#     Create a Spectral colour bar from 0 to 1
+    sm = plt.cm.ScalarMappable(
+        cmap=plt.get_cmap("Spectral"),
+        norm=plt.Normalize(0, 1)
+    )
+    sm.set_array([])
+
+    cbar = plt.colorbar(sm, cax=cax, orientation='horizontal')
+    cbar.outline.set_linewidth(0)
+    cax.set_title('Colour Scale')
+    ax.axis('off')
+
+
+def conf_mat(cm, ax=None, norm=0, **kwargs):
     """Parameters: confusion matrix, ax, and normalization axis."""
     if ax is None:
         ax = plt.gca()
     cm_normed = cm if norm is None else cm / cm.sum(axis=norm)
     p = sns.heatmap(
         cm_normed,
-        annot=cm if cm.shape[0] <= 5 else False,
+        annot=cm_normed if cm.shape[0] <= 5 else False,
         fmt='d' if cm.dtype != 'float' else '.3f',
         square=True,
         mask=(cm == 0),
@@ -153,6 +172,7 @@ def conf_mat(cm, ax=None, norm=0):
         vmin=0 if np.all(cm_normed <= 1) else None,
         xticklabels=1 if cm.shape[0] <= 10 else 5,
         yticklabels=1 if cm.shape[0] <= 10 else 5,
+        **kwargs,
     )
     ax.set_xlabel('Predicted')
     ax.set_ylabel('Ground Truth')
@@ -184,18 +204,20 @@ def conf_mat(cm, ax=None, norm=0):
         # Draw the number of degrees on the top
         for i, degrees in enumerate(range(0, 181, 45)):
             ax.text(
-                cm.shape[0], 5.5 + i*10,
+                cm.shape[0] + 0.5, 5.5 + i*10,
                 f'{degrees}$^\\circ$',
                 alpha=0.5,
-                ha='left',
-                va='center',
-                fontsize=8,
+                ha='center',
+                va='top',
+                fontsize=4,
+                rotation=90,
             )
 
     return p
 
 
-def precision_recall_f1(report=None, recall=None, precision=None, f1=None, ax=None):
+def precision_recall_f1(report=None, recall=None, precision=None, f1=None,
+                        ax=None, **kwargs):
     """Given an sklearn classificaiton report in dict format, plot the
     precision, recall, and f1 score."""
     assert bool(report is None) != bool(
@@ -207,30 +229,33 @@ def precision_recall_f1(report=None, recall=None, precision=None, f1=None, ax=No
         f1 = {i: f for i, f in enumerate(f1)}
 
     df = pd.DataFrame()
-    df['Recall'] = recall if report is None else {
-        int(k): d['recall']
-        for k, d in report.items()
-        if type(d) is dict and k.isdigit()
-    }
     df['Precision'] = precision if report is None else {
         int(k): d['precision']
         for k, d in report.items()
         if type(d) is dict and k.isdigit()
     }
-    df['F1-score'] = f1 if report is None else {
+    df['Recall'] = recall if report is None else {
+        int(k): d['recall']
+        for k, d in report.items()
+        if type(d) is dict and k.isdigit()
+    }
+    df['$F_1$-score'] = f1 if report is None else {
         int(k): d['f1-score']
         for k, d in report.items()
         if type(d) is dict and k.isdigit()
     }
+    # if ax is not None: ax.set_aspect(1.5)
+
     sns.heatmap(
         df.T,
-        square=True,
+        # square=True,
         cbar=False,
         cmap="Spectral",
         vmin=0,
         vmax=1,
         ax=ax,
-        xticklabels=5,
+        xticklabels=5 if len(df) > 10 else 1,
+        **kwargs
     )
 
 
@@ -429,9 +454,9 @@ def cmp_ts(
                 alpha=0.1,
                 color='grey'
             )
-        if i % 6 != 0:
+        if i % axs.shape[1] != 0:
             ax.set_yticks([])
-        if i < 24:
+        if i < (axs.shape[0] - 1) * axs.shape[1]:
             ax.set_xticks([])
 
         for ts in time_series:
@@ -441,7 +466,7 @@ def cmp_ts(
                 c=color,
                 alpha=.5,
             )
-    for i in range(time_series[0].shape[1], ncols * nrows):
+    for i in range(time_series[0].shape[1], len(axs.flat)):
         axs.flatten()[i].axis('off')
 
     plt.subplots_adjust(wspace=0, hspace=0)
@@ -495,7 +520,7 @@ def add_grid(ax=None, **kwargs):
     return ax
 
 
-def add_jitter(df, cols_to_jitter, amount=0.025):
+def add_jitter(df, cols_to_jitter, amount=0.025, clamp=True):
     """Adds a small amount of random noise to the selected columns. useful for
     visualising points that are all ontop of one another. The noise is
     gaussian, with a standard deviation proportional to `amount` and the
@@ -509,8 +534,8 @@ def add_jitter(df, cols_to_jitter, amount=0.025):
                 scale=df[c].std() * amount,
                 size=df[c].shape
             ),
-            df[c].min(),
-            df[c].max()
+            df[c].min() if clamp else -np.inf,
+            df[c].max() if clamp else np.inf
         )
         for c in cols_to_jitter
     })
@@ -538,3 +563,60 @@ def add_cbar(
         label=label
     )
     cb.outline.set_visible(False)
+
+
+def rename_axs(axs):
+    for ax in axs.flat:
+        rename_ax(ax)
+
+
+def rename_ax(ax):
+    def multi_replace(item: Optional[str], replacements: dict):
+        if item is None:
+            return item
+
+        sorted_replacement_keys = sorted(replacements, key=lambda x: -len(x))
+
+        for k in sorted_replacement_keys:
+            item = item.replace(k, replacements[k])
+        return item
+
+    ax.set(
+        title=multi_replace(ax.get_title(), rename_hpars),
+        xlabel=multi_replace(ax.get_xlabel(), rename_hpars),
+        ylabel=multi_replace(ax.get_ylabel(), rename_hpars),
+    )
+
+
+rename_hpars = {
+    'ffnn.dropout_rate': r'Dropout Rate',
+    'ffnn.l2_coefficient': r'L2 Coef.',
+    'ffnn.l2_coefficient.log10': r'L2 ($\log_{10}$)',
+    'ffnn.nodes_per_layer.-1': r'\#Nodes (last layer)',
+    'ffnn.nodes_per_layer.-1.log10': r'\#Nodes (last layer, $\log_{10}$)',
+    'ffnn.nodes_per_layer.1': r'\#Nodes (layer 1)',
+    'ffnn.nodes_per_layer.1.log10': r'\#Nodes (layer 1, $\log_{10}$)',
+    'ffnn.nodes_per_layer.2': r'\#Nodes (layer 2)',
+    'ffnn.nodes_per_layer.2.log10': r'\#Nodes (layer 2, $\log_{10}$)',
+    'ffnn.nodes_per_layer.3': r'\#Nodes (layer 3)',
+    'ffnn.nodes_per_layer.3.log10': r'\#Nodes (layer 3, $\log_{10}$)',
+    'ffnn.num_layers': r'\#Layers',
+    'nn.epochs': r'\#Epochs',
+    'nn.batch_size': r'Batch Size',
+    'nn.batch_size.log10': r'Batch Size ($\log_{10}$)',
+    'nn.learning_rate': r'LR',
+    'nn.learning_rate.log10': r'LR ($\log_{10}$)',
+    'trn.loss': r'Trn. Loss',
+    'trn.loss.log10': r'Trn. Loss ($\log_{10}$)',
+    'val.loss': r'Val. Loss',
+    'val.loss.log10': r'Val. Loss ($\log_{10}$)',
+    'val.macro avg.f1-score': r'$F_1$-score',
+    'val.macro avg.precision': r'Precision',
+    'val.macro avg.recall': r'Recall',
+}
+# Add rename cols for the HFFNNs
+rename_hpars |= {
+    f'hffnn.majority.{k}': f'Maj. {v}' for k, v in rename_hpars.items() if 'nn.' in k
+} | {
+    f'hffnn.minority.{k}': f'Min. {v}' for k, v in rename_hpars.items() if 'nn.' in k
+}

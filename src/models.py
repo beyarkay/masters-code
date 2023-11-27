@@ -791,9 +791,9 @@ class CuSUMClassifier(TemplateClassifier):
         # Calculate the cusum for the lower limit
         cusum_neg = np.zeros(len(x))
         cusum_neg[0] = min(0, x[0] - lower_limit)
-        for i in range(1, len(x)):
-            cusum_pos[i] = max(0, cusum_pos[i - 1] + x[i] - upper_limit)
-            cusum_neg[i] = min(0, cusum_neg[i - 1] + x[i] - lower_limit)
+        for n in range(1, len(x)):
+            cusum_pos[n] = max(0, cusum_pos[n - 1] + x[n] - upper_limit)
+            cusum_neg[n] = min(0, cusum_neg[n - 1] + x[n] - lower_limit)
 
         # Create arrays of booleans describing if the value was too high/too low
         too_high = np.where(cusum_pos == 0, 0, 1)
@@ -814,37 +814,44 @@ class CuSUMClassifier(TemplateClassifier):
 
     @timeout(3600)
     def fit(self, X, y, dt, validation_data, **kwargs) -> None:
+        # Sanity checks
         assert self.config is not None
         assert self.config["cusum"] is not None
         self.fit_start_time = time.time()
         self.set_random_seed(self.config["preprocessing"]["seed"])
         self._check_model_params(X, y, dt, validation_data)
+
+        # Extract some constants for ease-of-use
         threshold = self.config["cusum"]["thresh"]
         self.const: common.ConstantsDict = common.read_constants()
 
-        num_gestures = len(np.unique(self.y_))
+        n_gesture_classes = len(np.unique(self.y_))
 
-        records = np.zeros((num_gestures, self.const["n_sensors"]))
+        # TODO what does this doe
+        records = np.zeros((n_gesture_classes, self.const["n_sensors"]))
 
-        pbar = (
-            range(num_gestures)
+        # Use a tqdm progress bar if `verbose`
+        gesture_iter = (
+            range(n_gesture_classes)
             if kwargs.get("verbose", False)
-            else tqdm.trange(num_gestures)
+            else tqdm.trange(n_gesture_classes)
         )
-        # Loop over all gestures
-        for gesture_idx in pbar:
-            if isinstance(pbar, tqdm.tqdm):
-                pbar.set_description(f"CuSUM gesture: {self.i2g(gesture_idx)}")
+        for gesture_idx in gesture_iter:
+            if isinstance(gesture_iter, tqdm.tqdm):
+                gesture_iter.set_description(
+                    f"CuSUM gesture: {self.i2g(gesture_idx)}")
+            # Extract just the observations for this class
             data = self.X_[self.y_ == gesture_idx]
-            record = np.zeros((data.shape[0], self.const["n_sensors"]))
+            # TODO what does this doe
+            gesture_ood = np.zeros((data.shape[0], self.const["n_sensors"]))
 
             # Loop over all observations matching that gesture
-            iterator = (
+            obs_iter = (
                 tqdm.trange(data.shape[0])
                 if kwargs.get("verbose", False)
                 else range(data.shape[0])
             )
-            for observation_idx in iterator:
+            for observation_idx in obs_iter:
                 subset = data[observation_idx, :, :]
 
                 # Loop over each sensor
@@ -857,15 +864,17 @@ class CuSUMClassifier(TemplateClassifier):
                     too_high = (np.abs(csm["cusum_neg"]) > threshold).any()
                     too_low = (np.abs(csm["cusum_pos"]) > threshold).any()
                     # record whether or not the cusum statistic passes the threshold
-                    record[observation_idx, sensor_idx] = int(
+                    gesture_ood[observation_idx, sensor_idx] = int(
                         too_high or too_low)
 
             # We don't care about all the details, just the sum of all the
             # times the statistic was over the threshold for a given gesture
-            records[gesture_idx] = record.sum(axis=0)
+            records[gesture_idx] = gesture_ood.sum(axis=0)
         # Some gestures have more observations than others. Normalise the data
         # so we can treat all gestures equally.
         self.normalised = (records.T / records.T.sum(axis=0)).T
+
+        # Bookkeeping
         self.is_fitted_ = True
         self.fit_finsh_time = time.time()
 
@@ -877,17 +886,34 @@ class CuSUMClassifier(TemplateClassifier):
         preds = np.empty(X.shape[0])
         threshold = self.config["cusum"]["thresh"]
         for i, xi in enumerate(X):
-            values = np.zeros(self.const["n_sensors"])
+            # Zero out the binary OOD detection for each sensor
+            sensor_ood = np.zeros(self.const["n_sensors"])
             for sensor_idx in range(self.const["n_sensors"]):
+
                 csm = self._cusum(
+                    # Perform CuSUM on just the i-th sensor's time series
                     xi[:, sensor_idx],
+                    # The reference value from which the time series should not
+                    # deviate is the first 10 observations in the time series
                     target=xi[:10, sensor_idx].mean(),
                 )
+                # Check if any of the time series observations were too high
                 too_high = (np.abs(csm["cusum_neg"]) > threshold).any()
+                # Check if any of the time series observations were too low
                 too_low = (np.abs(csm["cusum_pos"]) > threshold).any()
-                values[sensor_idx] = int(too_high or too_low)
-            preds[i] = np.argmin(np.linalg.norm(
-                self.normalised - values, axis=1))
+                # A sensor is OOD if _any_ of the time series observations is
+                # out of distribution
+                sensor_ood[sensor_idx] = int(too_high or too_low)
+            # Calculate how far away the observed OODs are from the expected
+            # OODs for every gesture
+            diff_from_expected = np.linalg.norm(
+                self.normalised - sensor_ood,
+                axis=1
+            )
+            # The prediction is the gesture index for which the difference
+            # between the observed and expected sensor values are the smallest.
+            preds[i] = np.argmin(diff_from_expected)
+        # Keep track of the start and end time for bookkeeping
         self.predict_finsh_time = time.time()
         return preds
 
@@ -1047,6 +1073,8 @@ class DisplayConfMat(keras.callbacks.Callback):
 
 
 class FFNNClassifier(TFClassifier):
+    """ Some example docstring"""
+
     def __init__(
         self, config_path: Optional[str] = None, config: Optional[ConfigDict] = None
     ):

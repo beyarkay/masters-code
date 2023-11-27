@@ -203,7 +203,8 @@ def objective_nn(trial, X_trn, y_trn, dt_trn, X_val, y_val, dt_val, study_name, 
     # Keras has memory leak issues. `clear_session` reportedly fixes this
     # https://github.com/optuna/optuna/issues/4587#issuecomment-1511564031
     keras.backend.clear_session()
-    num_layers = trial.suggest_int("num_layers", 1, 3)
+    # TODO: reset this back to randomly selected nlayers
+    num_layers = 2  # trial.suggest_int("num_layers", 2, 2)
     nodes_per_layer = [
         trial.suggest_int(f"nodes_per_layer.{layer_idx+1}", 4, 512, log=True)
         for layer_idx in range(num_layers)
