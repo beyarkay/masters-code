@@ -53,11 +53,11 @@ class PredictGestureHandler(common.AbstractHandler):
             self.prediction = self.clf.predict(processed_sample)[0]
 
         if self.prediction != 50:
-            spaces_before = " " * self.prediction
-            spaces_after = " " * (50 - self.prediction)
-            self.stdout = f" {C.Style.DIM}Prediction: {C.Style.RESET_ALL}{spaces_before}{C.Fore.GREEN}{self.prediction}{C.Style.RESET_ALL}{spaces_after}"
+            # spaces_before = " " * self.prediction
+            # spaces_after = " " * (50 - self.prediction)
+            self.stdout = f" {C.Style.DIM}Predicted Class:   {C.Style.RESET_ALL}{C.Fore.GREEN}{self.prediction}{C.Style.RESET_ALL}"
         else:
-            self.stdout = f" {C.Style.DIM}Prediction: {C.Style.RESET_ALL}{self.prediction}"
+            self.stdout = f" {C.Style.DIM}Predicted Class: {C.Style.RESET_ALL}{self.prediction}  "
 
 
 class KeystrokePrediction(TypedDict):
@@ -93,7 +93,13 @@ class MapToKeystrokeHandler(common.AbstractHandler):
 
         gidx = 255 if prediction_handler.prediction == 50 else prediction_handler.prediction
         keystroke = self.g2k[f'gesture{gidx:0>4}']['key']
-        self.stdout = keystroke
+        if gidx != 255:
+            self.stdout = f"{C.Style.DIM}{C.Fore.WHITE}" \
+                f"Predicted Keystroke: " \
+                f"'{C.Style.RESET_ALL}{C.Fore.GREEN}{keystroke}{C.Fore.WHITE}{C.Style.DIM}'" \
+                f"{C.Style.RESET_ALL}"
+        else:
+            self.stdout = ''
         self.typed.append(KeystrokePrediction(
             timestamp=datetime.datetime.now(),
             keystroke=keystroke,
